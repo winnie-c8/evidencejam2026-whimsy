@@ -579,8 +579,19 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
             % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
 
 
-def at_a_glance(q: Question, short_html: str = '') -> str:
-    """Q1: factors as rows, outcomes as columns; each cell links to its card."""
+CHART_KEY = [('increase', 'Increases'), ('decrease', 'Decreases'), ('mixed', 'Mixed: the studies disagree'),
+             ('no_effect', 'No effect'), ('unclear', 'Unclear')]
+
+
+# chart title per question (our wording); other EFFECTS questions get the general one
+CHART_TITLE = {'q1': 'Effect of each factor on seedling survival and growth, by certainty of evidence'}
+
+
+def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
+    """Q1 main view: one bar per finding (factor x outcome). Bar length = the pack's certainty
+    grade (Very low..High), colour + symbol + word = direction, the number = studies. A gap is an
+    empty dashed box, never a bar. Each row is a button that opens its finding's full card in a
+    popup (why that grade, the quoted sources), the same popup as the Q2 timeline."""
     subjects, outcomes, cells = [], [], {}
     for f in q.findings:
         if f.subject_id not in [x[0] for x in subjects]:
@@ -591,34 +602,64 @@ def at_a_glance(q: Question, short_html: str = '') -> str:
     for g in q.gaps:
         if g.subject_id not in [x[0] for x in subjects]:
             subjects.append((g.subject_id, g.subject_label))
+        if g.outcome_id not in [x[0] for x in outcomes]:
+            outcomes.append((g.outcome_id, g.outcome_label))
         cells[(g.subject_id, g.outcome_id)] = g
+
     def strength(sid: str) -> Tuple[int, int]:
         fs = [c for (s_, _), c in cells.items() if s_ == sid and isinstance(c, Finding)]
         return (min((CERT_ORDER.index(f.certainty) for f in fs), default=9), -sum(f.studies for f in fs))
     subjects.sort(key=lambda x: strength(x[0]))
-    head = ''.join('<th scope="col">%s</th>' % esc(lbl) for _, lbl in outcomes)
-    rows = []
+
+    groups = []
     for sid, slbl in subjects:
-        tds = []
-        for oid, _ in outcomes:
+        rows = []
+        for oid, olbl in outcomes:
             c = cells.get((sid, oid))
             if c is None:
-                tds.append('<td class="none">–</td>')
-            elif isinstance(c, Gap):
-                tds.append('<td class="gapcell"><a href="#gap-%s"><span class="chip gapchip">'
-                           '<span aria-hidden="true">?</span> Not studied</span></a></td>' % esc(c.slug))
-            else:
-                b = '%s/%s' % (c.question, c.slug)
-                tds.append('<td><a href="#f-%s">%s <span class="bars b%d" aria-hidden="true"></span> %s · %s %s</a></td>'
-                           % (esc(c.slug), chip(c.direction, b + '/direction'), CERT_BARS.get(c.certainty, 0),
-                              span(b + '/certainty', CERT_WORD[c.certainty]), span(b + '/studies', c.studies),
-                              plural(c.studies, 'study', 'studies')))
-        rows.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(slbl), ''.join(tds)))
-    return ('<section class="glance-sec" aria-labelledby="glance"><h2 id="glance">At a glance %s</h2>%s'
-            '<div class="table-wrap"><table class="glance"><caption>Every factor: which way it pushes each outcome, '
-            'how sure we can be, and how many studies. Select a cell for the details.</caption><thead><tr>'
-            '<th scope="col">Factor</th>%s</tr></thead><tbody>%s</tbody></table></div></section>'
-            % (HELP_BTN, short_box(short_html, 'short') if short_html else '', head, ''.join(rows)))
+                continue
+            if isinstance(c, Gap):
+                rows.append('<li><a class="cc-row cc-gap" href="#gap-%s"><span class="sr-only">%s, </span><span class="cc-out">%s</span>'
+                            '<span class="cc-dir"><span class="chip gapchip"><span aria-hidden="true">?</span> '
+                            'Not studied</span></span><span class="cc-track"><span class="cc-none">No study tested '
+                            'this: a gap, not a result</span></span><span class="cc-q" aria-hidden="true">?</span></a></li>'
+                            % (esc(c.slug), esc(slbl), esc(olbl)))
+                continue
+            b = '%s/%s' % (c.question, c.slug)
+            rows.append('<li><button type="button" class="cc-row" popovertarget="pop-%s">'
+                        '<span class="sr-only">Details: %s, </span><span class="cc-out">%s</span><span class="cc-dir">%s</span>'
+                        '<span class="cc-track"><span class="cc-bar cb%d bar-%s"><span class="cc-lab">%s'
+                        '<span class="sr-only"> certainty</span> · %s %s</span></span></span>'
+                        '<span class="cc-q" aria-hidden="true">?</span></button></li>'
+                        % (esc(c.slug), esc(slbl), esc(olbl), chip(c.direction, b + '/direction'),
+                           CERT_BARS.get(c.certainty, 0), esc(c.direction.replace('_', '-')),
+                           span(b + '/certainty', CERT_WORD[c.certainty]),
+                           span(b + '/studies', c.studies), plural(c.studies, 'study', 'studies')))
+        groups.append('<li class="cc-grp"><h3>%s</h3><ul>%s</ul></li>' % (esc(slbl), ''.join(rows)))
+
+    present = {f.direction for f in q.findings}
+    key = ''.join('<li><span class="sw bar-%s" aria-hidden="true"></span><span aria-hidden="true">%s</span> %s</li>'
+                  % (esc(d.replace('_', '-')), CHIP[d][0], esc(w)) for d, w in CHART_KEY if d in present)
+    if q.gaps:
+        key += ('<li><span class="sw sw-gap" aria-hidden="true"></span>Not studied: no study tested it '
+                '(not a negative result)</li>')
+    levels = ['very_low', 'low', 'moderate', 'high']
+    unused = [CERT_WORD[c] for c in levels if c not in {f.certainty for f in q.findings}]
+    unused_note = (' No finding here is graded %s.' % ' or '.join(unused)) if unused else ''
+    ticks = ''.join('<span>%s</span>' % esc(CERT_WORD[c]) for c in levels)
+    outs = '<p class="cc-outs"><strong>Outcomes:</strong> %s</p>' % ' · '.join(esc(o) for _, o in outcomes)
+    title = CHART_TITLE.get(q.qid, 'Effect of each factor on each outcome, by certainty of evidence')
+    return ('<section class="cchart-sec" aria-labelledby="glance"><h2 id="glance">%s %s</h2>%s'
+            '<p class="cc-read"><strong>How to read:</strong> each bar is one finding, a factor\'s effect on one '
+            'outcome. Bar length is the certainty of the evidence (Very low, Low, Moderate, High), not the size of '
+            'the effect. Colour, symbol and word give the direction; the number is how many studies.%s '
+            'Select a bar for the certainty rationale and the quoted sources.</p>'
+            '<ul class="cc-key" aria-label="Legend">%s</ul>'
+            '<div class="cchart"><div class="cc-axis" aria-hidden="true"><span class="cc-out"></span>'
+            '<span class="cc-dir">Direction</span><span class="cc-ticks">%s</span><span class="cc-q"></span></div>'
+            '<ul class="cc-grps">%s</ul><p class="cc-xlab" aria-hidden="true">Certainty of evidence →</p></div>'
+            '</section>%s'
+            % (esc(title), HELP_BTN, outs, unused_note, key, ticks, ''.join(groups), ''.join(popups.values())))
 
 
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
@@ -868,29 +909,24 @@ def by_strength(fs: Iterable[Finding]) -> List[Finding]:
 
 
 def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """EFFECTS layout (Q1 today). Main view: at a glance, findings by outcome (strongest first),
-    combined treatments, graph link."""
-    def card(f: Finding) -> str:
+    """EFFECTS layout (Q1 today). Main view: the certainty chart (each row opens its finding's card
+    in a popup), combined treatments, graph link."""
+    def popup(f: Finding) -> str:
         graph = ''
         if f.slug in data.graph_join:
             graph = ('<a href="%s#e-%s">On the graph<span class="sr-only">: %s</span></a>'
                      % (graph_file(q.qid), esc(slug(data.graph_join[f.slug])), esc(f.label)))
-        return finding_card(data, f, sources, level=4, links=graph)
+        return ('<div popover id="pop-%s" class="pop fpop" role="dialog" aria-label="%s">'
+                '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
+                '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
+                % (esc(f.slug), esc(f.label), esc(f.slug),
+                   finding_card(data, f, sources, level=3, links=graph, open_=True)))
 
-    groups: Dict[str, List[Finding]] = {}
-    for f in q.findings:
-        groups.setdefault(f.outcome_label, []).append(f)
-    main = at_a_glance(q)
-    main += ('<h2 id="findings">Findings</h2><p class="note">Open a group, then a finding, for why it has that '
-             'certainty, the quoted sources and, where the graph has them, possible pathways.</p>')
-    for outcome, fs in groups.items():
-        main += fold('o-%s' % slug(fs[0].outcome_id), esc(outcome), 3, '%d findings, strongest first' % len(fs),
-                     '<div class="cards">%s</div>' % ''.join(card(f) for f in by_strength(fs)))
+    main = certainty_chart(q, {f.slug: popup(f) for f in by_strength(q.findings)})
     main += interactions_section(data, q)
     if q.qid in data.graphs:
         main += '<p class="graph-link"><a href="%s">See this answer as a graph →</a></p>' % graph_file(q.qid)
-    jumps = [('#glance', 'At a glance')]
-    jumps += [('#o-%s' % slug(fs[0].outcome_id), fs[0].outcome_label) for fs in groups.values()]
+    jumps = [('#glance', 'Certainty chart')]
     if q.extra.get('interactions'):
         jumps.append(('#ix-h', 'Combined treatments'))
     return question_page(data, prose, q, main, jumps=jumps)
