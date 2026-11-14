@@ -562,13 +562,6 @@ def at_a_glance(q: Question, short_html: str = '') -> str:
             % (HELP_BTN, short_box(short_html, 'short') if short_html else '', head, ''.join(rows)))
 
 
-def gap_marker(g: Gap, id_: Optional[str] = None) -> str:
-    return ('<div class="gap" role="note" id="%s"><span class="gq" aria-hidden="true">?</span> '
-            '<strong>Not studied:</strong> %s. '
-            '<span class="searched">Searched for: %s</span></div>'
-            % (esc(id_ or 'gap-' + g.slug), esc(g.label), esc(g.searched_for)))
-
-
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
                how_built: Optional[str], heading: str = 'Read this first') -> str:
     """The pack's limitations, word for word. A closed one-liner, so the page stays clean,
@@ -745,23 +738,75 @@ def fold(sid: str, heading: str, level: int, count: str, inner: str, open_: bool
             % (esc(sid), ' open' if open_ else '', level, heading, level, esc(count), inner))
 
 
-def q_header(q: Question, prose: Prose, skip_short: bool = False) -> str:
-    out = '<h1>%s</h1>' % esc(q.text)
-    if not skip_short:
-        out += short_box(prose.short_answer[q.qid].html, 'short')
-    return out
+def search_template(gaps: List[Gap]) -> Optional[str]:
+    """The pack's "searched for" sentence shared by a group of gaps, with the outcome replaced by
+    {outcome}, when they all use the same sentence apart from their outcome; else None. Read from
+    the pack's own text, so it is said once per group instead of once per gap."""
+    if len(gaps) < 2:
+        return None
+    templates = set()
+    for g in gaps:
+        templates.add(g.searched_for.replace(g.outcome_label, OUTCOME_SLOT)
+                      if g.searched_for.count(g.outcome_label) == 1 else None)
+    if len(templates) == 1 and None not in templates:
+        return templates.pop()
+    return None
 
 
-def gaps_section(q: Question, heading: str = 'Not studied') -> str:
+OUTCOME_SLOT = '{outcome}'
+
+
+def not_studied(q: Question) -> str:
+    """Gaps, the same compact way on every page: grouped by what was tested, each one
+    "? Not studied: <outcome>". Never worded as a negative result."""
     if not q.gaps:
         return ''
-    return fold('gaps-h', esc(heading), 2, '%d %s' % (len(q.gaps), plural(len(q.gaps), 'pairing', 'pairings')),
-                '<p>These pairings were looked for and not found in this body of research. That is not '
-                'evidence that the treatment fails; nobody here tested it.</p>%s' % ''.join(gap_marker(g) for g in q.gaps))
+    groups: Dict[str, List[Gap]] = {}
+    for g in q.gaps:
+        groups.setdefault(g.subject_label, []).append(g)
+    parts = []
+    for subj, gs in groups.items():
+        template = search_template(gs)
+        note = ''
+        if template is not None:
+            note = ('<p class="searched" data-template="%s">Searched for and not found: %s.</p>'
+                    % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
+        items = ''.join(
+            '<li class="gap" id="gap-%s"><span class="gq" aria-hidden="true">?</span> <strong>Not studied:</strong> %s%s</li>'
+            % (esc(g.slug), esc(g.outcome_label),
+               '' if template is not None else ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for))
+            for g in gs)
+        parts.append('<section class="gapgrp" aria-label="%s"><h3>%s</h3>%s<ul class="gaps">%s</ul></section>'
+                     % (esc(subj), esc(subj), note, items))
+    return fold('gaps-h', 'Not studied', 2, '%d %s' % (len(q.gaps), plural(len(q.gaps), 'pairing', 'pairings')),
+                '<p>Looked for in this body of research and not found. That is not evidence that something '
+                'fails: nobody here tested it.</p>%s' % ''.join(parts))
+
+
+def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
+                  jumps: List[Tuple[str, str]], short: Optional[str] = None) -> str:
+    """The one template every question page uses, in this order: kicker + h1, short answer,
+    limitations, MAIN VIEW, not studied, link to How it works."""
+    n = list(data.questions).index(q.qid) + 1
+    name = question_name(q)
+    body = '<p class="kicker">Question %02d · %s</p><h1>%s</h1>' % (n, esc(name), esc(q.text))
+    body += short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
+    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
+    body += main
+    body += not_studied(q)
+    body += ('<p class="to-method"><a href="method.html">How it works: how certainty is graded, where the data '
+             'comes from, and the limits →</a></p>')
+    jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else [])
+    return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
+                body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
+
+
+def by_strength(fs: Iterable[Finding]) -> List[Finding]:
+    return sorted(fs, key=lambda f: (CERT_ORDER.index(f.certainty), -f.studies))
 
 
 def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    g = data.q1_graph
+    """Main view: at a glance, findings by outcome (strongest first), combined treatments, graph link."""
     def card(f: Finding) -> str:
         graph = ''
         if f.slug in data.graph_join:
@@ -769,28 +814,23 @@ def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
                      % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
         return finding_card(data, f, sources, level=4, links=graph)
 
-    rank = {c: i for i, c in enumerate(['high', 'moderate', 'low', 'very_low'])}
     groups: Dict[str, List[Finding]] = {}
     for f in q.findings:
         groups.setdefault(f.outcome_label, []).append(f)
-    body = q_header(q, prose, skip_short=True)
-    body += at_a_glance(q, prose.short_answer[q.qid].html)
-    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += ('<h2 id="findings">Findings</h2><p class="note">Open a group, then a finding, for why it has that '
+    main = at_a_glance(q)
+    main += ('<h2 id="findings">Findings</h2><p class="note">Open a group, then a finding, for why it has that '
              'certainty, the quoted sources and, where the graph has them, possible pathways.</p>')
     for outcome, fs in groups.items():
-        fs = sorted(fs, key=lambda f: (rank.get(f.certainty, 9), -f.studies))
-        body += fold('o-%s' % slug(fs[0].outcome_id), esc(outcome), 3,
-                     '%d findings, strongest first' % len(fs), '<div class="cards">%s</div>' % ''.join(card(f) for f in fs))
-    body += interactions_section(data, q)
-    body += gaps_section(q)
+        main += fold('o-%s' % slug(fs[0].outcome_id), esc(outcome), 3, '%d findings, strongest first' % len(fs),
+                     '<div class="cards">%s</div>' % ''.join(card(f) for f in by_strength(fs)))
+    main += interactions_section(data, q)
+    if data.q1_graph is not None:
+        main += '<p class="graph-link"><a href="q1-graph.html">See this answer as a graph →</a></p>'
     jumps = [('#glance', 'At a glance')]
     jumps += [('#o-%s' % slug(fs[0].outcome_id), fs[0].outcome_label) for fs in groups.values()]
     if q.extra.get('interactions'):
         jumps.append(('#ix-h', 'Combined treatments'))
-    if q.gaps:
-        jumps.append(('#gaps-h', 'Not studied'))
-    return page(data, 'q1.html', 'Q1 · Tree planting', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
+    return question_page(data, prose, q, main, jumps=jumps)
 
 
 def interactions_section(data: SiteData, q: Question) -> str:
@@ -831,26 +871,21 @@ def interactions_section(data: SiteData, q: Question) -> str:
 
 
 def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """Main view: what lags behind, compared with natural marshes, change as marshes age.
+    The "how long?" answer is the short answer itself, so it comes first and is said once."""
     sa = q.extra.get('short_answer') or {}
     note = sa.get('time_to_reference_note') or ''
     ttr = sa.get('time_to_reference')
     if ttr is not None:
-        callout = ('<p><strong>Time to reach the reference:</strong> %s</p><p>%s</p>'
-                   % (span('q2/short_answer/time_to_reference', ttr),
-                      span('q2/short_answer/time_to_reference_note', note)))
+        lead = ('<p><strong>Time to reach the reference:</strong> %s</p><p>%s</p>'
+                % (span('q2/short_answer/time_to_reference', ttr), span('q2/short_answer/time_to_reference_note', note)))
     else:
-        callout = ('<p><strong>How long? This body of research cannot say.</strong></p><p>%s</p>'
-                   % span('q2/short_answer/time_to_reference_note', note))
-    body = ('<h1>%s</h1><div class="callout" role="note" aria-label="How long" id="howlong">%s</div>'
-            % (esc(q.text), callout))
+        lead = ('<p><strong>How long? This body of research cannot say.</strong></p><p>%s</p>'
+                % span('q2/short_answer/time_to_reference_note', note))
     if prose.short_answer[q.qid].text != note:
-        body += short_box(prose.short_answer[q.qid].html)
-    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    lag = sa.get('lagging_attributes') or []
-    if lag:
-        body += ('<h2 id="lag">Attributes that lag behind natural marshes</h2><ul class="lagging">%s</ul>'
-                 % ''.join('<li>%s</li>' % span('q2/short_answer/lagging_attributes/%d' % i, a)
-                           for i, a in enumerate(lag)))
+        lead += '<p>%s</p>' % prose.short_answer[q.qid].html
+    short = ('<div class="short callout" role="note" aria-label="How long" id="short"><p class="sa-h">'
+             '<strong>Short answer</strong></p>%s</div>' % lead)
 
     def when(f: Finding) -> str:
         tps = f.raw.get('time_points') or []
@@ -859,7 +894,7 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         return '<ul class="when">%s</ul>' % ''.join(
             '<li>%s</li>' % span('q2/%s/time_points/%d' % (f.slug, i), t) for i, t in enumerate(tps))
 
-    def rows(fs: Iterable[Finding]) -> str:
+    def cards(fs: Iterable[Finding]) -> str:
         out = []
         for f in fs:
             tag = ' <span class="lags">Lags</span>' if f.raw.get('lags') else ''
@@ -867,23 +902,20 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
             out.append(finding_card(data, f, sources, tag=tag, extra=extra))
         return '<div class="cards">%s</div>' % ''.join(out)
 
-    body += ('<h2 id="compare">Created marshes compared with natural ones</h2>'
-             '<p class="note">“When measured” lists the ages of the marshes studied, not a time to '
-             'recovery.</p>')
-    body += rows(q.findings)
-    if q.trends:
-        body += '<h2 id="age">Change as marshes age</h2>'
-        body += rows(q.trends)
-    body += gaps_section(q)
-    jumps = [('#howlong', 'How long?')]
+    main, jumps = '', []
+    lag = sa.get('lagging_attributes') or []
     if lag:
-        jumps.append(('#lag', 'What lags'))
+        main += ('<h2 id="lag">What lags behind natural marshes</h2><ul class="lagging">%s</ul>'
+                 % ''.join('<li>%s</li>' % span('q2/short_answer/lagging_attributes/%d' % i, a) for i, a in enumerate(lag)))
+        jumps.append(('#lag', 'What lags behind'))
+    main += ('<h2 id="compare">Compared with natural marshes</h2><p class="note">Behind, matches or ahead of a '
+             'natural reference wetland. “When measured” lists the ages of the marshes studied, not a time to '
+             'recovery.</p>' + cards(q.findings))
     jumps.append(('#compare', 'Compared with natural'))
     if q.trends:
+        main += '<h2 id="age">Change as marshes age</h2>' + cards(q.trends)
         jumps.append(('#age', 'As marshes age'))
-    if q.gaps:
-        jumps.append(('#gaps-h', 'Not studied'))
-    return page(data, 'q2.html', 'Q2 · Created marshes', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
+    return question_page(data, prose, q, main, jumps=jumps, short=short)
 
 
 def q3_cell_id(subject_id: str, outcome_id: str) -> str:
@@ -893,44 +925,23 @@ def q3_cell_id(subject_id: str, outcome_id: str) -> str:
 OUTCOME_SLOT = '{outcome}'
 
 
-def row_search_template(grid: Dict[str, Any], rid: str) -> Optional[str]:
-    """The pack's "searched for" sentence for a Q3 row's gaps, with the outcome replaced by
-    {outcome}, when every gap in the row uses the same sentence apart from its outcome; else None.
-    Read from the pack's own text (nothing typed in here), so it says it once per row instead of
-    261 times. If the pack's wording ever stops fitting, each gap keeps its full sentence, and the
-    build says so."""
-    templates = set()
-    for cid, clbl in grid['cols']:
-        item = grid['cells'][(rid, cid)]
-        if isinstance(item, Gap):
-            if item.searched_for.count(clbl) != 1:
-                templates.add(None)
-            else:
-                templates.add(item.searched_for.replace(clbl, OUTCOME_SLOT))
-    if len(templates) == 1 and None not in templates:
-        return templates.pop()
-    if templates:
-        print('[build] note: Q3 row %s: gaps\' "searched for" wording differs, showing each in full' % rid,
-              file=sys.stderr)
-    return None
-
-
 def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """Main view: the gap map (sticky names), the ten most studied, then every studied combination
+    grouped by intervention, closed; a map cell opens its card. Gaps are in the shared Not studied."""
     grid = data.q3_grid
     s = q.extra['summary']
-    body = q_header(q, prose, skip_short=True)
-    body += short_box('%s of %s combinations have been studied; %s of those by a single study. %s'
-             % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
-                span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html), 'short')
-    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += ('<h2 id="map">Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
-             ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
-             'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
-             '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
-             '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
-             'dense</dt><dd>4 or more studies</dd></div></dl>'
-             '<p class="note">Each filled cell shows its number of studies and density word. Study counts '
-             'measure research effort, not effect size. Select a cell to read its finding.</p>')
+    short = short_box('%s of %s combinations have been studied; %s of those by a single study. %s'
+                      % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
+                         span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html), 'short')
+    main = ('<h2 id="map">Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
+            ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
+            'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
+            '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
+            '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
+            'dense</dt><dd>4 or more studies</dd></div></dl>'
+            '<p class="note">Each filled cell shows its number of studies and density word. Study counts '
+            'measure research effort, not effect size. Select a cell to open its finding. Scroll the map '
+            'sideways for more outcomes →</p>')
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
     trs = []
     for rid, rlbl in grid['rows']:
@@ -938,19 +949,17 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
             if isinstance(item, Gap):
-                tds.append('<td class="empty" aria-label="Not studied" title="Not studied: %s">–</td>'
-                           % esc(item.label))
+                tds.append('<td class="empty" aria-label="Not studied" title="Not studied: %s">–</td>' % esc(item.label))
             else:
                 dens = item.raw.get('density', '')
                 tds.append('<td class="d-%s"><a href="#%s">%s <span class="sr-only">%s, </span>%s</a></td>'
                            % (esc(dens), q3_cell_id(rid, cid), span('q3/%s/studies' % item.slug, item.studies),
                               esc(plural(item.studies, 'study', 'studies')), esc(dens)))
         trs.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(rlbl), ''.join(tds)))
-    body += ('<div class="grid-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
+    main += ('<div class="grid-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
              '<caption>Interventions (rows) by outcomes (columns): number of studies in each '
              'combination</caption><thead><tr><td></td>%s</tr></thead><tbody>%s</tbody></table></div>'
              % (head, ''.join(trs)))
-
     by_id = {f.id: f for f in q.findings}
     dense = []
     for fid in s.get('densest') or []:
@@ -959,51 +968,35 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         dense.append('<li><a href="#%s">%s</a>: %s · %s · %s</li>' % (
             q3_cell_id(f.subject_id, f.outcome_id), esc(f.subject_label + ' × ' + f.outcome_label), d,
             span('q3/%s/certainty' % f.slug, certainty_text(f.certainty)), n))
-    body += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
+    main += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
              'order.</p><ol class="densest">%s</ol>' % ''.join(dense))
-
-    body += '<h2 id="every">Every combination</h2>'
+    main += '<h2 id="every">Every studied combination</h2>'
     for rid, rlbl in grid['rows']:
         items = []
-        template = row_search_template(grid, rid)
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
-            cell_id = q3_cell_id(rid, cid)
             if isinstance(item, Gap):
-                if template is not None:
-                    # what was searched for is said once for the row (below the heading)
-                    items.append('<li id="%s"><div class="gap" role="note" id="gap-%s"><span class="gq" aria-hidden="true">?</span> <strong>Not studied:'
-                                 '</strong> %s</div></li>' % (cell_id, esc(item.slug), esc(clbl)))
-                else:
-                    items.append('<li id="%s">%s</li>' % (cell_id, gap_marker(item)))
-            else:
-                f = item
-                dens = '<p class="density">Evidence: <strong>%s</strong></p>' % esc(f.raw.get('density', ''))
-                items.append('<li id="%s">%s</li>' % (
-                    cell_id, finding_card(data, f, sources, subject=False, level=4, extra=dens, quotes_shown=1)))
-        note = ''
-        if template is not None:
-            note = ('<p class="searched" data-template="%s">“Not studied” below means this was searched for and '
-                    'nothing was found: %s.</p>' % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
-        n_f = sum(1 for cid, _ in grid['cols'] if not isinstance(grid['cells'][(rid, cid)], Gap))
-        body += fold('r-%s' % slug(rid), esc(rlbl), 3, '%d studied, %d not studied' % (n_f, len(grid['cols']) - n_f),
-                     '%s<ul class="cells">%s</ul>' % (note, ''.join(items)))
-    jumps = [('#short', 'Short answer'), ('#map', 'Gap map'), ('#densest', 'Most studied'), ('#every', 'Every combination')]
-    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
+                continue
+            dens = '<p class="density">Evidence: <strong>%s</strong></p>' % esc(item.raw.get('density', ''))
+            items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
+                data, item, sources, subject=False, level=4, extra=dens, quotes_shown=1)))
+        if items:
+            main += fold('r-%s' % slug(rid), esc(rlbl), 3, '%d studied' % len(items),
+                         '<ul class="cells">%s</ul>' % ''.join(items))
+    jumps = [('#map', 'Gap map'), ('#densest', 'Most studied'), ('#every', 'Every studied combination')]
+    return question_page(data, prose, q, main, jumps=jumps, short=short)
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """Any future qN file gets a page with no code change."""
-    def rows(fs: Iterable[Finding]) -> str:
-        return '<div class="cards">%s</div>' % ''.join(
-            finding_card(data, f, sources)
-            for f in fs)
-    body = q_header(q, prose) + limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += '<h2>Findings</h2>' + rows(q.findings)
+    """Any future qN file gets the same page with no code change: its findings, then its trends."""
+    main = '<h2 id="findings">Findings</h2><div class="cards">%s</div>' % ''.join(
+        finding_card(data, f, sources) for f in by_strength(q.findings))
+    jumps = [('#findings', 'Findings')]
     if q.trends:
-        body += '<h2>Trends</h2>' + rows(q.trends)
-    body += gaps_section(q)
-    return page(data, '%s.html' % q.qid, '%s · %s' % (q.qid.upper(), question_name(q)), q.text, body)
+        main += '<h2 id="trends">Trends</h2><div class="cards">%s</div>' % ''.join(
+            finding_card(data, f, sources) for f in q.trends)
+        jumps.append(('#trends', 'Trends'))
+    return question_page(data, prose, q, main, jumps=jumps)
 
 
 # --------------------------------------------------------------- graph page

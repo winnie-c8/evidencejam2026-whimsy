@@ -385,3 +385,22 @@ details.limits .intro { font-size: .95rem; color: var(--muted); }
 .guide ol { padding-left: 1.4rem; }
 .guide li { margin: .4rem 0; }
 h2.rows-h { margin-bottom: 0; }
+
+/* shared question page (one template for Q1, Q2, Q3) */
+.kicker { margin: 1.5rem 0 -.75rem; font-size: .85rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--link); }
+div.short.callout { border-left: 6px solid var(--link); background: var(--cream); }
+.to-method { margin: 2rem 0 0; padding-top: 1rem; border-top: 1px solid var(--line); }
+.graph-link { margin: 1rem 0; }
+
+/* not studied: the same compact list everywhere */
+section.gapgrp { margin: .75rem 0 1rem; }
+section.gapgrp h3 { font-size: 1rem; margin: .5rem 0 .25rem; }
+ul.gaps { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+ul.gaps li.gap { border: 2px dashed var(--gap); border-radius: 999px; padding: .15rem .7rem; margin: 0; font-size: .9rem; max-width: 100%; }
+ul.gaps li.gap .searched { display: block; font-size: .85rem; color: var(--muted); }
+p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
+
+/* Q3 gap map: row and column names stay visible while scrolling */
+.grid-wrap thead th, .grid-wrap thead td { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.grid-wrap tbody th { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+.grid-wrap thead td:first-child { left: 0; z-index: 3; }
