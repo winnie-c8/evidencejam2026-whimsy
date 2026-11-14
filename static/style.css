@@ -5,13 +5,13 @@
    Tokens marked "not in Figma yet" keep the site's earlier values until the
    design covers them. */
 
-/* Fonts are bundled in static/fonts/ (nothing is loaded from the internet).
-   Flecha is the trial ("Test") version: letters, digits, comma and full stop only;
-   other characters in headings (? · & : and so on) come from the Georgia fallback. */
-@font-face { font-family: "Flecha"; src: url("fonts/flecha.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Neue Haas Grotesk Text"; src: url("fonts/neue-haas-grotesk-text.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Against"; src: url("fonts/against.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Babel Sans"; src: url("fonts/babel-sans.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+/* Fonts are bundled in static/fonts/ (nothing is loaded from the internet), both under the
+   SIL Open Font License (licence files next to them), so the public repo may share them.
+   They stand in for the Figma fonts, whose licences don't allow that: Inter for Neue Haas
+   Grotesk Text (body, menus, graph) and Fraunces for Flecha / Against (headings, logo).
+   Inter keeps its weight axis (400-700) so bold text is real bold, not faked. */
+@font-face { font-family: "Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Fraunces"; src: url("fonts/fraunces.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 
 :root {
   /* colours, named as in Figma */
@@ -52,10 +52,10 @@
   --target: #fffbe6;          /* section you jumped to */
 
   /* fonts */
-  --font-display: "Against", Georgia, serif;                     /* logo, display titles */
-  --font-heading: "Flecha", Georgia, "Times New Roman", serif;   /* page and question headings */
-  --font-body: "Neue Haas Grotesk Text", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-graph: "Babel Sans", "Arial Narrow", system-ui, sans-serif;  /* the Q1 graph */
+  --font-display: "Fraunces", Georgia, serif;                    /* logo, display titles (Figma: Against) */
+  --font-heading: "Fraunces", Georgia, "Times New Roman", serif; /* page and question headings (Figma: Flecha) */
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;  /* (Figma: Neue Haas Grotesk) */
+  --font-graph: "Inter", system-ui, sans-serif;                  /* the Q1 graph (Figma: Babel Sans) */
 
   /* text sizes (Figma: 65, 40, 24, 18, 15.6 px) */
   --text-display: 4rem;      /* 64 px: page title */
@@ -180,7 +180,11 @@ ul.cells > li { border-bottom: 1px solid var(--divider); padding: .25rem 0; }
 /* Q1 graph: its text uses the graph font */
 figure.graph svg text { font-family: var(--font-graph); }
 figure.graph { margin: var(--space-2) 0; }
-figure.graph svg { display: block; max-width: 1194px; height: auto; }
+figure.graph svg { display: block; height: auto; }
+/* a page with the graph gets the full width beside the sidebar, so the graph shrinks less */
+.layout:has(figure.graph) { max-width: none; }
+.layout main:has(figure.graph) { max-width: none; }
+.layout main:has(figure.graph) > :not(figure.graph):not(.graph-tools):not(.drawer) { max-width: 62rem; }
 dl.legend { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .25rem var(--space-2); }
 dl.legend > div { display: contents; }
 dl.legend dt { font-weight: 600; }
@@ -199,8 +203,8 @@ svg .node rect { fill: var(--bg); stroke: var(--text); stroke-width: 1.5; }
 svg .node.k-condition rect { fill: var(--box-condition); }
 svg .node.k-outcome rect { fill: var(--box-outcome); stroke-width: 2.5; }
 svg .node.k-combination rect { fill: var(--box-combination); stroke-dasharray: 4 2; }
-svg .node text { font-size: 14px; fill: var(--text); }
-svg .colhead { font-size: 13px; font-weight: 700; fill: var(--muted); }
+svg .node text { font-size: 19px; fill: var(--text); }
+svg .colhead { font-size: 17px; font-weight: 700; fill: var(--muted); }
 svg .member { stroke: var(--muted); stroke-width: 1; fill: none; }
 svg .hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; }
 svg .vis { fill: none; }
@@ -220,10 +224,10 @@ svg .ah-mixed { fill: var(--dir-mixed); }
 svg .ah-none { fill: var(--dir-none); }
 svg .lbl rect { fill: var(--bg); stroke: var(--line); }
 svg .lbl text { font-size: 12px; font-weight: 600; }
-svg .lbl .sym { font-size: 22px; font-weight: 700; }
-svg .lbl .n { font-size: 20px; font-weight: 700; }
-svg .lbl .split { font-size: 18px; font-weight: 700; }
-svg .lbl .sub { font-size: 12px; font-weight: 600; }
+svg .lbl .sym { font-size: 25px; font-weight: 700; }
+svg .lbl .n { font-size: 23px; font-weight: 700; }
+svg .lbl .split { font-size: 20px; font-weight: 700; }
+svg .lbl .sub { font-size: 16px; font-weight: 600; }
 svg .d-increase .lbl text { fill: var(--dir-up); }
 svg .d-decrease .lbl text { fill: var(--dir-down); }
 svg .d-mixed .lbl text { fill: var(--dir-mixed); }
@@ -231,7 +235,7 @@ svg .d-no_effect .lbl text, svg .d-unclear .lbl text { fill: var(--dir-none); }
 /* "no evidence": a faint thin dashed line, so it never reads as a result. Its label stays at full contrast. */
 svg .gap-link .vis { stroke: var(--gap); stroke-dasharray: 4 6; stroke-width: 1.5; opacity: .45; }
 svg .gap-link .lbl rect { stroke-dasharray: 3 3; }
-svg .gap-link .lbl text { fill: var(--gap); font-style: italic; font-weight: 400; }
+svg .gap-link .lbl text { fill: var(--gap); font-style: italic; font-weight: 400; font-size: 16px; }
 svg .member { stroke-width: 1.5; }
 
 /* graph.js: dragging, highlighting, side panel */

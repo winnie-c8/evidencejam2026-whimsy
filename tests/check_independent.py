@@ -463,29 +463,27 @@ class Checker:
             where = f'{name} {e["id"]}'
             a = svg_ids.get('edge-' + s)
             if self.ok(a is not None, f'{where}: arrow not drawn in the SVG'):
-                # Visible on the arrow itself (no hover). Studies: the exact number from the
-                # label's data-check span, so "1" can't pass for "11". Certainty: the line's own
-                # style (thickness + dashes, explained in the legend), so the drawn line must
-                # carry exactly the pack's grade, c-low can't pass for c-very_low.
+                # Visible on the arrow itself (no hover), as text on its label: the certainty
+                # word and the study count, exact values from the label's data-check spans, so
+                # "Low" can't pass for "Very low" or "1" for "11". The line's style must carry
+                # the same grade too (checked below), and a mixed arrow also shows how many
+                # studies went up and down ("⇅ ↑5 ↓1").
                 shown = {}
                 for n in a.iter():
                     dc = n.attrs.get('data-check', '')
                     for field in ('certainty', 'studies'):
                         if dc.endswith('/' + field) and field not in shown:
                             shown[field] = n.text()
+                for field in ('certainty', 'studies'):
+                    if self.ok(field in shown, f'{where}: {field} not visible on the arrow (needs hover?)'):
+                        self.ok(str(shown_value(field, shown[field])) == str(e[field]),
+                                f'{where}: arrow shows {field} "{shown[field]}", pack says "{e[field]}"')
                 if e['direction'] == 'mixed' and e['kind'] != 'moderation':
-                    # A mixed arrow shows how many studies went up and down ("⇅ ↑5 ↓1"); the
-                    # values themselves are checked against the pack by check_every_value.
+                    # the split values themselves are checked against the pack by check_every_value
                     dcs = {n.attrs.get('data-check', '') for n in a.iter()}
                     for d_ in ('increase', 'decrease'):
                         self.ok(f'q1graph/{s}/study_directions/{d_}' in dcs,
                                 f'{where}: mixed arrow does not show how many studies found {d_}')
-                elif self.ok('studies' in shown, f'{where}: studies not visible on the arrow (needs hover?)'):
-                    self.ok(str(shown_value('studies', shown['studies'])) == str(e['studies']),
-                            f'{where}: arrow shows studies "{shown["studies"]}", pack says "{e["studies"]}"')
-                if 'certainty' in shown:
-                    self.ok(str(shown_value('certainty', shown['certainty'])) == str(e['certainty']),
-                            f'{where}: arrow shows certainty "{shown["certainty"]}", pack says "{e["certainty"]}"')
                 lines = [n for n in a.iter() if n.tag == 'path' and 'vis' in n.cls()]
                 styles = {c[2:] for v in lines for c in v.cls() if c.startswith('c-')}
                 self.ok(styles == {e['certainty']},

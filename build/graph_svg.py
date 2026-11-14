@@ -31,18 +31,21 @@ from load import Graph, slug
 FLOW = 'down'          # 'down' or 'right'
 
 # shared sizes
-NODE_PAD, LINE_H = 12, 18
-CHAR_W = 7.8           # px per char at 14 px
+NODE_PAD, LINE_H = 12, 24
+CHAR_W = 10.4          # px per char at 19 px (box text)
 LBL_CHAR_W = 7.0       # px per char at 12 px bold
-LBL_H = 20
-BIG_LBL_H = 30         # label with the large symbol and number
-SYM_W = 16             # width of the direction symbol at 22 px
-NUM_W = 12             # width of one digit at 20 px bold
-ARR_W = 12             # width of the ↑ / ↓ before a split count at 18 px
+LBL_H = 26             # the "no evidence" label (one small line)
+BIG_LBL_H = 33         # label with the large symbol and number
+SYM_W = 18             # width of the direction symbol at 25 px
+NUM_W = 14             # width of one digit at 23 px bold
+ARR_W = 13             # width of the ↑ / ↓ before a split count at 20 px
 VTAIL = 20             # tail of an arrow entering a box from the side across the flow
 HEAD_GAP = 18          # space between a label and the box, for the arrowhead
 MOD_INSET = 24         # a moderation arrow lands this far into the lane of the arrow it changes
-TIER = BIG_LBL_H + 4   # top-down: offset of the second (staggered) row of labels
+SUB_H = 18             # each small line under a label's big line (certainty word, studies)
+SUB_CHAR_W = 9.4       # px per char at 16 px semibold
+MAX_LBL_H = BIG_LBL_H + 2 * SUB_H   # tallest label: big line + two small lines
+TIER = MAX_LBL_H + 4   # top-down: offset of the second (staggered) row of labels
 
 # left to right: columns x, width
 X0, W0 = 34, 200
@@ -52,15 +55,15 @@ X1, W1 = X0 + W0 + GUTTER + STRIP_R, 190
 X2, W2 = X1 + W1 + GUTTER + STRIP_R, 170
 VIEW_W_R = X2 + W2 + 24
 COMB_INDENT = 24       # a combination box is indented so its member bracket fits
-PORT_H = 36            # vertical room per labelled incoming arrow
+PORT_H = MAX_LBL_H + 6   # vertical room per labelled incoming arrow
 OUT_GAP = 12           # vertical room per outgoing arrow
 TOP = 56
 
 # top to bottom
-BOX_W = 150            # narrowest box
-PORT_W = 54            # horizontal room per labelled incoming arrow (labels alternate rows)
+BOX_W = 176            # narrowest box
+PORT_W = 58            # horizontal room per labelled incoming arrow (labels alternate rows)
 OUT_W = 14             # horizontal room per outgoing arrow
-STRIP_D = HEAD_GAP + BIG_LBL_H + TIER + 16   # straight tail above a box; holds two rows of labels
+STRIP_D = HEAD_GAP + MAX_LBL_H + TIER + 16   # straight tail above a box; holds two rows of labels
 GUTTER_D = 190         # free space between rows where arrows curve
 CASCADE = 64           # each middle box sits this much lower than the one to its left
 LANE_GAP = 40          # outer lanes: distance from the middle boxes
@@ -152,18 +155,31 @@ def split_counts(e: Dict[str, Any]) -> Tuple[int, int]:
     return int(sd.get('increase', 0)), int(sd.get('decrease', 0))
 
 
+def sub_lines(kind: str, e: Dict[str, Any]) -> List[str]:
+    """The small lines under a label's big line (plain text, for sizing): the certainty word,
+    then for a mixed arrow its total studies, for a moderation arrow what it does."""
+    lines = [CERT[e['certainty']]]
+    if kind == 'e' and e['direction'] == 'mixed':
+        lines.append('%d %s' % (e['studies'], 'study' if e['studies'] == 1 else 'studies'))
+    if kind == 'm':
+        lines.append('changes this effect')
+    return lines
+
+
 def label_size(kind: str, e: Dict[str, Any]) -> Tuple[float, float]:
-    """A label shows a large direction symbol and the study count; certainty is the line style."""
+    """A label shows a large direction symbol and the study count ("↑ 7", or "⇅ ↑5 ↓1" for a
+    mixed arrow), and under it, small, the certainty word (and a mixed arrow's total studies).
+    The line style shows certainty too."""
     if kind == 'g':
-        return len('no evidence') * LBL_CHAR_W + 12, LBL_H
+        return len('no evidence') * SUB_CHAR_W + 14, LBL_H
     if kind == 'e' and e['direction'] == 'mixed':   # "⇅ ↑5 ↓1": how many studies went each way
         up, down = split_counts(e)
         w = SYM_W + 6 + (ARR_W + NUM_W * len(str(up))) + 8 + (ARR_W + NUM_W * len(str(down))) + 16
     else:
         w = SYM_W + 6 + NUM_W * len(str(e['studies'])) + 16
-    if kind == 'm':
-        return max(w, len('changes this effect') * LBL_CHAR_W + 12), BIG_LBL_H + 14
-    return w, BIG_LBL_H
+    subs = sub_lines(kind, e)
+    w = max([w] + [len(t) * SUB_CHAR_W + 14 for t in subs])
+    return w, BIG_LBL_H + SUB_H * len(subs)
 
 
 def pack(keys: List[str], desired: Dict[str, float], size: Dict[str, float],
@@ -330,7 +346,7 @@ def layout_down(g: Graph) -> Dict[str, Any]:
     for n in g.nodes:
         w = max(BOX_W, PORT_W * (n_in.get(n['id'], 0) + 1), OUT_W * (n_out.get(n['id'], 0) + 1))
         b = Box(n, row[n['id']], 0.0, w)
-        b.h = max(b.h, 44)
+        b.h = max(b.h, 54)
         boxes[n['id']] = b
 
     by_row = {r: [b.id for b in boxes.values() if b.col == r] for r in (0, 1, 2)}
@@ -764,7 +780,7 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
                    'not studied in this body of research. Opens details."%s>'
                    % (gs, gs, esc(name(gp['source'])), esc(name(gp['target'])), data_attrs(gp['id'])))
         out.append('<path class="hit" d="%s"/><path class="vis" d="%s"/>' % (d, d))
-        out.append(label_svg(gp['id'], [('no evidence', False, 14)]))
+        out.append(label_svg(gp['id'], [('no evidence', False, 18)]))
         out.append('</a>')
 
     # effect and moderation edges
@@ -812,10 +828,20 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
         else:
             main = ('<tspan class="sym" aria-hidden="true">%s</tspan> '
                     '<tspan class="n" data-check="%s/%s/studies">%d</tspan>' % (SYM[e['direction']], prefix, es, n))
-        parts = [(main, False, 22.0)]
+        parts = [(main, False, 25.0)]
+        # small lines: the certainty word (read by the checkers), a mixed arrow's total studies,
+        # and what a moderation arrow does (the name already says "changes the effect of")
+        dy = 25.0 + SUB_H
+        parts.append(('<tspan class="sub" data-check="%s/%s/certainty">%s</tspan>'
+                      % (prefix, es, CERT[e['certainty']]), False, dy))
+        if e['direction'] == 'mixed' and e.get('kind') != 'moderation':
+            dy += SUB_H
+            parts.append(('<tspan class="sub" data-check="%s/%s/studies">%d</tspan>'
+                          '<tspan class="sub"> %s</tspan>' % (prefix, es, n, 'study' if n == 1 else 'studies'),
+                          False, dy))
         if e.get('kind') == 'moderation':
-            # the name already says "changes the effect of"
-            parts.append(('<tspan class="sub">changes this effect</tspan>', True, 37.0))
+            dy += SUB_H
+            parts.append(('<tspan class="sub">changes this effect</tspan>', True, dy))
         out.append(label_svg(e['id'], parts))
         out.append('</a>')
 
@@ -828,7 +854,7 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
         out.append('<text text-anchor="middle">')
         top = (b.h - LINE_H * len(b.lines)) / 2
         for i, line in enumerate(b.lines):
-            out.append('<tspan x="%s" y="%s">%s</tspan>' % (f1(b.w / 2), f1(top + 13 + i * LINE_H), esc(line)))
+            out.append('<tspan x="%s" y="%s">%s</tspan>' % (f1(b.w / 2), f1(top + 18 + i * LINE_H), esc(line)))
         out.append('</text></g>')
 
     out.append('</svg>')

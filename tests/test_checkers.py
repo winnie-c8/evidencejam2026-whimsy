@@ -145,7 +145,7 @@ MUTATIONS = [
     ('index no longer links to Q3', 'index.html',
      r'href="q3\.html[^"]*"', 'href="#"', 0),
     ('graph node label removed from SVG text', 'q1-graph.html',
-     r'(<tspan[^>]*>)Site preparation(</tspan>)', r'\1\2', 1),
+     r'(<tspan[^>]*>)Seedling survival(</tspan>)', r'\1\2', 1),
     ('arrow label removed (certainty only on hover)', 'q1-graph.html',
      r'(id="edge-site-preparation--to--growth".*?)<g class="lbl">.*?</g>', r'\1', 1),
     ('graph arrow deleted', 'q1-graph.html',
@@ -196,7 +196,13 @@ MUTATIONS = [
      r'data-claim="camo:[^"]+"', 'data-claim="camo:edge_3fb326f2a6c3"', 1),
     ('made-up time span on a Q2 source page', 'sources-q2--created-marsh--abundance-density.html',
      r'(<div class="sources">)', r'<p>Created marshes recover in 10 years.</p>\1', 1),
-    # certainty is shown by the line style now (labels show the direction symbol + studies)
+    # certainty is shown twice on an arrow: as a word on its label and by its line style
+    ('certainty word on a graph arrow label changed', 'q1-graph.html',
+     r'(id="edge-site-preparation--to--survival".*?data-check="q1graph/site-preparation--to--survival/'
+     r'certainty">)High<', r'\1Moderate<', 1),
+    ('certainty word removed from a graph arrow label', 'q1-graph.html',
+     r'(id="edge-vegetation-control--to--growth".*?)<text[^>]*><tspan class="sub" data-check="[^"]+/certainty">'
+     r'[^<]+</tspan></text>', r'\1', 1),
     ('graph arrow drawn with a higher certainty than the pack', 'q1-graph.html',
      r'(id="edge-seedling-size--to--survival".*?<path class="vis c-)low"', r'\1high"', 1),
     ('graph arrow line has no certainty style', 'q1-graph.html',
