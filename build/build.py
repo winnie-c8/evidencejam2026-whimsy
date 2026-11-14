@@ -46,10 +46,11 @@ def main(argv=None) -> int:
             for w in data.warnings:
                 print('[build] warning: %s' % w)
         n_find = sum(len(q.findings) + len(q.trends) for q in data.questions.values())
-        g = data.q1_graph
+        gs = list(data.graphs.values())
         print('[build] loaded %d answer files + %d graph: %d findings and trends, %d edges, %d graph quotes'
-              % (len(data.questions), 1 if g else 0, n_find, len(g.edges) if g else 0,
-                 len(g.evidence) if g else 0))
+              % (len(data.questions), len(gs), n_find, sum(len(g.edges) for g in gs),
+                 sum(len(g.evidence) for g in gs)))
+        print('[build] layouts: %s' % ', '.join('%s %s' % (qid, k) for qid, k in data.kinds.items()))
 
         from summarize import summarize_all
         prose = summarize_all(data, args)
@@ -63,9 +64,9 @@ def main(argv=None) -> int:
         from render import render_site
         pages = render_site(data, prose, out)
 
-        if g is not None:
-            from graph_svg import write_graph
-            write_graph(g, data.edge_index, out)
+        from graph_svg import write_graph
+        for qid in data.graph_qids():
+            write_graph(data.graphs[qid], data.edge_index[qid], out, qid)
 
         print('[build] wrote %d pages to %s (%d KB)' % (len(pages), out, dir_size(out) // 1024))
 
