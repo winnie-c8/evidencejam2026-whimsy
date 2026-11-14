@@ -397,6 +397,7 @@ section.gapgrp { margin: .75rem 0 1rem; }
 section.gapgrp h3 { font-size: 1rem; margin: .5rem 0 .25rem; }
 ul.gaps { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem; }
 ul.gaps li.gap { border: 2px dashed var(--gap); border-radius: 999px; padding: .15rem .7rem; margin: 0; font-size: .9rem; max-width: 100%; }
+ul.gaps li.gap::before { content: "? " / ""; font-weight: 700; color: var(--gap); }
 ul.gaps li.gap .searched { display: block; font-size: .85rem; color: var(--muted); }
 p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
 
