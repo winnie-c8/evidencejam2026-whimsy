@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime
 import html
+import json
 import os
 import re
 import shutil
@@ -338,6 +339,34 @@ def rationale_score(r: Optional[str]) -> Optional[Tuple[int, List[int], int, str
     return start, deltas, final, note
 
 
+def _checks_js() -> str:
+    """Builds the Why checklist in the browser from a card's exact rule text (used on Q3, where
+    the card repeats 123 times). The lookup tables come from START_CHECK / STEP_CHECK above."""
+    start = json.dumps({k: list(v) for k, v in START_CHECK.items()}, ensure_ascii=False)
+    steps = json.dumps([[pat.pattern, mk, t] for pat, (mk, t) in STEP_CHECK], ensure_ascii=False)
+    return ('<script>(function(){var ST=%s,SP=%s,LV={"very low":1,low:2,moderate:3,high:4},'
+            'LW={1:"Very low",2:"Low",3:"Moderate",4:"High"},'
+            'RX=/^start (high|moderate|low|very low) \\([^)]*\\)(.*?)\\s*->\\s*(high|moderate|low|very low)$/;'
+            'function e(t){var d=document.createElement("span");d.textContent=t;return d.innerHTML}'
+            'function li(mk,t,p){return \'<li><span class="mk" aria-hidden="true">\'+mk+\'</span><span class="sr-only">\''
+            '+({"✓":"For","✗":"Against"}[mk]||"Note")+\': </span><span class="t">\'+e(t)+\'</span><span class="pts">\'+p+\'</span></li>\'}'
+            'document.querySelectorAll("ul.checks[data-rule]").forEach(function(ul){'
+            'var r=ul.parentNode.querySelector("p.rule").textContent.replace(/\\s+/g," ").trim(),m=r.match(RX);'
+            'if(!m){ul.remove();return}var s=ST[m[1]],o=li(s[0],s[1],"start "+LV[m[1]]),tot=LV[m[1]],one=false;'
+            'm[2].split(";").forEach(function(p){p=p.trim();if(!p)return;var d=+((p.match(/^([+-]\\d+)/)||[0,0])[1]);'
+            'tot+=d;if(/single study/.test(p))one=true;for(var i=0;i<SP.length;i++){var x=p.match(new RegExp(SP[i][0]));'
+            'if(x){o+=li(SP[i][1],SP[i][2].replace("{0}",x[1]||""),d?(d>0?"+":"\u2212")+Math.abs(d):"");return}}'
+            'o+=li("·",p,"")});var f=LV[m[3]],n="";if(tot!==f){n="adds up to "+tot+(tot>4&&f==4?", capped at 4: High is '
+            'the top level":tot<1&&f==1?", kept at 1: Very low is the lowest level":f==3&&one?", capped at 3: one study '
+            'never goes above Moderate":"; the pack grades it "+f)}'
+            'o+=\'<li class="total"><span class="mk" aria-hidden="true">=</span><span class="t">\'+LW[f]+'
+            '(n?\' <span class="cap">(\'+e(n)+\')</span>\':"")+\'</span><span class="pts">\'+f+\'</span></li>\';'
+            'ul.innerHTML=o})})();</script>' % (start, steps))
+
+
+CHECKS_JS = _checks_js()
+
+
 def headline_reason(checks: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
     """For the closed card: the first ✗, or if none the strongest ✓ (agreement, then mechanism, then design)."""
     for c in checks:
@@ -383,7 +412,7 @@ def split_bar(f: Finding) -> str:
     return '<span class="agree" aria-hidden="true">%s</span>' % segs
 
 
-SHORT = {'increase': 'up', 'decrease': 'down', 'mixed': 'mixed', 'no_effect': 'none', 'unclear': 'unclear',
+SHORT = {'increase': 'up', 'decrease': 'down', 'mixed': 'mixed', 'no_effect': 'no effect', 'unclear': 'unclear',
          'below_reference': 'behind', 'comparable': 'matches', 'above_reference': 'ahead'}
 
 
@@ -469,7 +498,7 @@ def card_name(f: Finding, subject: bool) -> str:
 
 def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
                  tag: str = '', level: int = 3, extra: str = '', links: str = '',
-                 quotes_shown: int = QUOTES_IN_CARD) -> str:
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False) -> str:
     """One finding. Closed it is one line: direction, name, certainty, study split, Details.
     Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
     base = '%s/%s' % (f.question, f.slug)
@@ -501,10 +530,16 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
                   '<span class="pts">%d</span></li>'
                   % (esc(LEVEL_WORD[score[2]]), (' <span class="cap">(%s)</span>' % esc(score[3])) if score[3] else '',
                      score[2]))
+    if compact:
+        # Q3 repeats this 123 times: the checklist is built in the browser from the rule text
+        # below (CHECKS_JS); without script the exact rule text is still there.
+        items = ''
     why = ('<section class="panel"><h5>Why “%s”?%s</h5>%s'
            # the pack's exact rationale must be on the page (README; both checkers): kept, but quiet
            '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
-           % (esc(cw), HELP_BTN, ('<ul class="checks">%s</ul>' % items) if items else '', raw))
+           % (esc(cw), '' if compact else HELP_BTN,
+              '<ul class="checks" data-rule></ul>' if compact else (('<ul class="checks">%s</ul>' % items) if items else ''),
+              raw))
     # panel 2: sources, quotes first
     finding_sources(sources, f, f.question)  # writes sources-<slug>.html
     groups = paper_groups(f.quotes)
@@ -923,14 +958,14 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
              % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
                 span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html), 'short')
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += ('<h2 id="map">Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
+    body += ('<h2 id="map">Gap map %s</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
              ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
              'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
              '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
              '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
              'dense</dt><dd>4 or more studies</dd></div></dl>'
              '<p class="note">Each filled cell shows its number of studies and density word. Study counts '
-             'measure research effort, not effect size. Select a cell to read its finding.</p>')
+             'measure research effort, not effect size. Select a cell to read its finding.</p>' % HELP_BTN)
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
     trs = []
     for rid, rlbl in grid['rows']:
@@ -972,15 +1007,16 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
             if isinstance(item, Gap):
                 if template is not None:
                     # what was searched for is said once for the row (below the heading)
-                    items.append('<li id="%s"><div class="gap" role="note" id="gap-%s"><span class="gq" aria-hidden="true">?</span> <strong>Not studied:'
-                                 '</strong> %s</div></li>' % (cell_id, esc(item.slug), esc(clbl)))
+                    items.append('<li class="gap" id="gap-%s"><strong>Not studied:</strong> %s</li>'
+                                 % (esc(item.slug), esc(clbl)))
                 else:
                     items.append('<li id="%s">%s</li>' % (cell_id, gap_marker(item)))
             else:
                 f = item
                 dens = '<p class="density">Evidence: <strong>%s</strong></p>' % esc(f.raw.get('density', ''))
                 items.append('<li id="%s">%s</li>' % (
-                    cell_id, finding_card(data, f, sources, subject=False, level=4, extra=dens, quotes_shown=1)))
+                    cell_id, finding_card(data, f, sources, subject=False, level=4, extra=dens, quotes_shown=0,
+                                          compact=True)))
         note = ''
         if template is not None:
             note = ('<p class="searched" data-template="%s">“Not studied” below means this was searched for and '
@@ -989,7 +1025,8 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         body += fold('r-%s' % slug(rid), esc(rlbl), 3, '%d studied, %d not studied' % (n_f, len(grid['cols']) - n_f),
                      '%s<ul class="cells">%s</ul>' % (note, ''.join(items)))
     jumps = [('#short', 'Short answer'), ('#map', 'Gap map'), ('#densest', 'Most studied'), ('#every', 'Every combination')]
-    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
+    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS + CHECKS_JS,
+                jumps=jumps)
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
