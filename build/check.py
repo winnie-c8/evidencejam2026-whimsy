@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from load import LoadError, SiteData, load_all, slug  # noqa: E402
+from load import COMPARISON, GAPMAP, LoadError, SiteData, load_all, slug  # noqa: E402
 
 DIR_WORDS = {
     'Increase': 'increase', 'Decrease': 'decrease', 'Mixed': 'mixed', 'No effect': 'no_effect',
@@ -161,8 +161,8 @@ def expected(path: str, data: SiteData) -> Tuple[str, Any]:
         for p in rest:
             v = v[p]
         return ('int' if isinstance(v, int) else 'text'), v
-    if head == 'q1graph':
-        g = data.q1_graph
+    if head.endswith('graph') and head[:-len('graph')] in data.questions:
+        g = data.graphs.get(head[:-len('graph')])  # e.g. q1graph -> the graph of q1
         if g is None:
             raise Unknown('no graph')
         if rest[0] == 'count':
@@ -262,23 +262,24 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
                 problems.append('%s: no gap marker id="gap-%s" for %s' % (pname, gp.slug, gp.id))
 
     # 3 + 4. graph edges and evidence boxes
-    g = data.q1_graph
-    if g is not None:
-        p = pages.get('q1-graph.html')
+    for gq in data.graph_qids():  # every question that has a *_graph.json
+        g = data.graphs[gq]
+        gname = '%s-graph.html' % gq
+        p = pages.get(gname)
         if p is None:
-            problems.append('q1-graph.html missing')
+            problems.append('%s missing' % gname)
         else:
             for e in g.edges:
                 s = slug(e['id'])
                 if 'edge-' + s not in p.edge_ids:
-                    problems.append('q1-graph.html: SVG has no <a class="edge" id="edge-%s">' % s)
+                    problems.append('%s: SVG has no <a class="edge" id="edge-%s">' % (gname, s))
                 if 'e-' + s not in p.ids:
-                    problems.append('q1-graph.html: no evidence section id="e-%s"' % s)
+                    problems.append('%s: no evidence section id="e-%s"' % (gname, s))
             if len(p.edge_ids) != len(g.edges):
-                problems.append('q1-graph.html: %d SVG edges, pack has %d' % (len(p.edge_ids), len(g.edges)))
+                problems.append('%s: %d SVG edges, pack has %d' % (gname, len(p.edge_ids), len(g.edges)))
             for gp in g.gaps:
                 if 'e-' + slug(gp['id']) not in p.ids:
-                    problems.append('q1-graph.html: no gap panel id="e-%s"' % slug(gp['id']))
+                    problems.append('%s: no gap panel id="e-%s"' % (gname, slug(gp['id'])))
             # each arrow's quotes are on its own page, sources-e-<slug>.html, and that page
             # must show exactly this arrow's claims (not another arrow's), each once
             for e in g.edges:
@@ -292,16 +293,18 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
                     problems.append('%s: shows claims %s, arrow %s has %s'
                                     % (sname, sorted(sp.claim_list), e['id'], want))
 
-    # 5. Q3 cells
-    q3 = data.questions.get('q3')
-    if q3 is not None and 'summary' in q3.extra and 'q3.html' in pages:
-        s = q3.extra['summary']
-        td = pages['q3.html'].classes_td
+    # 5. gap-map cells (Q3 today; any question with that shape)
+    for gq, kind in data.kinds.items():
+        pname = '%s.html' % gq
+        if kind != GAPMAP or pname not in pages:
+            continue
+        s = data.questions[gq].extra['summary']
+        td = pages[pname].classes_td
         filled = sum(td.get('d-' + k, 0) for k in ('thin', 'some', 'dense'))
         for label, got, want in (('filled', filled, s['filled']), ('single-study', td.get('d-thin', 0), s['thin']),
                                  ('empty', td.get('empty', 0), s['empty'])):
             if got != want:
-                problems.append('q3.html gap map: %d %s cells, pack summary says %d' % (got, label, want))
+                problems.append('%s gap map: %d %s cells, pack summary says %d' % (pname, got, label, want))
 
     # 6 + 7. links
     for name, p in pages.items():
@@ -326,14 +329,16 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
 
     # 8. Q2 says what it cannot answer, and invents no durations (on q2.html and on the
     #    sources-q2--*.html pages that hold its quotes)
-    q2 = data.questions.get('q2')
-    if q2 is not None and 'q2.html' in pages:
-        p = pages['q2.html']
-        note = (q2.extra.get('short_answer') or {}).get('time_to_reference_note')
+    for cq, kind in data.kinds.items():  # Q2 today; any comparison-shaped question
+        pname = '%s.html' % cq
+        if kind != COMPARISON or pname not in pages:
+            continue
+        p = pages[pname]
+        note = (data.questions[cq].extra.get('short_answer') or {}).get('time_to_reference_note')
         alltext = norm(' '.join(t for _, t in p.checks) + ' ' + ' '.join(p.free_text))
         if note and norm(note) not in alltext:
-            problems.append('q2.html: the pack\'s time_to_reference_note is missing')
-        for name in sorted(n for n in pages if n == 'q2.html' or n.startswith('sources-q2--')):
+            problems.append('%s: the pack\'s time_to_reference_note is missing' % pname)
+        for name in sorted(n for n in pages if n == pname or n.startswith('sources-%s--' % cq)):
             free = norm(' '.join(pages[name].free_text))
             for m in YEARS_RE.finditer(free):
                 ctx = free[max(0, m.start() - 40):m.end() + 20]

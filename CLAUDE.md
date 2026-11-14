@@ -33,23 +33,31 @@ Audience: restoration practitioners (non-coders, e.g. conservation authorities, 
 7. One command from a clean checkout: `./build.sh site/`. Pinned deps. Judges run on ARM64 (aarch64) Linux. A broken build halves automatic scores.
 8. LLM optional, build time only. Read BRINE_URL / BRINE_MODEL / BRINE_API_KEY from env. NEVER hardcode or commit keys. Token use counts against the sustainability score (we currently use no LLM).
 9. Accessibility (WCAG 2.1 AA) is also Lane 3's sustainability prize: keyboard nav, contrast, semantic HTML, one h1, lang attr, table view of the graph, no sideways scroll at 375px.
-10. Page weight per view is scored — q3.html (~1.3 MB) and q1-graph.html (~525 KB) are currently too heavy.
+10. Page weight per view is scored and ranked against other teams. Keep answer pages light: quotes live on `sources-<slug>.html` pages, not on the answer pages. Don't add images, fonts or libraries without checking the size (the independent checker prints every page's size).
 
 ## Code layout
 - `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; template-only, LLM off), `check.py` (built-in checker)
 - `static/style.css`; `static/graph.js` (Q1 graph only: drag boxes/arrows, pin highlight, filters, sort, side panel with sources; its routing mirrors `route_all` in graph_svg.py, keep them in step). `FLOW` in graph_svg.py switches the graph between top-down ('down', default) and left-to-right ('right')
-- `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + 22 mutation tests), `tests/a11y/` (axe + phone width, CI only)
+- **Add a new question:** drop its JSON in `answers/` and rebuild; the layout is picked from the data's shape (`detect_kind()` in `load.py`: gap map → comparison → effects → generic), and a `qN_..._graph.json` gets its own `qN-graph.html`. Per-question wording (`AUDIENCE`, `GRAPH_INTRO` in `render.py`) falls back to a default.
+- `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + mutation tests: each breaks the site on purpose and must be caught), `tests/a11y/` (axe, phone width, keyboard Tab order and focus outlines; CI only, needs Node)
 - `.github/workflows/check.yml` runs all of this on PRs.
-- Page contract the checkers rely on: `id="f-<slug>"` findings, `id="gap-<slug>"` gaps, `id="edge-<slug>"` SVG arrows, `id="e-<slug>"` evidence sections, `data-check="<q>/<slug>/direction|certainty|studies"`, `data-claim="<edge id>"`. If you change markup, update the mutation patterns in tests/test_checkers.py.
+- Page contract the checkers rely on: `id="f-<slug>"` findings, `id="gap-<slug>"` gaps, `id="edge-<slug>"` SVG arrows, `id="e-<slug>"` evidence sections, `data-check="<q>/<slug>/direction|certainty|studies"`, `data-claim="<edge id>"`, and one `sources-<finding slug>.html` / `sources-e-<arrow slug>.html` page per finding / graph arrow, linked from it, showing exactly its quotes. If you change markup, update the mutation patterns in tests/test_checkers.py.
 
 ## Before pushing
 ```
 ./build.sh site/ && python3 build/check.py site/ && python3 tests/check_independent.py site/ && python3 -m unittest discover -s tests
-grep -rn "sk-" --exclude-dir=.git --exclude-dir=site .   # must print nothing
+grep -rnE "sk-[A-Za-z0-9_-]{20,}" --exclude-dir=.git --exclude-dir=site --exclude-dir=node_modules .   # must print nothing (looks for real keys)
 ```
+Optional, the browser checks CI runs (needs Node): `cd tests/a11y && npm ci && npx playwright install chromium && node a11y.mjs ../../site`
+
+## How we work
+- Plan: issue #22 (Roadmap) lists every step; each issue's "Done when" is the spec. Start a session with "read issue #N".
+- One issue per branch and per PR. Never push straight to `main`: a ruleset blocks merging until all 3 CI checks pass.
+- Ask a teammate to review anything that changes the site; small docs-only PRs can be merged once the checks pass. Fix review comments by pushing to the same branch (no new PR). Merge with a merge commit.
+- Phase 2 pages overlap (`render.py`, `style.css`): keep PRs small and merge often to avoid conflicts.
 
 ## Deadlines
 Last commit before 6 p.m. Eastern, Sun Nov 15 2026 is judged. 3-minute team presentation Mon Nov 16, 1 p.m.
 
-## About me (Brian)
-First-year, new to hackathons and git. Explain things simply and step by step; say what a command does before running it.
+## Personal preferences
+Put notes about yourself (experience level, how you like things explained) in `CLAUDE.local.md` in the repo root. It is gitignored, so it only affects your own Claude Code sessions.

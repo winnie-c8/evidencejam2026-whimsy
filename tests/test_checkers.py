@@ -12,6 +12,7 @@ Standard library only.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -120,9 +121,9 @@ MUTATIONS = [
      r'(id="edge-competing-vegetation--to--growth".*?<g class="lbl">.*?)<tspan class="split"[^>]*>↓</tspan>'
      r'<tspan class="n" data-check="[^"]+">\d+</tspan>', r'\1', 1),
     ('finding deleted', 'q1.html',
-     r'<tr id="f-q1--seedling-size--growth".*?</tr>', '', 1),
+     r'<article class="fcard[^"]*" id="f-q1--seedling-size--growth".*?</article>', '', 1),
     ('certainty rationale removed', 'q2.html',
-     r'(<details class="cert[^"]*"><summary>.*?</summary>)<p>.*?</p>', r'\1', 1),
+     r'<p class="rule">.*?</p>', '', 1),
     ('source quote altered', 'sources-q2--created-marsh--abundance-density.html',
      r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
     ('DOI link removed', 'sources-q3--seeding--invasive-abundance.html',
@@ -132,7 +133,7 @@ MUTATIONS = [
     ('gap worded as a failure', 'q3.html',
      r'<strong>Not studied:</strong>', '<strong>Ineffective:</strong>', 1),
     ('gap deleted', 'q1.html',
-     r'<div class="gap" role="note" id="gap-q1--nursery-fertilization--survival">.*?</div>', '', 1),
+     r'<li class="gap" id="gap-q1--nursery-fertilization--survival">.*?</li>', '', 1),
     ('Q2 "how long" note replaced with a timeline', 'q2.html',
      r'No study in this corpus reports how long[^<]*', 'Created marshes match natural ones after 10 years.', 0),
     ('limitation removed', 'q3.html',
@@ -142,7 +143,7 @@ MUTATIONS = [
     ('external stylesheet added', 'q2.html',
      r'</head>', '<link rel="stylesheet" href="//fonts.example.com/a.css"></head>', 1),
     ('index no longer links to Q3', 'index.html',
-     r'href="q3\.html"', 'href="#"', 0),
+     r'href="q3\.html[^"]*"', 'href="#"', 0),
     ('graph node label removed from SVG text', 'q1-graph.html',
      r'(<tspan[^>]*>)Site preparation(</tspan>)', r'\1\2', 1),
     ('arrow label removed (certainty only on hover)', 'q1-graph.html',
@@ -171,7 +172,7 @@ MUTATIONS = [
     ('Q2 time point removed', 'q2.html',
      r'(data-check="q2/q2--created-marsh--abundance-density/time_points/0">)[^<]+', r'\1', 1),
     ('Q2 "how long" answer moved below the findings', 'q2.html',
-     r'(<div class="callout" role="note" aria-label="How long">.*?</div>)(.*?)(</main>)', r'\2\1\3', 1),
+     r'(<div class="[^"]*callout[^"]*" role="note" aria-label="How long"[^>]*>.*?</div>)(.*?)(</main>)', r'\2\1\3', 1),
     ('external SVG image via xlink:href', 'q1.html',
      r'</main>', '<svg><image xlink:href="https://img.example.com/a.png"/></svg></main>', 1),
     ('external image via inline style', 'q2.html',
@@ -202,7 +203,72 @@ MUTATIONS = [
      r'(id="edge-site-preparation--to--growth".*?<path class="vis) c-high"', r'\1"', 1),
     ('Q3 row drops what was searched for', 'q3.html',
      r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
+    # 2.8 short answers built from the data
+    ('short answer says "decreases" for an increase', 'q1.html',
+     r'(<span data-group="increase/high">.*?) increase it</span>', r'\1 decrease it</span>', 1),
+    ('short answer certainty word changed', 'index.html',
+     r'(<span data-cert="high">with )high certainty', r'\1moderate certainty', 1),
+    ('short answer lists a finding under the wrong group', 'q1.html',
+     r'(<span data-group="decrease/high"><a href=")[^"]+', r'\1q1.html#f-q1--site-preparation--growth', 1),
+    ('short answer links to a missing finding', 'index.html',
+     r'(<span data-group="increase/high"><a href=")[^"]+', r'\1q1.html#f-q1--nothing', 1),
+    ('Q3 short answer study count changed', 'q3.html',
+     r'(<div class="short"[^>]*>.*?\(<span data-check="q3/[^"]+/studies">)\d+', r'\g<1>99', 1),
 ]
+
+
+class NewQuestions(unittest.TestCase):
+    """The layout follows the answer file's shape, not its id: a new question dropped into
+    answers/ gets the right page with no code change (load.detect_kind)."""
+
+    def build_with(self, extra_files):
+        """Copy answers/ (+ manifest.json) to a temp dir, add extra_files {name: json text},
+        build into a temp site. Returns (site path, answers path, completed process)."""
+        root = tempfile.mkdtemp(prefix='newq-', dir=TMP)
+        answers = os.path.join(root, 'answers')
+        shutil.copytree(os.path.join(ROOT, 'answers'), answers)
+        shutil.copy(os.path.join(ROOT, 'manifest.json'), root)
+        for name, text in extra_files.items():
+            with open(os.path.join(answers, name), 'w', encoding='utf-8') as fh:
+                fh.write(text)
+        site = os.path.join(root, 'site')
+        env = {k: v for k, v in os.environ.items() if not k.startswith('BRINE_')}
+        r = subprocess.run([sys.executable, os.path.join(ROOT, 'build', 'build.py'), site, '--answers', answers,
+                            '--strict'], cwd=ROOT, env=env, capture_output=True, text=True)
+        return site, answers, r
+
+    def read(self, site, name):
+        with open(os.path.join(site, name), encoding='utf-8') as fh:
+            return fh.read()
+
+    def test_copy_of_q2_as_q4_gets_the_comparison_layout(self):
+        with open(os.path.join(ROOT, 'answers', 'q2_created_marshes.json'), encoding='utf-8') as fh:
+            q4 = fh.read().replace('"q2:', '"q4:')
+        site, answers, r = self.build_with({'q4_created_marshes_copy.json': q4})
+        self.assertEqual(r.returncode, 0, 'build failed:\n%s\n%s' % (r.stdout, r.stderr))
+        self.assertIn('q4 comparison', r.stdout)
+        html = self.read(site, 'q4.html')
+        self.assertIn('aria-label="How long"', html)   # the "how long?" answer comes first
+        self.assertIn('id="compare"', html)             # "Compared with natural marshes"
+        self.assertIn('data-check="q4/short_answer/time_to_reference_note"', html)
+        self.assertIn('href="q4.html"', self.read(site, 'index.html'))
+        self.assertEqual(Checker(site, answers).run(), [])
+
+    def test_unknown_shape_gets_the_generic_page(self):
+        # Q1's findings with every direction "unclear": not effects, not a comparison, not a gap map
+        with open(os.path.join(ROOT, 'answers', 'q1_tree_planting.json'), encoding='utf-8') as fh:
+            d = json.loads(fh.read().replace('"q1:', '"q5:'))
+        for f in d['findings']:
+            f['direction'] = 'unclear'
+        d.pop('interactions', None)
+        site, answers, r = self.build_with({'q5_unknown_shape.json': json.dumps(d)})
+        self.assertEqual(r.returncode, 0, 'build failed:\n%s\n%s' % (r.stdout, r.stderr))
+        self.assertIn('q5 generic', r.stdout)
+        html = self.read(site, 'q5.html')
+        self.assertIn('id="findings"', html)
+        self.assertNotIn('id="glance"', html)            # not the effects layout
+        self.assertIn('id="f-q5--', html)
+        self.assertEqual(Checker(site, answers).run(), [])
 
 
 class Mutations(unittest.TestCase):
