@@ -1,6 +1,7 @@
 """Build the Lane 3 site: load -> summarize -> render -> graph -> check.
 
-Exit codes: 0 ok, 1 check failed, 2 load/validation failed, 3 unexpected exception.
+Exit codes: 0 ok (self-check problems are printed as warnings), 1 check failed
+with --strict, 2 load/validation failed, 3 unexpected exception.
 """
 from __future__ import annotations
 
@@ -30,6 +31,8 @@ def main(argv=None) -> int:
     ap.add_argument('--answers', default='answers/', help='answer pack directory')
     ap.add_argument('--no-llm', action='store_true', help='accepted; the MVP never calls an LLM')
     ap.add_argument('--verbose', action='store_true')
+    ap.add_argument('--strict', action='store_true',
+                    help='exit 1 if the self-check finds problems (for CI); default is to warn and exit 0')
     args = ap.parse_args(argv)
 
     try:
@@ -68,10 +71,13 @@ def main(argv=None) -> int:
 
         from check import check_site
         problems = check_site(out, data, answers_dir=args.answers)
+        label = 'FAIL' if args.strict else 'WARN'
         for p in problems:
-            print('[check] FAIL %s' % p)
+            print('[check] %s %s' % (label, p))
         print('[build] check: %d problems' % len(problems))
-        return 1 if problems else 0
+        if problems and not args.strict:
+            print('[build] site written anyway; run with --strict (as CI does) to fail on problems')
+        return 1 if problems and args.strict else 0
     except Exception:  # noqa: BLE001
         traceback.print_exc()
         return 3

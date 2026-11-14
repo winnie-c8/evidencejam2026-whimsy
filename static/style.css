@@ -79,6 +79,8 @@ details.cert p { font-size: .9rem; margin: .25rem 0; }
 .gap .searched { display: block; color: var(--muted); font-size: .9rem; }
 
 /* tables */
+/* positioned so absolutely positioned .sr-only spans stay inside the scroll box (no page-wide sideways scroll) */
+.table-wrap, .grid-wrap { position: relative; }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; margin: .5rem 0 1.5rem; }
 caption { text-align: left; font-weight: 600; padding: .25rem 0; }
@@ -107,6 +109,7 @@ table.gapmap td.empty { color: var(--gap); }
 .d-thin { background: var(--d-thin); }
 .d-some { background: var(--d-some); }
 .d-dense { background: var(--d-dense); }
+table.gapmap td.d-dense a { color: #08306b; } /* 6.7:1 on the dense shade (link blue was 3.4:1) */
 dl.key { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
 dl.key dt { font-weight: 600; }
 dl.key dd { margin: 0; color: var(--muted); }
