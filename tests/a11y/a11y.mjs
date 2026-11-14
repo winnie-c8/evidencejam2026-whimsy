@@ -51,10 +51,17 @@ try {
   }
 
   const phone = await (await browser.newContext({ viewport: { width: 375, height: 800 } })).newPage();
+  // Twice per page: with the machine's default fonts, and with a wide font forced,
+  // because Linux's default fonts are wider than macOS's (a page that fits on a Mac
+  // can still scroll sideways on the judges' Linux machine).
+  const WIDE = '*{font-family:Verdana,"DejaVu Sans",sans-serif !important}';
   for (const p of pages) {
-    await phone.goto(`${base}/${p}`);
-    const w = await phone.evaluate(() => document.documentElement.scrollWidth);
-    if (w > 376) problems.push(`${p}: scrolls sideways at 375 px wide (page is ${w} px)`);
+    for (const wide of [false, true]) {
+      await phone.goto(`${base}/${p}`);
+      if (wide) await phone.addStyleTag({ content: WIDE });
+      const w = await phone.evaluate(() => document.documentElement.scrollWidth);
+      if (w > 376) problems.push(`${p}: scrolls sideways at 375 px wide${wide ? ' with a wide font' : ''} (page is ${w} px)`);
+    }
   }
 
   if (pages.includes('q1-graph.html')) {
