@@ -10,8 +10,9 @@ import datetime
 import html
 import os
 import shutil
+import sys
 from string import Template
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
 from load import (CERTAINTIES, EFFECT_DIRECTIONS, REFERENCE_DIRECTIONS, Finding, Gap,
                   Question, Quote, SiteData, slug)
@@ -150,26 +151,37 @@ def evidence_box(q: Quote, n: int, id_prefix: str, check_prefix: str, open_: boo
 
 
 # Source pages: the full quotes for each finding or graph arrow live on their own small page
-# (sources-<slug>.html), so the answer pages stay light. Filled while rendering, written by render_site.
-SOURCE_PAGES: List[Tuple[str, str, str]] = []  # (filename, title, body)
+# (sources-<slug>.html), so the answer pages stay light. Each renderer is handed a list and
+# appends the source pages it links to; render_site writes them.
+class SourcePage(NamedTuple):
+    fname: str
+    title: str
+    description: str
+    body: str
+
 
 SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper, with a link to the paper. '
                 '“Authors\' wording” is how strongly the paper words its claim; it is separate from the '
                 'certainty grade (<a href="method.html#certainty">how certainty is graded</a>).</p>')
 
 
-def evidence_list(quotes: Iterable[Quote], id_prefix: str, check_prefix: str, label: str, back: str) -> str:
-    """Write the quotes to their own page and return a link to it. id_prefix is ev-<slug>."""
-    quotes = list(quotes)
-    fname = 'sources-%s.html' % id_prefix[len('ev-'):]
+def source_page_link(sources: List[SourcePage], quotes: Iterable[Quote], *, fname: str, id_prefix: str,
+                     check_prefix: str, label: str, back: str, back_text: str, description: str) -> str:
+    """Add a page with these quotes (open, so the sentence shows at once) to sources; return a link to it."""
     boxes = ''.join(evidence_box(q, i + 1, id_prefix, check_prefix, open_=True) for i, q in enumerate(quotes))
-    back_text = 'Back to the graph' if back.startswith('q1-graph.html') else 'Back to the finding'
-    back_link = '<p class="back"><a href="%s">%s</a></p>' % (esc(back), back_text)
+    back_link = '<p class="back"><a href="%s">%s</a></p>' % (esc(back), esc(back_text))
     body = ('<h1>Sources: %s</h1>%s%s<div class="sources">%s</div>%s'
             % (esc(label), back_link, SOURCES_NOTE, boxes, back_link))
-    SOURCE_PAGES.append((fname, 'Sources · ' + label, body))
+    sources.append(SourcePage(fname, 'Sources · ' + label, description, body))
     return ('<a class="srclink" href="%s">Read the sources<span class="sr-only"> for %s</span></a>'
-            % (fname, esc(label)))
+            % (esc(fname), esc(label)))
+
+
+def finding_sources(sources: List[SourcePage], f: Finding, qid: str) -> str:
+    return source_page_link(sources, f.quotes, fname='sources-%s.html' % f.slug, id_prefix='ev-' + f.slug,
+                            check_prefix=qid, label=f.label, back='%s.html#f-%s' % (qid, f.slug),
+                            back_text='Back to the finding',
+                            description='The quoted sentences behind one finding.')
 
 
 def gap_marker(g: Gap, id_: Optional[str] = None) -> str:
@@ -322,7 +334,7 @@ def gaps_section(q: Question, heading: str = 'Not studied') -> str:
             % (esc(heading), ''.join(gap_marker(g) for g in q.gaps)))
 
 
-def render_q1(data: SiteData, prose: Prose, q: Question) -> str:
+def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     g = data.q1_graph
     rows = []
     for f in q.findings:
@@ -330,7 +342,7 @@ def render_q1(data: SiteData, prose: Prose, q: Question) -> str:
         if f.slug in data.graph_join:
             ev += ('<a href="q1-graph.html#e-%s">On the graph<span class="sr-only">: %s</span></a>'
                    % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
-        ev += evidence_list(f.quotes, 'ev-' + f.slug, q.qid, f.label, 'q1.html#f-' + f.slug)
+        ev += finding_sources(sources, f, q.qid)
         rows.append(finding_row(f, prose.finding_sentence[f.slug].html, esc(f.subject_label),
                                 [esc(f.outcome_label)], ev))
     body = q_header(q, prose)
@@ -382,7 +394,7 @@ def interactions_section(data: SiteData, q: Question) -> str:
                     ''.join(rows), 'interactions'))
 
 
-def render_q2(data: SiteData, prose: Prose, q: Question) -> str:
+def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     sa = q.extra.get('short_answer') or {}
     note = sa.get('time_to_reference_note') or ''
     ttr = sa.get('time_to_reference')
@@ -417,7 +429,7 @@ def render_q2(data: SiteData, prose: Prose, q: Question) -> str:
             head = esc(f.outcome_label)
             if f.raw.get('lags'):
                 head += ' <span class="lags">Lags</span>'
-            ev = evidence_list(f.quotes, 'ev-' + f.slug, q.qid, f.label, 'q2.html#f-' + f.slug)
+            ev = finding_sources(sources, f, q.qid)
             out.append(finding_row(f, prose.finding_sentence[f.slug].html, head, [when(f)], ev))
         return ''.join(out)
 
@@ -440,7 +452,32 @@ def q3_cell_id(subject_id: str, outcome_id: str) -> str:
     return 'c-%s--%s-detail' % (slug(subject_id), slug(outcome_id))
 
 
-def render_q3(data: SiteData, prose: Prose, q: Question) -> str:
+OUTCOME_SLOT = '{outcome}'
+
+
+def row_search_template(grid: Dict[str, Any], rid: str) -> Optional[str]:
+    """The pack's "searched for" sentence for a Q3 row's gaps, with the outcome replaced by
+    {outcome}, when every gap in the row uses the same sentence apart from its outcome; else None.
+    Read from the pack's own text (nothing typed in here), so it says it once per row instead of
+    261 times. If the pack's wording ever stops fitting, each gap keeps its full sentence, and the
+    build says so."""
+    templates = set()
+    for cid, clbl in grid['cols']:
+        item = grid['cells'][(rid, cid)]
+        if isinstance(item, Gap):
+            if item.searched_for.count(clbl) != 1:
+                templates.add(None)
+            else:
+                templates.add(item.searched_for.replace(clbl, OUTCOME_SLOT))
+    if len(templates) == 1 and None not in templates:
+        return templates.pop()
+    if templates:
+        print('[build] note: Q3 row %s: gaps\' "searched for" wording differs, showing each in full' % rid,
+              file=sys.stderr)
+    return None
+
+
+def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     grid = data.q3_grid
     s = q.extra['summary']
     body = q_header(q, prose, skip_short=True)
@@ -464,7 +501,8 @@ def render_q3(data: SiteData, prose: Prose, q: Question) -> str:
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
             if isinstance(item, Gap):
-                tds.append('<td class="empty" aria-label="Not studied">–</td>')
+                tds.append('<td class="empty" aria-label="Not studied" title="Not studied: %s">–</td>'
+                           % esc(item.label))
             else:
                 dens = item.raw.get('density', '')
                 tds.append('<td class="d-%s"><a href="#%s">%s <span class="sr-only">%s, </span>%s</a></td>'
@@ -490,16 +528,13 @@ def render_q3(data: SiteData, prose: Prose, q: Question) -> str:
     body += '<h2>Every combination</h2>'
     for rid, rlbl in grid['rows']:
         items = []
-        searched = False
+        template = row_search_template(grid, rid)
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
             cell_id = q3_cell_id(rid, cid)
             if isinstance(item, Gap):
-                # The pack's "searched for" text is the same sentence for every gap in a row, so it is
-                # said once per row (below) instead of 261 times; anything else gets the full marker.
-                if item.searched_for == ("grassland claims whose cause is in '%s' and whose effect is in '%s'"
-                                         % (rlbl, clbl)):
-                    searched = True
+                if template is not None:
+                    # what was searched for is said once for the row (below the heading)
                     items.append('<li id="%s"><div class="gap" role="note" id="gap-%s"><strong>Not studied:'
                                  '</strong> %s</div></li>' % (cell_id, esc(item.slug), esc(clbl)))
                 else:
@@ -514,22 +549,23 @@ def render_q3(data: SiteData, prose: Prose, q: Question) -> str:
                         cell_id, esc(f.slug), esc(clbl), d, c, n, esc(f.raw.get('density', '')),
                         prose.finding_sentence[f.slug].html,
                         vote_split('q3/' + f.slug, f.study_directions, f.reference),
-                        evidence_list(f.quotes, 'ev-' + f.slug, q.qid, f.label, 'q3.html#f-' + f.slug)))
-        note = ('<p class="searched">“Not studied” here means: searched for grassland claims whose cause is in '
-                '‘%s’ and whose effect is in that outcome, and found none.</p>' % esc(rlbl)) if searched else ''
+                        finding_sources(sources, f, q.qid)))
+        note = ''
+        if template is not None:
+            note = ('<p class="searched" data-template="%s">“Not studied” below means this was searched for and '
+                    'nothing was found: %s.</p>' % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
         body += ('<section class="row-detail" aria-labelledby="r-%s"><h3 id="r-%s">%s</h3>%s'
                  '<ul class="cells">%s</ul></section>'
                  % (esc(slug(rid)), esc(slug(rid)), esc(rlbl), note, ''.join(items)))
     return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body)
 
 
-def render_generic(data: SiteData, prose: Prose, q: Question) -> str:
+def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     """Any future qN file gets a page with no code change."""
     def rows(fs: Iterable[Finding]) -> str:
         return ''.join(finding_row(f, prose.finding_sentence[f.slug].html, esc(f.subject_label),
                                    [esc(f.outcome_label)],
-                                   evidence_list(f.quotes, 'ev-' + f.slug, q.qid, f.label,
-                                                 '%s.html#f-%s' % (q.qid, f.slug))) for f in fs)
+                                   finding_sources(sources, f, q.qid)) for f in fs)
     body = q_header(q, prose) + limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += '<h2>Findings</h2>' + table('Findings', ['Factor', 'Outcome', 'Direction', 'Certainty',
                                                      'Studies', 'Evidence'], rows(q.findings))
@@ -551,7 +587,7 @@ def edge_title(g: Any, e: Dict[str, Any]) -> str:
     return '%s → %s' % (src, g.node(e['target'])['label'])
 
 
-def render_graph_page(data: SiteData) -> str:
+def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
     g = data.q1_graph
     q1 = data.questions.get('q1')
     body = ('<h1>Tree planting as a causal graph</h1>'
@@ -603,7 +639,10 @@ def render_graph_page(data: SiteData) -> str:
         base = 'q1graph/%s' % es
         title = edge_title(g, e)
         quotes = data.edge_index.get(e['id'], ())
-        boxes = evidence_list(quotes, 'ev-e-' + es, 'q1graph', title, 'q1-graph.html#e-' + es)
+        boxes = source_page_link(sources, quotes, fname='sources-e-%s.html' % es, id_prefix='ev-e-' + es,
+                                 check_prefix='q1graph', label=title, back='q1-graph.html#e-' + es,
+                                 back_text='Back to the graph',
+                                 description='The quoted sentences behind one arrow on the Q1 graph.')
         finding = ''
         for fs, eid in data.graph_join.items():
             if eid == e['id']:
@@ -710,19 +749,18 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
     for f in ('style.css', 'favicon.svg'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
-    SOURCE_PAGES.clear()
+    sources: List[SourcePage] = []
     pages: Dict[str, str] = {'index.html': render_index(data, prose)}
     for qid, q in data.questions.items():
         fn = {'q1': render_q1, 'q2': render_q2, 'q3': render_q3}.get(qid, render_generic)
-        pages['%s.html' % qid] = fn(data, prose, q)
+        pages['%s.html' % qid] = fn(data, prose, q, sources)
     if data.q1_graph is not None:
-        pages['q1-graph.html'] = render_graph_page(data)
+        pages['q1-graph.html'] = render_graph_page(data, sources)
     pages['method.html'] = render_method(data)
-    for fname, title, body in SOURCE_PAGES:
-        if fname in pages:
-            raise RuntimeError('two source pages named %s' % fname)
-        pages[fname] = page(data, fname, title, 'The quoted sentences behind one finding.', body)
-    SOURCE_PAGES.clear()
+    for sp in sources:
+        if sp.fname in pages:
+            raise RuntimeError('two pages named %s' % sp.fname)
+        pages[sp.fname] = page(data, sp.fname, sp.title, sp.description, sp.body)
     for name, text in pages.items():
         with open(os.path.join(out, name), 'w', encoding='utf-8') as fh:
             fh.write(text)

@@ -153,7 +153,7 @@ MUTATIONS = [
      r'<html lang="en"', '<html', 1),
     # added after review on #40
     ('arrow screen-reader name says "very low" for "low"', 'q1-graph.html',
-     r'(id="edge-seedling-size--to--survival" aria-label="[^"]*?): increase, low certainty', r'\1: increase, very low certainty', 1),
+     r'(id="edge-seedling-size--to--survival" aria-label="[^"]*?): increase, certainty low', r'\1: increase, certainty very low', 1),
     ('arrow screen-reader name says "1 study" for 11', 'q1-graph.html',
      r'(id="edge-site-preparation--to--growth" aria-label="[^"]*?)11 studies', r'\g<1>1 study', 1),
     ('"no evidence" gap arrow removed from the SVG', 'q1-graph.html',
@@ -184,6 +184,13 @@ MUTATIONS = [
      r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
     ('source page loads an external script', 'sources-q2--created-marsh--abundance-density.html',
      r'</head>', '<script src="https://cdn.example.com/lib.js"></script></head>', 1),
+    # added after review on #41
+    ("graph source page shows another arrow's claim", 'sources-e-site-preparation--to--growth.html',
+     r'data-claim="camo:[^"]+"', 'data-claim="camo:edge_3fb326f2a6c3"', 1),
+    ('made-up time span on a Q2 source page', 'sources-q2--created-marsh--abundance-density.html',
+     r'(<div class="sources">)', r'<p>Created marshes recover in 10 years.</p>\1', 1),
+    ('Q3 row drops what was searched for', 'q3.html',
+     r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
 ]
 
 

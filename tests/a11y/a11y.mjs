@@ -96,13 +96,18 @@ try {
   const kbPages = pages.filter((p) => !p.startsWith('sources-')).concat(pages.filter((p) => p.startsWith('sources-')).slice(0, 1));
   for (const p of kbPages) {
     await desktop.goto(`${base}/${p}`);
-    // Controls on screen now (a link inside a closed <details> is only reachable once it is opened).
-    const total = await desktop.evaluate(() => [...document.querySelectorAll(
-      'a[href], summary, button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-      .filter((e) => e.checkVisibility()).length);
-    const seen = new Set();
-    let first = null, noOutline = [], steps = 0;
-    for (; steps < total + 5; steps++) {
+    // Tag every control that should be a Tab stop: on screen now (a link inside a closed
+    // <details> is only reachable once it is opened), not tabindex="-1", not disabled.
+    const expected = await desktop.evaluate(() => {
+      const els = [...document.querySelectorAll('a[href], summary, button, input, select, textarea, [tabindex]')]
+        .filter((e) => e.getAttribute('tabindex') !== '-1' && !e.disabled && e.checkVisibility());
+      els.forEach((e, i) => { e.dataset.kbExpect = String(i); });
+      return els.map((e) => (e.textContent || e.getAttribute('aria-label') || e.tagName).trim().slice(0, 50));
+    });
+    const reached = new Set();
+    const extra = [];
+    let first = null, noOutline = [];
+    for (let steps = 0; steps < expected.length + 10; steps++) {
       await desktop.keyboard.press('Tab');
       const s = await desktop.evaluate(() => {
         const el = document.activeElement;
@@ -111,20 +116,23 @@ try {
         const visible = (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== 'none';
         // A unique tag per element, so two controls with the same text are not taken for one.
         if (!el.dataset.kbStop) el.dataset.kbStop = String((window.__kbStops = (window.__kbStops || 0) + 1));
-        const key = el.dataset.kbStop;
-        return { key, visible, text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 50) };
+        return { stop: el.dataset.kbStop, expect: el.dataset.kbExpect, visible,
+                 text: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 50) };
       });
-      if (!s) break;                      // focus left the page: Tab reached the end
-      if (seen.has(s.key)) break;         // wrapped round
-      seen.add(s.key);
+      if (!s) break;                                    // focus left the page: Tab reached the end
+      if (s.expect !== undefined ? reached.has(s.expect) : extra.includes(s.stop)) break;  // wrapped round
+      if (s.expect !== undefined) reached.add(s.expect); else extra.push(s.stop);
       if (first === null) first = s.text;
       if (!s.visible) noOutline.push(s.text);
     }
     if (first !== 'Skip to content') problems.push(`${p}: first Tab stop is "${first}", not the skip link`);
-    // Every link and summary on the page must be a Tab stop (none skipped, no trap before the end).
-    if (seen.size < total) problems.push(`${p}: Tab reached only ${seen.size} of ${total} controls`);
+    // Compare WHICH controls were reached, not how many: each one must be a Tab stop.
+    const missed = expected.filter((_, i) => !reached.has(String(i)));
+    for (const t of missed.slice(0, 5)) problems.push(`${p}: Tab never reaches "${t}"`);
+    if (missed.length > 5) problems.push(`${p}: ... and ${missed.length - 5} more controls Tab never reaches`);
     for (const t of noOutline.slice(0, 5)) problems.push(`${p}: no visible focus outline on "${t}"`);
-    console.log(`[a11y] ${p}: keyboard ${seen.size} Tab stops, ${noOutline.length} without a visible outline`);
+    console.log(`[a11y] ${p}: keyboard ${reached.size}/${expected.length} controls reached` +
+                `${extra.length ? ` (+${extra.length} other stops)` : ''}, ${noOutline.length} without a visible outline`);
   }
 
   if (pages.includes('q1-graph.html')) {

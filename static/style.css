@@ -91,7 +91,7 @@ tr.sub p { margin: .25rem 0; }
 ul.when { margin: 0; padding-left: 1rem; }
 
 /* evidence */
-details.evlist > summary, details.ev > summary { cursor: pointer; }
+details.ev > summary { cursor: pointer; }
 details.ev { border-left: 3px solid var(--line); padding: .25rem .5rem; margin: .5rem 0; }
 blockquote.quote { margin: .5rem 0; padding: .25rem .75rem; border-left: 3px solid var(--link); background: var(--panel); max-width: 68ch; }
 .src { margin: .25rem 0; }
