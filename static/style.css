@@ -5,13 +5,11 @@
    Tokens marked "not in Figma yet" keep the site's earlier values until the
    design covers them. */
 
-/* Fonts are bundled in static/fonts/ (nothing is loaded from the internet).
-   Flecha is the trial ("Test") version: letters, digits, comma and full stop only;
-   other characters in headings (? · & : and so on) come from the Georgia fallback. */
-@font-face { font-family: "Flecha"; src: url("fonts/flecha.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Neue Haas Grotesk Text"; src: url("fonts/neue-haas-grotesk-text.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Against"; src: url("fonts/against.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Babel Sans"; src: url("fonts/babel-sans.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+/* Fonts: system fonts only for now. The Figma fonts (Against, Flecha, Neue Haas Grotesk,
+   Babel Sans) have trial, personal-use or commercial licences, so they can't be published in
+   this public MIT repo. To use a web font: bundle it in static/fonts/ WITH its licence file
+   (an open licence such as OFL), declare it here and put its name first in a stack below.
+   Nothing may load from the internet (the site must work offline). */
 
 :root {
   /* colours, named as in Figma */
@@ -52,10 +50,10 @@
   --target: #fffbe6;          /* section you jumped to */
 
   /* fonts */
-  --font-display: "Against", Georgia, serif;                     /* logo, display titles */
-  --font-heading: "Flecha", Georgia, "Times New Roman", serif;   /* page and question headings */
-  --font-body: "Neue Haas Grotesk Text", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-graph: "Babel Sans", "Arial Narrow", system-ui, sans-serif;  /* the Q1 graph */
+  --font-display: Georgia, "Times New Roman", serif;             /* logo, display titles */
+  --font-heading: Georgia, "Times New Roman", serif;             /* page and question headings */
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-graph: "Arial Narrow", "Helvetica Neue", Arial, system-ui, sans-serif;  /* the Q1 graph */
 
   /* text sizes (Figma: 65, 40, 24, 18, 15.6 px) */
   --text-display: 4rem;      /* 64 px: page title */
