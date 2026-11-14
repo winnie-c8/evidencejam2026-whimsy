@@ -642,7 +642,7 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     lt = level_track(f.certainty_rationale) if track else ''
     if lt:
         # Q1: a one-line explanation, then the steps on the four levels (a dot per step)
-        why = ('<section class="panel why-track"><h5>Why “%s”?%s</h5><p class="why-intro">Certainty is how much '
+        why = ('<section class="panel why-track"><h5>Certainty measurement: %s%s</h5><p class="why-intro">Certainty is how much '
                'you can trust this result. It starts at the level of the best kind of study, then moves up or down '
                'one level for each check below.</p>%s'
                '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
@@ -666,14 +666,14 @@ CHART_KEY = [('increase', 'Increases'), ('decrease', 'Decreases'), ('mixed', 'Mi
              ('no_effect', 'No effect'), ('unclear', 'Unclear')]
 
 
-# Highlight bars by outcome and factor: the others fade (they stay in place, so nothing seems to vanish).
+# Show only the bars for the chosen outcome and factor; "Showing N of 14 bars" says how many are hidden.
 CHART_FILTER_JS = ('<script>(function(){var f=document.querySelector(".cc-filter");if(!f)return;f.hidden=false;'
                    'var o="",bs=f.querySelectorAll("[data-o]"),sel=document.getElementById("cc-factor"),'
                    'n=f.querySelector(".cc-count");function go(){var fa=sel.value,t=0,k=0;'
                    'document.querySelectorAll(".cc-grp").forEach(function(g){var any=false;'
                    'g.querySelectorAll("li[data-outcome]").forEach(function(r){t++;var m=(!o||r.dataset.outcome===o)'
-                   '&&(!fa||g.dataset.factor===fa);r.classList.toggle("cc-dim",!m);if(m){k++;any=true}});'
-                   'g.classList.toggle("cc-dim-g",!any)});n.textContent=(o||fa)?"Highlighting "+k+" of "+t+" bars":""}'
+                   '&&(!fa||g.dataset.factor===fa);r.hidden=!m;if(m){k++;any=true}});'
+                   'g.hidden=!any});n.textContent=(o||fa)?"Showing "+k+" of "+t+" bars":""}'
                    'bs.forEach(function(b){b.addEventListener("click",function(){o=b.dataset.o;bs.forEach(function(x)'
                    '{x.setAttribute("aria-pressed",x===b?"true":"false")});go()})});sel.addEventListener("change",go)'
                    '})();</script>')
@@ -746,12 +746,12 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
     unused_note = (' No finding here is graded %s.' % ' or '.join(unused)) if unused else ''
     ticks = ''.join('<span>%s</span>' % esc(CERT_WORD[c]) for c in levels)
     outs = '<p class="cc-outs"><strong>Outcomes:</strong> %s</p>' % ' · '.join(esc(o) for _, o in outcomes)
-    # highlight controls: hidden until the script runs, so without script nothing is broken
+    # filter controls: hidden until the script runs, so without script nothing is broken
     obtn = ''.join('<button type="button" data-o="%s" aria-pressed="%s">%s</button>'
                    % (v, 'true' if v == '' else 'false', esc(lbl))
                    for v, lbl in [('', 'Both')] + [(slug(oid), olbl) for oid, olbl in outcomes])
     fopt = ''.join('<option value="%s">%s</option>' % (esc(slug(sid)), esc(slbl)) for sid, slbl in subjects)
-    filt = ('<div class="cc-filter" hidden><div class="cc-f-o" role="group" aria-label="Highlight an outcome">'
+    filt = ('<div class="cc-filter" hidden><div class="cc-f-o" role="group" aria-label="Show an outcome">'
             '<span class="cc-f-l" aria-hidden="true">Outcome:</span>%s</div><div class="cc-f-f"><label for="cc-factor">'
             'Factor:</label> <select id="cc-factor"><option value="">All factors</option>%s</select></div>'
             '<p class="cc-count" role="status"></p></div>' % (obtn, fopt))
