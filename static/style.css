@@ -616,3 +616,47 @@ details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0
 .pop-x { position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border-radius: 50%;
   border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .pop-x:hover { background: var(--panel); }
+
+/* Q1 popup card ("track" cards): study colours match the chart's direction colours */
+.fcard.track { --s-up: var(--dir-up); --s-down: var(--dir-down); --s-mixed: var(--dir-mixed); }
+.fcard.track.fdir-mixed { border-left-color: var(--dir-mixed); }
+.fcard.track .fmore { display: none; }
+/* "Why High?" as steps on the four levels: one dot per step shows the level after it */
+.panel.why-track { grid-column: 1 / -1; position: relative; }
+.why-intro { margin: .2rem 0 .6rem; max-width: none; }
+ol.track { list-style: none; padding: 0; margin: 0 0 .5rem; }
+ol.track li { display: grid; grid-template-columns: minmax(0, 1fr) 14rem; gap: .75rem; align-items: center;
+  padding: .3rem 0; border-top: 1px solid var(--line); max-width: none; }
+ol.track li.hd { border-top: 0; padding: 0; }
+ol.track li.total { border-top: 2px solid var(--ink); font-weight: 600; }
+ol.track .mk { display: inline-block; width: 1.1rem; font-weight: 700; }
+ol.track .cap { font-weight: 400; font-size: .85rem; color: var(--muted); }
+ol.track .lv { display: grid; grid-template-columns: repeat(4, 1fr); }
+ol.track .lv b { font-weight: 400; font-size: .75rem; color: var(--muted); text-align: center; }
+ol.track .lv i { height: 1rem; display: flex; justify-content: center; align-items: center; position: relative; }
+ol.track .lv i::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--light-blue); }
+ol.track .lv i.on::after { content: ""; position: relative; width: .9rem; height: .9rem; border-radius: 50%; background: var(--ink); }
+@media (max-width: 40rem) {
+  ol.track li { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
+  ol.track li.hd .t { display: none; }
+}
+table.levels { border-collapse: collapse; font-size: .95rem; margin: .5rem 0; }
+table.levels th, table.levels td { text-align: left; vertical-align: top; padding: .35rem .5rem; border-top: 1px solid var(--line); }
+table.levels th { white-space: nowrap; }
+
+/* Q1 chart highlight controls */
+.cc-filter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; margin: 0 0 .75rem; }
+.cc-f-o { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.cc-f-l { font-weight: 600; }
+.cc-f-f label { font-weight: 600; }
+.cc-filter button { font: inherit; font-size: .9rem; padding: .2rem .7rem; border: 1px solid var(--link); border-radius: 999px;
+  background: var(--bg); color: var(--link); cursor: pointer; min-height: 2rem; }
+.cc-filter button[aria-pressed="true"] { background: var(--link); color: var(--bg); }
+.cc-filter select { font: inherit; font-size: .9rem; padding: .2rem .4rem; min-height: 2rem; max-width: 100%; }
+.cc-count { margin: 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; flex-basis: 100%; }
+/* faded rows: bars lose their colour, text turns grey but stays readable (contrast kept) */
+.cc-dim .cc-bar { background: var(--d-some); }  /* #555 on it: 5.5:1 */
+.cc-dim .cc-lab, .cc-dim .cc-out { color: var(--muted); }
+.cc-dim .chip { color: var(--muted); }
+.cc-dim .cc-none { opacity: .5; }
+.cc-dim-g h3 { color: var(--muted); }

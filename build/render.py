@@ -390,6 +390,78 @@ def _checks_js() -> str:
 CHECKS_JS = _checks_js()
 
 
+START_WHY = {
+    'high': 'the best studies are proper experiments (treated vs. untreated plots)',
+    'moderate': 'the best studies are controlled, but not fully randomized',
+    'low': 'the best studies only observe, with no experiment',
+    'very low': 'the evidence is models or single case studies',
+}
+LEVELS_BTN = ('<button type="button" class="help" popovertarget="how-levels" aria-label="How certainty levels are set">'
+              '<span aria-hidden="true">?</span></button>')
+LEVELS_POPOVER = (
+    '<div id="how-levels" popover class="pop" role="dialog" aria-labelledby="how-levels-h">'
+    '<h2 id="how-levels-h">How certainty levels are set</h2>'
+    '<p>Certainty is how much you can trust a result, not how big the effect is. There are four levels: '
+    '<strong>Very low · Low · Moderate · High</strong>. The same recipe is applied to every finding.</p>'
+    '<table class="levels"><tbody>'
+    '<tr><th scope="row">1. Start</th><td>at the level of the best kind of study behind the result: '
+    'experiments with untreated plots → High · other controlled studies → Moderate · observation only → Low · '
+    'models or case studies → Very low</td></tr>'
+    '<tr><th scope="row">2. Down one level</th><td>for each of: only one study · the studies disagree · most '
+    'claims have no untreated site to compare against</td></tr>'
+    '<tr><th scope="row">3. Up one level</th><td>for each of: three or more studies agree · the studies show '
+    '<em>how</em> it works, not only <em>that</em> it works</td></tr>'
+    '<tr><th scope="row">4. Limits</th><td>High is the top and Very low the bottom · one study never goes above '
+    'Moderate</td></tr></tbody></table>'
+    '<p class="ex">Example: starts at High (experiments) · down one, the studies disagree (Moderate) · up one, '
+    'they show how it works · ends at <strong>High</strong>.</p>'
+    '<p><a href="method.html#certainty">Full method →</a> '
+    '<button type="button" popovertarget="how-levels" popovertargetaction="hide">Close</button></p></div>')
+
+
+def level_track(r: Optional[str]) -> str:
+    """The pack's certainty_rationale as steps on the four levels: a dot shows the level after each
+    step. The last row is always the pack's own grade. '' if the rationale doesn't follow the pattern."""
+    m = RATIONALE.match(norm_space(r or ''))
+    if not m:
+        return ''
+    cells = lambda lv: ''.join('<i%s></i>' % (' class="on"' if i == lv else '') for i in range(1, 5))
+    def row(cls: str, mk: str, text: str, lv: int, note: str = '') -> str:
+        return ('<li class="%s"><span class="t"><span class="mk" aria-hidden="true">%s</span> %s%s'
+                '<span class="sr-only">: now %s</span></span><span class="lv" aria-hidden="true">%s</span></li>'
+                % (cls, mk, text, (' <span class="cap">(%s)</span>' % esc(note)) if note else '',
+                   LEVEL_WORD[lv], cells(lv)))
+    lv = LEVEL[m.group(1)]
+    out = [row('start', '●', 'Starts at <strong>%s</strong>: %s' % (LEVEL_WORD[lv], esc(START_WHY[m.group(1)])), lv)]
+    for part in (p.strip() for p in m.group(2).split(';') if p.strip()):
+        text = part
+        for pat, (_, t) in STEP_CHECK:
+            mm = pat.match(part)
+            if mm:
+                text = t.format(*mm.groups())
+                break
+        d = re.match(r'^([+-]\d+)\b', part)
+        d = int(d.group(1)) if d else 0
+        new = min(4, max(1, lv + d))
+        note = ''
+        if d > 0 and new == lv:
+            note = 'already at the top, so no change'
+        elif d < 0 and new == lv:
+            note = 'already at the bottom, so no change'
+        out.append(row('step', '↑' if d > 0 else ('↓' if d < 0 else '·'),
+                       '%s %s' % ({1: 'Up one:', -1: 'Down one:'}.get(d, ''), esc(text)), new, note))
+        lv = new
+    final = LEVEL[m.group(3)]
+    note = ''
+    if final != lv:
+        note = ('one study never goes above Moderate' if final == 3 and 'single study' in m.group(2)
+                else 'the final grade from the data')
+    out.append(row('total', '=', 'Ends at <strong>%s</strong>' % LEVEL_WORD[final], final, note))
+    head = ('<li class="hd" aria-hidden="true"><span class="t"></span><span class="lv">'
+            '<b>Very low</b><b>Low</b><b>Moderate</b><b>High</b></span></li>')
+    return '<ol class="track">%s%s</ol>' % (head, ''.join(out))
+
+
 def headline_reason(checks: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
     """For the closed card: the first ✗, or if none the strongest ✓ (agreement, then mechanism, then design)."""
     for c in checks:
@@ -522,7 +594,8 @@ def card_name(f: Finding, subject: bool) -> str:
 
 def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
                  tag: str = '', level: int = 3, extra: str = '', links: str = '',
-                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False) -> str:
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False,
+                 track: bool = False) -> str:
     """One finding. Closed it is one line: direction, name, certainty, study split, Details.
     Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
     base = '%s/%s' % (f.question, f.slug)
@@ -536,8 +609,10 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
                '<span class="fcert"><span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
                '<span class="fsplit">%s %s</span></span>'
                % (chip(f.direction, base + '/direction'), level, card_name(f, subject), tag, level,
-                  CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
+                  0 if track else CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
                   split_bar(f), split_short(f, base)))
+    if track:
+        summary = summary.replace('<span class="bars b0" aria-hidden="true"></span> ', '')
     # panel 1: why that certainty, as a checklist; the exact rule text one click further
     raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
     score = rationale_score(f.certainty_rationale)
@@ -564,6 +639,14 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
            % (esc(cw), '' if compact else HELP_BTN,
               '<ul class="checks" data-rule></ul>' if compact else (('<ul class="checks">%s</ul>' % items) if items else ''),
               raw))
+    lt = level_track(f.certainty_rationale) if track else ''
+    if lt:
+        # Q1: a one-line explanation, then the steps on the four levels (a dot per step)
+        why = ('<section class="panel why-track"><h5>Why “%s”?%s</h5><p class="why-intro">Certainty is how much '
+               'you can trust this result. It starts at the level of the best kind of study, then moves up or down '
+               'one level for each check below.</p>%s'
+               '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
+               % (esc(cw), LEVELS_BTN, lt, raw))
     # panel 2: sources, quotes first
     finding_sources(sources, f, f.question)  # writes sources-<slug>.html
     groups = paper_groups(f.quotes)
@@ -576,11 +659,24 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
     return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"%s><summary>%s</summary>'
             '<div class="panels">%s%s%s</div>%s</details></article>'
-            % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
+            % ((' fref' if f.reference else '') + (' track' if lt else ''), esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
 
 
 CHART_KEY = [('increase', 'Increases'), ('decrease', 'Decreases'), ('mixed', 'Mixed: the studies disagree'),
              ('no_effect', 'No effect'), ('unclear', 'Unclear')]
+
+
+# Highlight bars by outcome and factor: the others fade (they stay in place, so nothing seems to vanish).
+CHART_FILTER_JS = ('<script>(function(){var f=document.querySelector(".cc-filter");if(!f)return;f.hidden=false;'
+                   'var o="",bs=f.querySelectorAll("[data-o]"),sel=document.getElementById("cc-factor"),'
+                   'n=f.querySelector(".cc-count");function go(){var fa=sel.value,t=0,k=0;'
+                   'document.querySelectorAll(".cc-grp").forEach(function(g){var any=false;'
+                   'g.querySelectorAll("li[data-outcome]").forEach(function(r){t++;var m=(!o||r.dataset.outcome===o)'
+                   '&&(!fa||g.dataset.factor===fa);r.classList.toggle("cc-dim",!m);if(m){k++;any=true}});'
+                   'g.classList.toggle("cc-dim-g",!any)});n.textContent=(o||fa)?"Highlighting "+k+" of "+t+" bars":""}'
+                   'bs.forEach(function(b){b.addEventListener("click",function(){o=b.dataset.o;bs.forEach(function(x)'
+                   '{x.setAttribute("aria-pressed",x===b?"true":"false")});go()})});sel.addEventListener("change",go)'
+                   '})();</script>')
 
 
 # chart title per question (our wording); other EFFECTS questions get the general one
@@ -618,15 +714,16 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
             c = cells.get((sid, oid))
             if c is None:
                 continue
+            li = '<li data-outcome="%s">' % esc(slug(oid))
             if isinstance(c, Gap):
-                rows.append('<li><a class="cc-row cc-gap" href="#gap-%s"><span class="sr-only">%s, </span><span class="cc-out">%s</span>'
+                rows.append(li + '<a class="cc-row cc-gap" href="#gap-%s"><span class="sr-only">%s, </span><span class="cc-out">%s</span>'
                             '<span class="cc-dir"><span class="chip gapchip"><span aria-hidden="true">?</span> '
                             'Not studied</span></span><span class="cc-track"><span class="cc-none">No study tested '
                             'this: a gap, not a result</span></span><span class="cc-q" aria-hidden="true">?</span></a></li>'
                             % (esc(c.slug), esc(slbl), esc(olbl)))
                 continue
             b = '%s/%s' % (c.question, c.slug)
-            rows.append('<li><button type="button" class="cc-row" popovertarget="pop-%s">'
+            rows.append(li + '<button type="button" class="cc-row" popovertarget="pop-%s">'
                         '<span class="sr-only">Details: %s, </span><span class="cc-out">%s</span><span class="cc-dir">%s</span>'
                         '<span class="cc-track"><span class="cc-bar cb%d bar-%s"><span class="cc-lab">%s'
                         '<span class="sr-only"> certainty</span> · %s %s</span></span></span>'
@@ -635,7 +732,8 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
                            CERT_BARS.get(c.certainty, 0), esc(c.direction.replace('_', '-')),
                            span(b + '/certainty', CERT_WORD[c.certainty]),
                            span(b + '/studies', c.studies), plural(c.studies, 'study', 'studies')))
-        groups.append('<li class="cc-grp"><h3>%s</h3><ul>%s</ul></li>' % (esc(slbl), ''.join(rows)))
+        groups.append('<li class="cc-grp" data-factor="%s"><h3>%s</h3><ul>%s</ul></li>'
+                      % (esc(slug(sid)), esc(slbl), ''.join(rows)))
 
     present = {f.direction for f in q.findings}
     key = ''.join('<li><span class="sw bar-%s" aria-hidden="true"></span><span aria-hidden="true">%s</span> %s</li>'
@@ -648,18 +746,27 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
     unused_note = (' No finding here is graded %s.' % ' or '.join(unused)) if unused else ''
     ticks = ''.join('<span>%s</span>' % esc(CERT_WORD[c]) for c in levels)
     outs = '<p class="cc-outs"><strong>Outcomes:</strong> %s</p>' % ' · '.join(esc(o) for _, o in outcomes)
+    # highlight controls: hidden until the script runs, so without script nothing is broken
+    obtn = ''.join('<button type="button" data-o="%s" aria-pressed="%s">%s</button>'
+                   % (v, 'true' if v == '' else 'false', esc(lbl))
+                   for v, lbl in [('', 'Both')] + [(slug(oid), olbl) for oid, olbl in outcomes])
+    fopt = ''.join('<option value="%s">%s</option>' % (esc(slug(sid)), esc(slbl)) for sid, slbl in subjects)
+    filt = ('<div class="cc-filter" hidden><div class="cc-f-o" role="group" aria-label="Highlight an outcome">'
+            '<span class="cc-f-l" aria-hidden="true">Outcome:</span>%s</div><div class="cc-f-f"><label for="cc-factor">'
+            'Factor:</label> <select id="cc-factor"><option value="">All factors</option>%s</select></div>'
+            '<p class="cc-count" role="status"></p></div>' % (obtn, fopt))
     title = CHART_TITLE.get(q.qid, 'Effect of each factor on each outcome, by certainty of evidence')
     return ('<section class="cchart-sec" aria-labelledby="glance"><h2 id="glance">%s %s</h2>%s'
             '<p class="cc-read"><strong>How to read:</strong> each bar is one finding, a factor\'s effect on one '
             'outcome. Bar length is the certainty of the evidence (Very low, Low, Moderate, High), not the size of '
             'the effect. Colour, symbol and word give the direction; the number is how many studies.%s '
             'Select a bar for the certainty rationale and the quoted sources.</p>'
-            '<ul class="cc-key" aria-label="Legend">%s</ul>'
+            '<ul class="cc-key" aria-label="Legend">%s</ul>%s'
             '<div class="cchart"><div class="cc-axis" aria-hidden="true"><span class="cc-out"></span>'
             '<span class="cc-dir">Direction</span><span class="cc-ticks">%s</span><span class="cc-q"></span></div>'
             '<ul class="cc-grps">%s</ul><p class="cc-xlab" aria-hidden="true">Certainty of evidence →</p></div>'
-            '</section>%s'
-            % (esc(title), HELP_BTN, outs, unused_note, key, ticks, ''.join(groups), ''.join(popups.values())))
+            '</section>%s%s'
+            % (esc(title), LEVELS_BTN, outs, unused_note, key, filt, ticks, ''.join(groups), CHART_FILTER_JS, ''.join(popups.values())))
 
 
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
@@ -920,9 +1027,9 @@ def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[Sour
                 '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
                 '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
                 % (esc(f.slug), esc(f.label), esc(f.slug),
-                   finding_card(data, f, sources, level=3, links=graph, open_=True)))
+                   finding_card(data, f, sources, level=3, links=graph, open_=True, track=True)))
 
-    main = certainty_chart(q, {f.slug: popup(f) for f in by_strength(q.findings)})
+    main = certainty_chart(q, {f.slug: popup(f) for f in by_strength(q.findings)}) + LEVELS_POPOVER
     main += interactions_section(data, q)
     if q.qid in data.graphs:
         main += '<p class="graph-link"><a href="%s">See this answer as a graph →</a></p>' % graph_file(q.qid)
