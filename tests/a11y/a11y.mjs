@@ -7,6 +7,8 @@
 //   1. axe-core (WCAG 2.1 A + AA rules): 0 violations. Judges run axe-core and Lighthouse.
 //   2. Phone width (375 px): the page must not scroll sideways (wide tables may scroll
 //      inside their own container).
+// Keyboard: on every answer page (and one source page), Tab reaches every visible control,
+//   starting with the skip link, and each one shows a visible focus outline.
 // On the graph page, every arrow must be keyboard-focusable.
 // Exit 0 = PASS, 1 = problems found.
 
@@ -86,6 +88,51 @@ try {
       const w = await phone.evaluate(() => document.documentElement.scrollWidth);
       if (w > 376) problems.push(`${p}: scrolls sideways at 375 px wide${wide ? ' with a wide font' : ''} (page is ${w} px)`);
     }
+  }
+
+  // Keyboard only, on the answer pages: press Tab through the whole page. Every stop must
+  // show a visible focus outline, the skip link must come first, and Tab must reach the end
+  // of the page (no keyboard trap). Source pages share the same template, so one is enough.
+  const kbPages = pages.filter((p) => !p.startsWith('sources-')).concat(pages.filter((p) => p.startsWith('sources-')).slice(0, 1));
+  for (const p of kbPages) {
+    await desktop.goto(`${base}/${p}`);
+    // Tag every control that should be a Tab stop: on screen now (a link inside a closed
+    // <details> is only reachable once it is opened), not tabindex="-1", not disabled.
+    const expected = await desktop.evaluate(() => {
+      const els = [...document.querySelectorAll('a[href], summary, button, input, select, textarea, [tabindex]')]
+        .filter((e) => e.getAttribute('tabindex') !== '-1' && !e.disabled && e.checkVisibility());
+      els.forEach((e, i) => { e.dataset.kbExpect = String(i); });
+      return els.map((e) => (e.textContent || e.getAttribute('aria-label') || e.tagName).trim().slice(0, 50));
+    });
+    const reached = new Set();
+    const extra = [];
+    let first = null, noOutline = [];
+    for (let steps = 0; steps < expected.length + 10; steps++) {
+      await desktop.keyboard.press('Tab');
+      const s = await desktop.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return null;
+        const cs = getComputedStyle(el);
+        const visible = (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== 'none';
+        // A unique tag per element, so two controls with the same text are not taken for one.
+        if (!el.dataset.kbStop) el.dataset.kbStop = String((window.__kbStops = (window.__kbStops || 0) + 1));
+        return { stop: el.dataset.kbStop, expect: el.dataset.kbExpect, visible,
+                 text: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 50) };
+      });
+      if (!s) break;                                    // focus left the page: Tab reached the end
+      if (s.expect !== undefined ? reached.has(s.expect) : extra.includes(s.stop)) break;  // wrapped round
+      if (s.expect !== undefined) reached.add(s.expect); else extra.push(s.stop);
+      if (first === null) first = s.text;
+      if (!s.visible) noOutline.push(s.text);
+    }
+    if (first !== 'Skip to content') problems.push(`${p}: first Tab stop is "${first}", not the skip link`);
+    // Compare WHICH controls were reached, not how many: each one must be a Tab stop.
+    const missed = expected.filter((_, i) => !reached.has(String(i)));
+    for (const t of missed.slice(0, 5)) problems.push(`${p}: Tab never reaches "${t}"`);
+    if (missed.length > 5) problems.push(`${p}: ... and ${missed.length - 5} more controls Tab never reaches`);
+    for (const t of noOutline.slice(0, 5)) problems.push(`${p}: no visible focus outline on "${t}"`);
+    console.log(`[a11y] ${p}: keyboard ${reached.size}/${expected.length} controls reached` +
+                `${extra.length ? ` (+${extra.length} other stops)` : ''}, ${noOutline.length} without a visible outline`);
   }
 
   if (pages.includes('q1-graph.html')) {

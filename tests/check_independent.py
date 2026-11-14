@@ -12,7 +12,8 @@ Exit code 0 = PASS, 1 = at least one problem.
 
 Page contract it relies on (from the MVP renderer):
   id="f-<slug>"    one element per finding/trend, containing its direction,
-                   certainty, studies (data-check spans), rationale and sources
+                   certainty, studies (data-check spans), rationale, and its sources or a
+                   link to sources-<slug>.html, the page that holds its quotes
   id="gap-<slug>"  one element per gap
   id="edge-<slug>" one SVG <a> per graph edge; id="e-<slug>" its evidence section
   data-claim="<edge id>" on each source; data-check="<...>/direction|certainty|studies"
@@ -69,6 +70,22 @@ class Node:
 
     def cls(self) -> List[str]:
         return self.attrs.get('class', '').split()
+
+    def own_text(self) -> str:
+        """Text written by the site, leaving out pack values (data-check) and quoted sentences."""
+        parts: List[str] = []
+
+        def walk(n: 'Node') -> None:
+            for c in n.children:
+                if isinstance(c, Node):
+                    if 'data-check' in c.attrs or (c.tag == 'blockquote' and 'quote' in c.cls()):
+                        continue
+                    walk(c)
+                    parts.append(' ')
+                else:
+                    parts.append(c)
+        walk(self)
+        return norm(''.join(parts))
 
 
 class Builder(HTMLParser):
@@ -133,6 +150,9 @@ CSS_EXTERNAL = re.compile(r'url\(\s*["\']?\s*(?:https?:)?//|@import\s+(?:url\()?
 
 
 # ------------------------------------------------------------------ checker
+
+SOURCES_PAGE = re.compile(r'^sources-[a-z0-9-]+\.html$')
+
 
 class Checker:
     def __init__(self, site: str, answers: str) -> None:
@@ -235,11 +255,21 @@ class Checker:
             self.ok(str(got) == str(want), f'{name}: "{dc}" shows "{shown}", pack says "{want}"')
 
     def check_claims(self, where: str, el: Node, edge_ids: List[str], evidence: dict) -> None:
+        """Each source must be shown with its finding: inside its block, or on the
+        sources-*.html page that the block links to (one click away)."""
         claims: Dict[str, List[Node]] = {}
-        for n in el.iter():
-            c = n.attrs.get('data-claim')
-            if c:
-                claims.setdefault(c, []).append(n)
+        roots = [el]
+        for a in el.iter():
+            href = a.attrs.get('href', '') if a.tag == 'a' else ''
+            if SOURCES_PAGE.match(href):
+                linked = self.page(href)
+                if self.ok(linked is not None, f'{where}: links to missing source page {href}'):
+                    roots.append(linked)
+        for root in roots:
+            for n in root.iter():
+                c = n.attrs.get('data-claim')
+                if c:
+                    claims.setdefault(c, []).append(n)
         for eid in edge_ids:
             if not self.ok(eid in claims, f'{where}: source {eid} not shown with this finding'):
                 continue
@@ -349,7 +379,10 @@ class Checker:
         self.ok(sum(i.startswith('f-') for i in ids) == len(items),
                 f'{name}: {sum(i.startswith("f-") for i in ids)} findings shown, pack has {len(items)}')
         for g in data['gaps']:
-            self.check_gap(f'{name} {g["id"]}', ids.get('gap-' + slug(g['id'])), g)
+            el = ids.get('gap-' + slug(g['id']))
+            self.check_gap(f'{name} {g["id"]}', el, g)
+            if el is not None and g.get('searched_for'):
+                self.check_searched_for(f'{name} {g["id"]}', el, g)
         self.ok(sum(i.startswith('gap-') for i in ids) == len(data['gaps']),
                 f'{name}: {sum(i.startswith("gap-") for i in ids)} gaps shown, pack has {len(data["gaps"])}')
         text = root.text()
@@ -361,10 +394,32 @@ class Checker:
                 self.ok(norm(data['evidence'][it['edge_id']]['quote']) in boxes[0].text(),
                         f'{name}: quote for combined-treatment claim {it["edge_id"]} missing')
 
+    def check_searched_for(self, where: str, el: Node, gap: dict) -> None:
+        """The pack's "searched for" sentence must be shown: in the gap marker itself, or once for
+        its row as data-template with {outcome} standing for this gap's outcome."""
+        want = norm(gap['searched_for'])
+        if want in el.text():
+            return
+        outcome = (gap.get('outcome') or {}).get('label', '')
+        sec = el.parent
+        while sec is not None and not (sec.tag == 'section'):
+            sec = sec.parent
+        notes = [n for n in (sec.iter() if sec is not None else []) if 'data-template' in n.attrs]
+        ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) == want
+                 and norm(n.attrs['data-template'].replace('{outcome}', 'that outcome')) in n.text()
+                 for n in notes)
+        self.ok(ok, f'{where}: what was searched for ("{gap["searched_for"]}") is not shown')
+
     def check_q2_honesty(self) -> None:
         root = self.page('q2.html')
         if root is None:
             return
+        # No made-up time spans: "N years" may appear only inside a pack value or a quoted
+        # sentence, on q2.html and on the source pages that hold its quotes.
+        for name in ['q2.html'] + [n for n in self.html_files() if n.startswith('sources-q2--')]:
+            r = self.page(name)
+            for m in re.finditer(r'\d+\s*(?:-|–|to)?\s*\d*\s*years?', r.own_text() if r else ''):
+                self.ok(False, f'{name}: "{m.group(0)}" written by the site, not from the pack or a quote')
         sa = self.load('q2')['short_answer']
         text = root.text()
         self.ok(sa['time_to_reference'] is None, 'q2 pack: time_to_reference is no longer null; recheck the Q2 page')
@@ -422,7 +477,7 @@ class Checker:
                 # Screen-reader name: the exact phrase, anchored by ": " and ", " on each side.
                 label = norm(a.attrs.get('aria-label', '')).lower()
                 n_studies = e['studies']
-                phrase = ': %s, %s certainty, %d %s' % (e['direction'].replace('_', ' '),
+                phrase = ': %s, certainty %s, %d %s' % (e['direction'].replace('_', ' '),
                                                         e['certainty'].replace('_', ' '), n_studies,
                                                         'study' if n_studies == 1 else 'studies')
                 self.ok(phrase in label, f'{where}: accessible name should contain "{phrase}", got "{label}"')

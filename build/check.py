@@ -42,6 +42,7 @@ class Page(HTMLParser):
         self.ids: Set[str] = set()
         self.links: List[Tuple[str, str]] = []  # (attr, value)
         self.claims: Set[str] = set()
+        self.claim_list: List[str] = []  # in page order, with repeats
         self.checks: List[Tuple[str, str]] = []
         self.ev_boxes = 0
         self.edge_ids: Set[str] = set()
@@ -75,6 +76,7 @@ class Page(HTMLParser):
                 self.links.append((k, a[k]))
         if 'data-claim' in a:
             self.claims.add(a['data-claim'])
+            self.claim_list.append(a['data-claim'])
         cls = a.get('class', '').split()
         if tag == 'details' and 'ev' in cls:
             self.ev_boxes += 1
@@ -274,9 +276,18 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
             for gp in g.gaps:
                 if 'e-' + slug(gp['id']) not in p.ids:
                     problems.append('q1-graph.html: no gap panel id="e-%s"' % slug(gp['id']))
-            if p.ev_boxes != len(g.evidence):
-                problems.append('q1-graph.html: %d evidence boxes, graph evidence has %d'
-                                % (p.ev_boxes, len(g.evidence)))
+            # each arrow's quotes are on its own page, sources-e-<slug>.html, and that page
+            # must show exactly this arrow's claims (not another arrow's), each once
+            for e in g.edges:
+                sname = 'sources-e-%s.html' % slug(e['id'])
+                sp = pages.get(sname)
+                if sp is None:
+                    problems.append('%s missing for graph arrow %s' % (sname, e['id']))
+                    continue
+                want = sorted(e.get('edge_ids') or [])
+                if sorted(sp.claim_list) != want:
+                    problems.append('%s: shows claims %s, arrow %s has %s'
+                                    % (sname, sorted(sp.claim_list), e['id'], want))
 
     # 5. Q3 cells
     q3 = data.questions.get('q3')
@@ -310,7 +321,8 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
                 if tp is None or frag not in tp.ids:
                     problems.append('%s: link %s has no matching id="%s" in %s' % (name, val, frag, tname))
 
-    # 8. Q2 says what it cannot answer, and invents no durations
+    # 8. Q2 says what it cannot answer, and invents no durations (on q2.html and on the
+    #    sources-q2--*.html pages that hold its quotes)
     q2 = data.questions.get('q2')
     if q2 is not None and 'q2.html' in pages:
         p = pages['q2.html']
@@ -318,12 +330,24 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
         alltext = norm(' '.join(t for _, t in p.checks) + ' ' + ' '.join(p.free_text))
         if note and norm(note) not in alltext:
             problems.append('q2.html: the pack\'s time_to_reference_note is missing')
-        free = norm(' '.join(p.free_text))
-        for m in YEARS_RE.finditer(free):
-            ctx = free[max(0, m.start() - 40):m.end() + 20]
-            problems.append('q2.html: "%s" outside a data-check span or quote: ...%s...' % (m.group(0), ctx))
+        for name in sorted(n for n in pages if n == 'q2.html' or n.startswith('sources-q2--')):
+            free = norm(' '.join(pages[name].free_text))
+            for m in YEARS_RE.finditer(free):
+                ctx = free[max(0, m.start() - 40):m.end() + 20]
+                problems.append('%s: "%s" outside a data-check span or quote: ...%s...' % (name, m.group(0), ctx))
 
-    # 9. every cited claim is on some page
+    # 9. each finding's source page shows exactly that finding's claims
+    for qid, q in data.questions.items():
+        for f in q.all_findings():
+            sname = 'sources-%s.html' % f.slug
+            sp = pages.get(sname)
+            if sp is None:
+                continue  # sources shown on the answer page itself; check 9b covers them
+            if sorted(sp.claim_list) != sorted(f.edge_ids):
+                problems.append('%s: shows claims %s, finding %s cites %s'
+                                % (sname, sorted(sp.claim_list), f.id, sorted(f.edge_ids)))
+
+    # 9b. every cited claim is on some page
     shown: Set[str] = set()
     for p in pages.values():
         shown |= p.claims

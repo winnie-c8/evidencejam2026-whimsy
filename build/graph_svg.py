@@ -205,7 +205,7 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
             text_len = len('no evidence')
             lines = 1
         else:
-            text_len = len('%s %s · %d' % (SYM[e['direction']], CERT[e['certainty']], e['studies']))
+            text_len = len('%s %s, %d' % (SYM[e['direction']], CERT[e['certainty']], e['studies']))
             lines = 1
             if kind == 'm':
                 text_len = max(text_len, len('changes this effect'))
@@ -295,8 +295,10 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
 
     def label_svg(key: str, parts: List[str], cls: str = 'lbl') -> str:
         l = labels[key]
-        texts = ''.join('<text x="%s" y="%s" text-anchor="middle">%s</text>'
-                        % (f1(l['x'] + l['w'] / 2), f1(l['y'] + 14 + i * 14), p) for i, p in enumerate(parts))
+        # parts: (text, aria_hidden). A hidden line repeats what the link's name already says.
+        texts = ''.join('<text x="%s" y="%s" text-anchor="middle"%s>%s</text>'
+                        % (f1(l['x'] + l['w'] / 2), f1(l['y'] + 14 + i * 14),
+                           ' aria-hidden="true"' if hidden else '', p) for i, (p, hidden) in enumerate(parts))
         return ('<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="4"/>%s</g>'
                 % (cls, f1(l['x']), f1(l['y']), f1(l['w']), f1(l['h']), texts))
 
@@ -311,7 +313,7 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
                    'not studied in this body of research. Opens details.">'
                    % (gs, gs, esc(name(gp['source'])), esc(name(gp['target']))))
         out.append('<path class="hit" d="%s"/><path class="vis" d="%s"/>' % (d, d))
-        out.append(label_svg(gp['id'], ['no evidence']))
+        out.append(label_svg(gp['id'], [('no evidence', False)]))
         out.append('</a>')
 
     # effect and moderation edges
@@ -322,14 +324,17 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
         studies = '%d %s' % (n, 'study' if n == 1 else 'studies')
         if e.get('kind') == 'moderation':
             t = g.edge(e['target_edge'])
-            aria = '%s changes the effect of %s on %s: %s, %s certainty, %s. Opens evidence.' % (
+            aria = '%s changes the effect of %s on %s: %s, certainty %s, %s. Opens evidence.' % (
                 name(e['source']), name(t['source']), name(t['target']), WORD[e['direction']],
                 CERT[e['certainty']].lower(), studies)
             cls = 'edge mod d-%s c-%s' % (e['direction'], e['certainty'])
         else:
-            aria = '%s to %s: %s, %s certainty, %s. Opens evidence.' % (
+            aria = '%s to %s: %s, certainty %s, %s. Opens evidence.' % (
                 name(e['source']), name(e['target']), WORD[e['direction']], CERT[e['certainty']].lower(), studies)
             cls = 'edge d-%s c-%s' % (e['direction'], e['certainty'])
+        # The label shows "Moderate, 3" and the name says "certainty moderate, 3 studies": the
+        # visible words are inside the name, in order (WCAG 2.5.3 "label in name"), so someone
+        # using voice control can say what they see, and a screen reader hears each fact once.
         out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s">' % (es, cls, es, esc(aria)))
         out.append('<path class="hit" d="%s"/>' % d)
         if e.get('kind') == 'moderation':
@@ -339,12 +344,13 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
         else:
             out.append('<path class="vis c-%s" d="%s" marker-end="url(#ah-%s)"/>'
                        % (e['certainty'], d, ARROW[e['direction']]))
-        main = ('<tspan aria-hidden="true">%s</tspan> <tspan data-check="q1graph/%s/certainty">%s</tspan> · '
+        main = ('<tspan aria-hidden="true">%s</tspan> <tspan data-check="q1graph/%s/certainty">%s</tspan>, '
                 '<tspan data-check="q1graph/%s/studies">%d</tspan>'
                 % (SYM[e['direction']], es, CERT[e['certainty']], es, n))
-        parts = [main]
+        parts = [(main, False)]
         if e.get('kind') == 'moderation':
-            parts.append('changes this effect')
+            parts.append(('changes this effect', True))  # the name already says "changes the effect of"
+
         out.append(label_svg(e['id'], parts))
         out.append('</a>')
 

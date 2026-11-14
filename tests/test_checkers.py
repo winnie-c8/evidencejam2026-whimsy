@@ -117,11 +117,11 @@ MUTATIONS = [
      r'<tr id="f-q1--seedling-size--growth".*?</tr>', '', 1),
     ('certainty rationale removed', 'q2.html',
      r'(<details class="cert[^"]*"><summary>.*?</summary>)<p>.*?</p>', r'\1', 1),
-    ('source quote altered', 'q2.html',
+    ('source quote altered', 'sources-q2--created-marsh--abundance-density.html',
      r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
-    ('DOI link removed', 'q3.html',
+    ('DOI link removed', 'sources-q3--seeding--invasive-abundance.html',
      r'href="https://doi\.org/[^"]+"', 'href="#"', 1),
-    ('source detached from its finding', 'q1.html',
+    ('source detached from its finding', 'sources-q1--site-preparation--survival.html',
      r'<details class="ev" data-claim="camo:edge_0ec39c79a398".*?</dl></details>', '', 1),
     ('gap worded as a failure', 'q3.html',
      r'<strong>Not studied:</strong>', '<strong>Ineffective:</strong>', 1),
@@ -153,7 +153,7 @@ MUTATIONS = [
      r'<html lang="en"', '<html', 1),
     # added after review on #40
     ('arrow screen-reader name says "very low" for "low"', 'q1-graph.html',
-     r'(id="edge-seedling-size--to--survival" aria-label="[^"]*?): increase, low certainty', r'\1: increase, very low certainty', 1),
+     r'(id="edge-seedling-size--to--survival" aria-label="[^"]*?): increase, certainty low', r'\1: increase, certainty very low', 1),
     ('arrow screen-reader name says "1 study" for 11', 'q1-graph.html',
      r'(id="edge-site-preparation--to--growth" aria-label="[^"]*?)11 studies', r'\g<1>1 study', 1),
     ('"no evidence" gap arrow removed from the SVG', 'q1-graph.html',
@@ -173,6 +173,24 @@ MUTATIONS = [
     ('form posting to an external site', 'index.html',
      r'</main>', '<form action="https://forms.example.com/x"></form></main>', 1),
     ('page in a subfolder loads an external script', 'extra/page.html', None, SUBFOLDER_PAGE, 0),
+    # source pages (quotes moved off the answer pages to keep them light)
+    ('finding no longer links to its source page', 'q3.html',
+     r'<a class="srclink" href="sources-q3--seeding--invasive-abundance\.html">', '<a class="srclink" href="#">', 1),
+    ('finding links to another finding\'s source page', 'q1.html',
+     r'href="sources-q1--site-preparation--survival\.html"', 'href="sources-q1--site-preparation--growth.html"', 1),
+    ('graph arrow no longer links to its source page', 'q1-graph.html',
+     r'href="sources-e-site-preparation--to--growth\.html"', 'href="#"', 1),
+    ('source quote altered on a graph source page', 'sources-e-vegetation-control--to--growth.html',
+     r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
+    ('source page loads an external script', 'sources-q2--created-marsh--abundance-density.html',
+     r'</head>', '<script src="https://cdn.example.com/lib.js"></script></head>', 1),
+    # added after review on #41
+    ("graph source page shows another arrow's claim", 'sources-e-site-preparation--to--growth.html',
+     r'data-claim="camo:[^"]+"', 'data-claim="camo:edge_3fb326f2a6c3"', 1),
+    ('made-up time span on a Q2 source page', 'sources-q2--created-marsh--abundance-density.html',
+     r'(<div class="sources">)', r'<p>Created marshes recover in 10 years.</p>\1', 1),
+    ('Q3 row drops what was searched for', 'q3.html',
+     r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
 ]
 
 
