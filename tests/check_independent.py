@@ -402,7 +402,7 @@ class Checker:
             return
         outcome = (gap.get('outcome') or {}).get('label', '')
         sec = el.parent
-        while sec is not None and not (sec.tag == 'section'):
+        while sec is not None and sec.tag not in ('section', 'details'):  # a row may fold (details)
             sec = sec.parent
         notes = [n for n in (sec.iter() if sec is not None else []) if 'data-template' in n.attrs]
         ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) == want

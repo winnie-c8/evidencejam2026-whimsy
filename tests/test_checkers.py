@@ -165,7 +165,7 @@ MUTATIONS = [
     ('Q2 time point removed', 'q2.html',
      r'(data-check="q2/q2--created-marsh--abundance-density/time_points/0">)[^<]+', r'\1', 1),
     ('Q2 "how long" answer moved below the findings', 'q2.html',
-     r'(<div class="callout" role="note" aria-label="How long">.*?</div>)(.*?)(</main>)', r'\2\1\3', 1),
+     r'(<div class="callout" role="note" aria-label="How long"[^>]*>.*?</div>)(.*?)(</main>)', r'\2\1\3', 1),
     ('external SVG image via xlink:href', 'q1.html',
      r'</main>', '<svg><image xlink:href="https://img.example.com/a.png"/></svg></main>', 1),
     ('external image via inline style', 'q2.html',
@@ -201,7 +201,7 @@ MUTATIONS = [
     ('short answer links to a missing finding', 'index.html',
      r'(<span data-group="increase/high"><a href=")[^"]+', r'\1q1.html#f-q1--nothing', 1),
     ('Q3 short answer study count changed', 'q3.html',
-     r'(<p class="short">.*?\(<span data-check="q3/[^"]+/studies">)\d+', r'\g<1>99', 1),
+     r'(<div class="short"[^>]*>.*?\(<span data-check="q3/[^"]+/studies">)\d+', r'\g<1>99', 1),
 ]
 
 

@@ -155,7 +155,8 @@ def effects_short_answer(q) -> ProseItem:
             sent_h += _esc(extra)
         texts.append(sent_t)
         htmls.append(sent_h)
-    return ProseItem(' '.join(texts), ' '.join(htmls))
+    # one bullet per outcome, so it reads at a glance
+    return ProseItem(' '.join(texts), '<ul class="sa">%s</ul>' % ''.join('<li>%s</li>' % h for h in htmls))
 
 
 def gap_map_short_answer(q) -> ProseItem:
