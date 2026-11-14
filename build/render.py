@@ -201,7 +201,8 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
 OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
                   'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
                   '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details");'
-                  'if(d)d.open=true;}e.scrollIntoView();}addEventListener("hashchange",openTarget);openTarget();</script>')
+                  'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover()}catch(x){}}'
+                  'else e.scrollIntoView();}addEventListener("hashchange",openTarget);openTarget();</script>')
 
 
 # "?" button (top right of the Why box and the glance table) opening one popup per page.
@@ -404,8 +405,8 @@ def headline_reason(checks: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
 
 CHIP = {'increase': ('▲', 'Increase', 's'), 'decrease': ('▼', 'Decrease', 's'), 'mixed': ('⇅', 'Mixed', ''),
         'no_effect': ('–', 'No effect', ''), 'unclear': ('?', 'Unclear', ''),
-        'below_reference': ('▼', 'Below reference', ''), 'comparable': ('=', 'Comparable', ''),
-        'above_reference': ('▲', 'Above reference', '')}
+        'below_reference': ('◀', 'Behind', ''), 'comparable': ('=', 'Matches', ''),
+        'above_reference': ('▶', 'Ahead', '')}  # plain words, the same as the Q2 chart
 
 
 def chip(d: str, path: str) -> str:
@@ -521,7 +522,7 @@ def card_name(f: Finding, subject: bool) -> str:
 
 def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
                  tag: str = '', level: int = 3, extra: str = '', links: str = '',
-                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False) -> str:
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False) -> str:
     """One finding. Closed it is one line: direction, name, certainty, study split, Details.
     Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
     base = '%s/%s' % (f.question, f.slug)
@@ -573,9 +574,9 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     src = '<section class="panel"><h5>Sources</h5>%s<p class="go">%s</p></section>' % (quotes, all_link)
     pw = pathways(data, f) if f.question in data.graphs else ''
     more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
-    return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"><summary>%s</summary>'
+    return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"%s><summary>%s</summary>'
             '<div class="panels">%s%s%s</div>%s</details></article>'
-            % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), summary, why, src, pw, more))
+            % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
 
 
 def at_a_glance(q: Question, short_html: str = '') -> str:
@@ -932,6 +933,131 @@ def interactions_section(data: SiteData, q: Question) -> str:
                         ''.join(rows), 'interactions'))
 
 
+# --------------------------------------------------------------- Q2 timeline
+# "When were these marshes measured?": one row per comparison finding, a bar for each marsh age
+# in its time_points. It is NOT a recovery curve: no study reports a time to reach the
+# reference (time_to_reference is null), and the bar colour is the overall result.
+
+TL_WORD = {'below_reference': ('◀', 'Behind'), 'above_reference': ('▶', 'Ahead'),
+           'comparable': ('=', 'Matches'), 'mixed': ('⇅', 'Mixed'), 'unclear': ('?', 'Unclear'),
+           'increase': ('▲', 'Increase'), 'decrease': ('▼', 'Decrease'), 'no_effect': ('–', 'No effect')}
+TL_MAX, TL_STEP = 30, 5                      # axis: 0 to 30, a tick every 5
+TL_X0, TL_PX = 400, 16                       # where the axis starts, px per year (fits the page column)
+TL_ROW, TL_TOP, TL_GROUP = 76, 60, 44        # row height, space for the axis, a group heading
+TL_BTN = 44                                  # the "?" column on the right
+AGE_RANGE = re.compile(r'^\s*(\d+)\s*[-–]\s*(\d+)\s*years?\s*$')
+AGE_ONE = re.compile(r'^\s*(\d+)\s*years?\s*$')
+
+
+def f1(v: float) -> str:
+    s_ = '%.1f' % v
+    return s_[:-2] if s_.endswith('.0') else s_
+
+
+def parse_age(t: str) -> Optional[Tuple[int, int]]:
+    """'6-10 years' -> (6, 10); '9 years' -> (9, 9); anything else -> None."""
+    m = AGE_RANGE.match(t)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = AGE_ONE.match(t)
+    if m:
+        return int(m.group(1)), int(m.group(1))
+    return None
+
+
+def timeline_chart(q: Question, popups: Dict[str, str]) -> str:
+    """The Q2 main view: one row per finding (compared with natural marshes, then change with age).
+    A row is short; its "?" (or a click anywhere on it) opens a popup with the finding's full card.
+    Static SVG, values in data-check spans; the same data follows as a table."""
+    rank = {c: i for i, c in enumerate(CERT_ORDER)}
+    groups = [('', sorted(q.findings, key=lambda f: (not f.raw.get('lags'), rank.get(f.certainty, 9))))]
+    if q.trends:
+        groups.append(('As marshes age', list(q.trends)))
+    allf = [f for _, fs in groups for f in fs]
+    if not allf or not any(f.raw.get('time_points') for f in allf):
+        return ''
+    qid = q.qid
+    x = lambda yr: TL_X0 + min(yr, TL_MAX) * TL_PX
+    width = x(TL_MAX) + 24 + TL_BTN
+    parts, buttons, y = [], [], TL_TOP
+    parts.append('<defs><pattern id="tl-hatch" width="8" height="8" patternUnits="userSpaceOnUse" '
+                 'patternTransform="rotate(45)"><rect width="8" height="8" class="tl-hatch-bg"/>'
+                 '<line x1="0" y1="0" x2="0" y2="8" class="tl-hatch-line"/></pattern></defs>')
+    # axis title first (so no tick number runs into it), then tick numbers
+    parts.append('<text class="tl-axis-title" x="%d" y="18">Marsh age when measured (years)</text>' % TL_X0)
+    for yr in range(0, TL_MAX + 1, TL_STEP):
+        parts.append('<text class="tl-tick" x="%d" y="%d" text-anchor="middle">%d</text>' % (x(yr), TL_TOP - 18, yr))
+    rows_svg = []
+    for title, fs in groups:
+        if title:
+            rows_svg.append('<text class="tl-group" x="0" y="%d">%s</text>' % (y + 30, esc(title)))
+            y += TL_GROUP
+        for f in fs:
+            base = '%s/%s' % (qid, f.slug)
+            sym, word = TL_WORD.get(f.direction, ('', words(f.direction)))
+            lag = ' <tspan class="tl-lag">· lags</tspan>' if f.raw.get('lags') else ''
+            row = ['<g class="tl-row tl-%s"><line class="tl-sep" x1="0" y1="%d" x2="%d" y2="%d"/>'
+                   '<text class="tl-name" x="0" y="%d">%s%s</text>'
+                   '<text class="tl-meta" x="0" y="%d"><tspan class="tl-sym" aria-hidden="true">%s</tspan> '
+                   '<tspan data-check="%s/direction">%s</tspan> · <tspan data-check="%s/certainty">%s</tspan> · '
+                   '<tspan data-check="%s/studies">%d</tspan> %s</text>'
+                   % (esc(f.direction.replace('_', '-')), y + TL_ROW, width, y + TL_ROW, y + 30,
+                      esc(f.outcome_label), lag, y + 54, sym, esc(base), esc(word), esc(base),
+                      esc(certainty_text(f.certainty)), esc(base), f.studies, plural(f.studies, 'study', 'studies'))]
+            ages = [a for a in (parse_age(t) for t in f.raw.get('time_points') or []) if a is not None]
+            if ages:
+                for a, b in ages:
+                    x1, x2 = x(a), x(b)
+                    if x2 - x1 < 8:
+                        x1, x2 = (x1 + x2) / 2 - 4, (x1 + x2) / 2 + 4
+                    row.append('<rect class="tl-bar" x="%s" y="%d" width="%s" height="28" rx="4"/>'
+                               % (f1(x1), y + 24, f1(x2 - x1)))
+            else:
+                row.append('<rect class="tl-none" x="%d" y="%d" width="%d" height="28" fill="url(#tl-hatch)"/>'
+                           '<text class="tl-none-t" x="%d" y="%d" text-anchor="middle">age not reported</text>'
+                           % (x(0), y + 24, x(TL_MAX) - x(0), (x(0) + x(TL_MAX)) // 2, y + 43))
+            row.append('</g>')
+            rows_svg.append(''.join(row))
+            # the whole row is a button (over the drawing); its "?" sits at the right
+            buttons.append('<button type="button" class="tl-open" popovertarget="pop-%s" '
+                           'style="top:%dpx;height:%dpx;width:%dpx">'
+                           '<span class="sr-only">Details: %s</span><span class="tl-q" aria-hidden="true">?</span></button>'
+                           % (esc(f.slug), y, TL_ROW, width, esc(f.label)))
+            y += TL_ROW
+    height = y + 8
+    grid = ''.join('<line class="tl-grid" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (x(yr), TL_TOP - 10, x(yr), height - 8)
+                   for yr in range(0, TL_MAX + 1, TL_STEP))
+    n_aged = sum(1 for f in allf if f.raw.get('time_points'))
+    summary = ('Ages of the marshes studied for %d findings; %d of them report marsh ages. Each row shows the '
+               'overall result. Select a row for its details. The table below has the same data.' % (len(allf), n_aged))
+    svg = ('<svg class="tl" width="%d" height="%d" viewBox="0 0 %d %d" role="group" aria-label="%s">%s%s%s</svg>'
+           % (width, height, width, height, esc(summary), ''.join(parts), grid, ''.join(rows_svg)))
+    rows = []
+    for f in allf:
+        base = '%s/%s' % (qid, f.slug)
+        sym, word = TL_WORD.get(f.direction, ('', words(f.direction)))
+        tps = f.raw.get('time_points') or []
+        ages = (', '.join(span('%s/time_points/%d' % (base, i), t) for i, t in enumerate(tps))
+                if tps else '<span class="muted">not reported</span>')
+        rows.append('<tr><th scope="row">%s%s</th><td><span aria-hidden="true">%s</span> %s</td>'
+                    '<td>%s</td><td>%s</td><td>%s</td></tr>'
+                    % (esc(f.outcome_label), ' (lags)' if f.raw.get('lags') else
+                       (' (as marshes age)' if f.kind == 'trend' else ''), sym,
+                       span(base + '/direction', word), span(base + '/certainty', CERT_WORD[f.certainty]),
+                       span(base + '/studies', f.studies), ages))
+    tbl = table('The chart as a table: each finding, its overall result and the marsh ages studied',
+                ['Outcome', 'Result', 'Certainty', 'Studies', 'Ages measured'], ''.join(rows), 'tl-table')
+    pops = ''.join(popups[f.slug] for f in allf)
+    return ('<h2 id="timeline">When were these marshes measured?</h2>'
+            '<p class="note">Select a row (or its <span class="tl-q-inline" aria-hidden="true">?</span>) for why it has '
+            'that certainty and the quoted sources.</p>'
+            '<div class="tl-wrap" role="region" aria-label="Marsh ages chart" tabindex="0">%s%s</div>'
+            '<p class="tl-cap">Bars show the marsh ages studies looked at. The result (Behind / Ahead) is overall, '
+            'not at each age. No study followed a marsh until it matched a natural one.</p>'
+            '<details class="tl-tbl"><summary>The same data as a table</summary>%s</details>%s'
+            % (svg, ''.join(buttons), tbl, pops))
+
+
 def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     """COMPARISON layout (Q2 today). Main view: what lags behind, compared with natural marshes, change as marshes age.
     The "how long?" answer is the short answer itself, so it comes first and is said once."""
@@ -964,19 +1090,22 @@ def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[S
             out.append(finding_card(data, f, sources, tag=tag, extra=extra))
         return '<div class="cards">%s</div>' % ''.join(out)
 
-    main, jumps = '', []
-    lag = sa.get('lagging_attributes') or []
-    if lag:
-        main += ('<h2 id="lag">What lags behind natural marshes</h2><ul class="lagging">%s</ul>'
-                 % ''.join('<li>%s</li>' % span('%s/short_answer/lagging_attributes/%d' % (q.qid, i), a) for i, a in enumerate(lag)))
-        jumps.append(('#lag', 'What lags behind'))
-    main += ('<h2 id="compare">Compared with natural marshes</h2><p class="note">Behind, matches or ahead of a '
-             'natural reference wetland. “When measured” lists the ages of the marshes studied, not a time to '
-             'recovery.</p>' + cards(q.findings))
-    jumps.append(('#compare', 'Compared with natural'))
-    if q.trends:
-        main += '<h2 id="age">Change as marshes age</h2>' + cards(q.trends)
-        jumps.append(('#age', 'As marshes age'))
+    def popup(f: Finding) -> str:
+        tag = ' <span class="lags">Lags</span>' if f.raw.get('lags') else ''
+        extra = '<div class="when-wrap"><span class="mlabel">When measured</span> %s</div>' % when(f)
+        return ('<div popover id="pop-%s" class="pop fpop" role="dialog" aria-label="%s">'
+                '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
+                '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
+                % (esc(f.slug), esc(f.label), esc(f.slug),
+                   finding_card(data, f, sources, tag=tag, extra=extra, open_=True)))
+
+    popups = {f.slug: popup(f) for f in q.all_findings()}
+    chart = timeline_chart(q, popups)
+    if chart:
+        main, jumps = chart, [('#timeline', 'When measured')]
+    else:  # no ages in the data: cards as on any other page
+        main = '<h2 id="compare">Findings</h2>' + cards(q.findings) + (cards(q.trends) if q.trends else '')
+        jumps = [('#compare', 'Findings')]
     return question_page(data, prose, q, main, jumps=jumps, short=short)
 
 

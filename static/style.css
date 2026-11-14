@@ -535,3 +535,44 @@ p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
 .grid-wrap thead th, .grid-wrap thead td { position: sticky; top: 0; z-index: 2; background: var(--panel); }
 .grid-wrap tbody th { position: sticky; left: 0; z-index: 1; background: var(--bg); }
 .grid-wrap thead td:first-child { left: 0; z-index: 3; }
+
+/* Q2 timeline: marsh ages studied (not a recovery curve). Scrolls inside its own frame on phones.
+   Each row is a button (over the drawing) that opens the finding's card in a popup. */
+.tl-wrap { overflow-x: auto; position: relative; margin: .75rem 0; }
+svg.tl { display: block; max-width: none; font-family: var(--font-body); }
+svg.tl .tl-axis-title { font-size: 15px; font-weight: 600; fill: var(--text); }
+svg.tl .tl-tick { font-size: 14px; fill: var(--muted); }
+svg.tl .tl-grid { stroke: var(--line); stroke-width: 1; }
+svg.tl .tl-sep { stroke: var(--line); stroke-width: 1; }
+svg.tl .tl-group { font-size: 16px; font-weight: 700; fill: var(--text); }
+svg.tl .tl-name { font-size: 17px; font-weight: 600; fill: var(--text); }
+svg.tl .tl-lag { font-weight: 400; fill: var(--muted); }
+svg.tl .tl-meta { font-size: 15px; fill: var(--text); }
+svg.tl .tl-sym { font-weight: 700; }
+svg.tl .tl-bar { fill: var(--s-none); }
+svg.tl .tl-below-reference .tl-bar, svg.tl .tl-below-reference .tl-sym,
+svg.tl .tl-decrease .tl-bar, svg.tl .tl-decrease .tl-sym { fill: var(--s-down); }
+svg.tl .tl-above-reference .tl-bar, svg.tl .tl-above-reference .tl-sym,
+svg.tl .tl-increase .tl-bar, svg.tl .tl-increase .tl-sym { fill: var(--s-up); }
+svg.tl .tl-mixed .tl-bar, svg.tl .tl-mixed .tl-sym { fill: var(--s-mixed); }
+svg.tl .tl-unclear .tl-bar, svg.tl .tl-unclear .tl-sym { fill: var(--dir-none); }
+svg.tl .tl-hatch-bg { fill: var(--bg); }
+svg.tl .tl-hatch-line { stroke: var(--line); stroke-width: 3; }
+svg.tl .tl-none { stroke: var(--line); }
+svg.tl .tl-none-t { font-size: 14px; fill: var(--muted); font-style: italic; }
+button.tl-open { position: absolute; left: 0; display: flex; align-items: center; justify-content: flex-end;
+  padding: 0 8px 0 0; border: 0; background: transparent; cursor: pointer; border-radius: 6px; }
+button.tl-open:hover { background: rgba(2, 79, 236, .06); }
+button.tl-open:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.tl-q, .tl-q-inline { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem;
+  border-radius: 50%; border: 1.5px solid var(--link); color: var(--link); font-weight: 700; background: var(--bg); }
+.tl-q-inline { width: 1.3rem; height: 1.3rem; font-size: .8rem; vertical-align: middle; }
+button.tl-open:hover .tl-q { background: var(--link); color: var(--bg); }
+.tl-cap { font-size: .95rem; color: var(--muted); }
+details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0 .75rem; }
+/* the finding card, in a popup */
+.pop.fpop { max-width: min(56rem, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 2.5rem 1rem 1rem; }
+.pop.fpop .fcard { margin: 0; }
+.pop-x { position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.pop-x:hover { background: var(--panel); }
