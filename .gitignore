@@ -5,3 +5,6 @@ node_modules/
 
 # macOS folder settings
 .DS_Store
+
+# personal Claude Code notes (see CLAUDE.md)
+CLAUDE.local.md
