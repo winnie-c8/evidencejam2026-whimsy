@@ -721,7 +721,7 @@ def side_nav(data: SiteData, filename: str, jumps: Optional[List[Tuple[str, str]
         qs.append(item('%s.html' % qid, '%02d' % n, question_name(q)))
         if qid in data.graphs:
             qs.append(item(graph_file(qid), '↳', '%s graph' % question_name(q), 'sub'))
-    more = item('method.html', '?', 'How it works') + item('index.html', '⌂', 'Home')
+    more = item('method.html', '?', 'Guide') + item('index.html', '⌂', 'Home')
     return ('<aside class="side"><a class="brand" href="index.html">whimsy<span class="sr-only">: home</span></a>'
             '<nav aria-label="Questions"><ol class="qnav">%s</ol><ul class="qnav more">%s</ul></nav></aside>'
             % (''.join(qs), more))
@@ -753,9 +753,21 @@ def page(data: SiteData, filename: str, title: str, description: str, body: str,
 
 # --------------------------------------------------------------- pages
 
+# "How to read this site": the symbols used on every page (shown on the Guide page)
+READ_KEY = ('<ul class="key-list">'
+            '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
+            '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
+            '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
+            '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
+            '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
+            '(not “doesn’t work”)</li>'
+            '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
+            '</ul>')
+
+
 def render_index(data: SiteData, prose: Prose) -> str:
-    """Home: big headline, one sentence, the questions as 01 / 02 / 03 rows with their real short
-    answers, and a small key for reading the site."""
+    """Home: big headline, one sentence, a few sentences on how to use the site, and the questions
+    as 01 / 02 / 03 rows (each answer is one click away)."""
     rows = []
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
@@ -764,38 +776,27 @@ def render_index(data: SiteData, prose: Prose) -> str:
                      % (graph_file(qid), esc(question_name(q))))
         rows.append(
             '<li class="qrow"><span class="n" aria-hidden="true">%02d</span><div>'
-            '<h2 id="card-%s"><a href="%s.html">%s</a></h2><p class="q">%s</p>%s'
-            '<p class="go"><a href="%s.html">Read the answer →<span class="sr-only"> %s</span></a>%s</p></div></li>'
-            % (n, esc(qid), esc(qid), esc(question_name(q)), esc(q.text), short_box(prose.short_answer[qid].html),
-               esc(qid), esc(question_name(q)), graph))
+            '<h2 id="card-%s"><a href="%s.html">%s</a></h2><p class="q">%s</p>'
+            '<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s</span></a>%s</p></div></li>'
+            % (n, esc(qid), esc(qid), esc(question_name(q)), esc(q.text), esc(qid), esc(question_name(q)), graph))
     m = data.manifest.get('graph') or {}
     papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
               if m.get('source_documents') else '')
-    key = ('<section class="key-strip" aria-labelledby="key-h"><h2 id="key-h">How to read this site</h2><ul>'
-           '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
-           '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
-           '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
-           '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
-           '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
-           '(not “doesn’t work”)</li>'
-           '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
-           '</ul><p class="go"><a href="method.html">How it works →</a></p></section>')
-    guide = ('<section class="guide" aria-labelledby="guide-h"><h2 id="guide-h">How to use this site</h2><ol>'
-             '<li><strong>Pick a question</strong> below or in the sidebar.</li>'
-             '<li><strong>Read the short answer.</strong> The best-supported findings in a line or two, and how '
-             'sure we can be of them.</li>'
-             '<li><strong>Scan “At a glance”.</strong> Every factor, which way it pushes the outcome, how sure '
-             'we can be (<span class="bars b3" aria-hidden="true"></span> 1 to 4) and how many studies.</li>'
-             '<li><strong>Open a finding</strong> to see why it got that certainty and the sentences quoted '
-             'from the papers, with links to each paper.</li>'
-             '<li><strong>Read “things this answer can’t tell you”</strong> before acting on it. It says how '
-             'the studies were picked and grouped, in the data team’s own words.</li></ol></section>')
-    body = ('<h1 class="mega">restoration evidence</h1>'
+    guide = ('<section class="guide" aria-labelledby="guide-h"><h2 id="guide-h">How to use this site</h2>'
+             '<p>Pick one of the questions below. Each answer starts with a short answer, then a chart or table '
+             'you can take in at a glance: what each treatment does, how sure we can be, and how many studies '
+             'looked at it.</p>'
+             '<p>Select any row or box to see why the evidence got its certainty grade and to read the exact '
+             'sentences from the papers, with a link to each one. Before acting on an answer, open “things this '
+             'answer can’t tell you”: it says how the studies were picked and grouped.</p>'
+             '<p class="go"><a href="method.html">The Guide: symbols, grading and where the data comes from →</a>'
+             '</p></section>')
+    body = ('<h1 class="mega">whimsy</h1>'
             '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
             'and where nothing has been studied. Works offline.</p>%s'
-            '<h2 class="rows-h">The questions</h2><ol class="qrows">%s</ol>%s'
-            % (number_word(len(data.questions)), papers, guide, ''.join(rows), key))
-    return page(data, 'index.html', 'Restoration evidence', 'Plain answers to restoration questions, '
+            '<h2 class="rows-h">The questions</h2><ol class="qrows">%s</ol>'
+            % (number_word(len(data.questions)), papers, guide, ''.join(rows)))
+    return page(data, 'index.html', 'Whimsy · Restoration evidence', 'Plain answers to restoration questions, '
                 'with certainty, gaps and sources.', body)
 
 
@@ -866,7 +867,7 @@ def not_studied(q: Question) -> str:
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
                   jumps: List[Tuple[str, str]], short: Optional[str] = None, scripts: str = '') -> str:
     """The one template every question page uses, in this order: kicker + h1, short answer,
-    limitations, MAIN VIEW, not studied, link to How it works."""
+    limitations, MAIN VIEW, not studied, link to the Guide."""
     n = list(data.questions).index(q.qid) + 1
     name = question_name(q)
     body = '<p class="kicker">Question %02d · %s</p><h1>%s</h1>' % (n, esc(name), esc(q.text))
@@ -874,7 +875,7 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
     body += not_studied(q)
-    body += ('<p class="to-method"><a href="method.html">How it works: how certainty is graded, where the data '
+    body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
     jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
@@ -1382,10 +1383,12 @@ def render_method(data: SiteData) -> str:
                'direction, the study design, the comparator and the sentence in the paper).')
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
     body = (
-        '<h1>How it works</h1>'
-        '<nav class="tabs" aria-label="On this page"><ul><li><a href="#certainty">Certainty</a></li>'
+        '<h1>Guide</h1>'
+        '<nav class="tabs" aria-label="On this page"><ul><li><a href="#read">How to read this site</a></li>'
+        '<li><a href="#certainty">Certainty</a></li>'
         '<li><a href="#data">Where the data comes from</a></li><li><a href="#limits">Limits</a></li>'
         '<li><a href="#about">About us</a></li></ul></nav>'
+        '<section class="tab" aria-labelledby="read"><h2 id="read">How to read this site</h2>%%READKEY%%</section>'
         '%%CERTAINTY%%'
         '<section class="tab" aria-labelledby="data"><h2 id="data">Where the data comes from</h2>'
         '<p>%s The answer pack pools those claims into findings with simple, visible rules: no '
@@ -1444,6 +1447,7 @@ def render_method(data: SiteData) -> str:
     cert_start = body.index('<section class="tab" aria-labelledby="certainty">')
     cert = body[cert_start:]
     body = body[:cert_start].replace('%CERTAINTY%', cert)
+    body = body.replace('%READKEY%', READ_KEY)
     lim = []
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         lim.append('<h3>%02d %s</h3><ul>%s</ul>' % (n, esc(question_name(q)), ''.join(
@@ -1465,8 +1469,10 @@ def render_method(data: SiteData) -> str:
                         'number on every page with the pack before the site is published.</p>'
                         '<p>Site code: MIT licence. Data: the Evidence Jam 2026 Lane 3 answer pack, built from '
                         'the Lane 2 CAMO causal graph.</p></section>')
-    return page(data, 'method.html', 'Method · How it works', 'How certainty is graded, what the direction '
-                'words mean and where every number comes from.', body)
+    jumps = [('#read', 'How to read this site'), ('#certainty', 'Certainty'), ('#data', 'Where the data comes from'),
+             ('#limits', 'Limits'), ('#about', 'About us')]
+    return page(data, 'method.html', 'Guide', 'How certainty is graded, what the direction '
+                'words mean and where every number comes from.', body, jumps=jumps)
 
 
 # --------------------------------------------------------------- entry

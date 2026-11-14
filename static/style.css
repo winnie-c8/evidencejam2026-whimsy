@@ -618,3 +618,5 @@ table.gapmap td button .bars { background: repeating-linear-gradient(90deg, tran
 .rowpop ul.cells > li:target .fcard { box-shadow: 0 0 0 3px var(--focus); }
 ol.densest { margin-bottom: .2rem; }
 details.more-densest > summary { cursor: pointer; color: var(--link); margin: 0 0 .5rem; }
+ul.key-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
+ul.key-list li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

@@ -211,11 +211,11 @@ MUTATIONS = [
     # 2.8 short answers built from the data
     ('short answer says "decreases" for an increase', 'q1.html',
      r'(<span data-group="increase/high">.*?) increase it</span>', r'\1 decrease it</span>', 1),
-    ('short answer certainty word changed', 'index.html',
+    ('short answer certainty word changed', 'q1.html',
      r'(<span data-cert="high">with )high certainty', r'\1moderate certainty', 1),
     ('short answer lists a finding under the wrong group', 'q1.html',
      r'(<span data-group="decrease/high"><a href=")[^"]+', r'\1q1.html#f-q1--site-preparation--growth', 1),
-    ('short answer links to a missing finding', 'index.html',
+    ('short answer links to a missing finding', 'q1.html',
      r'(<span data-group="increase/high"><a href=")[^"]+', r'\1q1.html#f-q1--nothing', 1),
     ('Q3 short answer study count changed', 'q3.html',
      r'(<div class="short"[^>]*>.*?\(<span data-check="q3/[^"]+/studies">)\d+', r'\g<1>99', 1),
