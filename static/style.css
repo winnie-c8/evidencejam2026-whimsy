@@ -169,3 +169,121 @@ svg .gap-link .lbl text { fill: var(--gap); font-style: italic; font-weight: 400
 .edge-panel:target { background: #fffbe6; }
 a.srclink { white-space: nowrap; }
 .sources details.ev { margin: 1rem 0; }
+
+/* finding cards (#49). Closed: one line. Open: panels (why / sources / pathways). */
+:root {
+  --c-high: #1b7a3a; --c-moderate: #5c8a1f; --c-low: #b25f00; --c-very-low: #b3261e;  /* green = more certain */
+  --s-up: #1b7a3a; --s-down: #c2410c; --s-mixed: #6b46c1; --s-none: #a67c00;         /* studies: up, down, mixed, no effect */
+}
+.cards { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 1.5rem; }
+.fcard { border: 1px solid var(--line); border-left: 6px solid var(--dir-none); border-radius: 6px; background: var(--bg); min-width: 0; }
+.fcard.fdir-increase, .fcard.fdir-above-reference { border-left-color: var(--s-up); }
+.fcard.fdir-decrease, .fcard.fdir-below-reference { border-left-color: var(--s-down); }
+.fcard.fdir-mixed { border-left-color: var(--s-mixed); }
+.fcard.fdir-no-effect, .fcard.fdir-comparable { border-left-color: var(--s-none); }
+.fcard:target { box-shadow: 0 0 0 3px var(--focus); }
+.fcard p, .fcard li { max-width: none; }
+
+/* the closed line */
+details.fd > summary { list-style: none; cursor: pointer; display: grid; align-items: center; gap: .25rem 1rem;
+  grid-template-columns: 8rem minmax(0, 1fr) minmax(12rem, 16rem) minmax(11rem, 15rem) 5rem; padding: .6rem .9rem; }
+details.fd > summary::-webkit-details-marker { display: none; }
+details.fd > summary:hover { background: var(--panel); }
+.chip { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: 0 .5rem; font-size: .9rem; white-space: nowrap; }
+.chip.gapchip { border-style: dashed; color: var(--muted); }
+.reason { white-space: normal; color: var(--ink); }
+.fcard .fhead { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; }
+.fcard .fhead .arrow { color: var(--muted); font-weight: 400; }
+.fcert, .fsplit { font-size: .9rem; }
+.fmore { color: var(--link); font-size: .9rem; text-align: right; }
+.fmore::after { content: " ▾"; }
+details.fd[open] .fmore::after { content: " ▴"; }
+details.fd[open] > summary { border-bottom: 1px solid var(--line); }
+@media (max-width: 52rem) {
+  details.fd > summary { grid-template-columns: auto minmax(0, 1fr); }
+  .fchip { grid-row: 1; } .fhead { grid-row: 1; }
+  .fcert, .fsplit { grid-column: 1 / -1; }
+  .fmore { grid-column: 1 / -1; text-align: left; }
+}
+
+/* open: panels side by side, stacked on phones */
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; padding: .75rem .9rem; }
+.panel { background: var(--panel); border-radius: 4px; padding: .5rem .75rem; min-width: 0; }
+.panel h5 { font-size: .95rem; margin: .25rem 0 .5rem; }
+ul.checks { list-style: none; padding: 0; margin: 0 0 .5rem; }
+ul.checks li { display: flex; gap: .5rem; margin: .2rem 0; align-items: baseline; }
+ul.checks .t { flex: 1; }
+ul.checks .pts { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+ul.checks li.total { border-top: 1px solid var(--line); padding-top: .25rem; font-weight: 600; }
+ul.checks .cap { font-weight: 400; font-size: .85rem; color: var(--muted); }
+.mk { font-weight: 700; min-width: 1rem; }
+details.raw { margin-top: .25rem; }
+details.raw > summary { cursor: pointer; font-size: .8rem; color: var(--muted); }
+.panel .rule { font-size: .8rem; color: var(--muted); margin: .25rem 0; }
+.panel .go { margin: .5rem 0 .25rem; }
+.panel .split { margin: 0 0 .5rem; font-size: .95rem; }
+figure.cq { margin: .5rem 0; }
+figure.cq blockquote.quote { margin: 0; font-size: .95rem; background: var(--bg); }
+figure.cq figcaption { font-size: .85rem; color: var(--muted); margin-top: .2rem; }
+.panel .warn { font-size: .9rem; margin: 0 0 .5rem; }
+ol.chain { list-style: none; padding: 0; margin: 0 0 .75rem; }
+ol.chain .node { border: 1px solid var(--ink); border-radius: 4px; background: var(--bg); padding: .2rem .5rem; font-weight: 600; display: inline-block; }
+ol.chain .step { padding: .2rem 0 .2rem 1rem; font-size: .9rem; }
+ol.chain .down { color: var(--muted); margin-right: .25rem; }
+.fcard .when-wrap, .fcard .density, .fcard .flinks { padding: 0 .9rem; margin: .25rem 0 .75rem; font-size: .95rem; }
+.mlabel { font-weight: 600; margin-right: .5rem; }
+.when-wrap ul.when { display: inline; padding: 0; }
+.when-wrap ul.when li { display: inline; }
+.when-wrap ul.when li + li::before { content: " · "; }
+
+/* certainty: 4 bars from one element, the first N filled; colour follows the grade */
+.bars { --c: var(--ink); display: inline-block; width: 4.4rem; height: .75rem; border-radius: 2px; vertical-align: middle;
+  background: repeating-linear-gradient(90deg, transparent 0 .95rem, var(--bg) .95rem 1.1rem),
+              linear-gradient(90deg, var(--c) 0 var(--fill), transparent var(--fill));
+  box-shadow: inset 0 0 0 1px var(--c); }
+.bars.b1 { --fill: .95rem; --c: var(--c-very-low); }
+.bars.b2 { --fill: 2.05rem; --c: var(--c-low); }
+.bars.b3 { --fill: 3.15rem; --c: var(--c-moderate); }
+.bars.b4 { --fill: 4.4rem; --c: var(--c-high); }
+
+/* studies: one segment per direction, and a matching dot before each number */
+.agree { display: inline-flex; width: 4.5rem; height: .75rem; border: 1px solid var(--ink); border-radius: 2px; overflow: hidden; vertical-align: middle; }
+.agree i { display: block; min-width: 4px; border-right: 2px solid var(--bg); }
+.agree i:last-child { border-right: 0; }
+.dot { display: inline-block; width: .7em; height: .7em; border-radius: 50%; margin-right: .3em; }
+.s-increase, .s-above-reference { background: var(--s-up); }
+.s-decrease, .s-below-reference { background: var(--s-down); }
+.s-mixed { background: var(--s-mixed); }
+.s-no-effect, .s-comparable { background: var(--s-none); }
+.s-unclear { background: var(--dir-none); }
+ul.cells > li > .fcard { margin: .5rem 0; }
+
+/* Q1 at a glance */
+table.glance { font-size: .9rem; }
+table.glance td a { display: block; text-decoration: none; color: var(--ink); white-space: nowrap; }
+table.glance td a:hover .dir, table.glance td a:focus .dir { text-decoration: underline; }
+table.glance td.gapcell { border: 2px dashed var(--gap); }
+table.glance td.gapcell a { color: var(--muted); }
+table.glance td.none { color: var(--muted); text-align: center; }
+
+/* gap card: grey, dashed, "?", no bars */
+.gap .gq { display: inline-block; width: 1.4em; height: 1.4em; line-height: 1.3em; text-align: center; border: 1px dashed var(--gap); border-radius: 50%; color: var(--gap); font-weight: 700; }
+
+/* sources pages: grouped by paper, first 3 shown */
+section.paper h2 { font-size: 1.05rem; margin: 1.5rem 0 .25rem; }
+details.more > summary { cursor: pointer; font-weight: 600; color: var(--link); margin: 1rem 0; }
+
+/* "?" help button and the grading popup */
+.panel { position: relative; }
+.panel h5 { padding-right: 2rem; }
+button.help { width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1px solid var(--link); background: var(--bg);
+  color: var(--link); font-weight: 700; cursor: pointer; line-height: 1; padding: 0; font-size: .9rem; }
+.panel button.help { position: absolute; top: .4rem; right: .4rem; }
+h2 button.help { vertical-align: middle; margin-left: .25rem; }
+button.help:hover { background: var(--link); color: var(--bg); }
+.pop { max-width: min(36rem, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem;
+  box-shadow: 0 8px 30px rgba(0,0,0,.2); color: var(--ink); background: var(--bg); }
+.pop::backdrop { background: rgba(0,0,0,.25); }
+.pop h2 { margin-top: 0; font-size: 1.2rem; }
+.pop .ex { background: var(--panel); padding: .4rem .6rem; border-radius: 4px; }
+.none-pw { font-size: .95rem; color: var(--muted); margin: .25rem 0; }
