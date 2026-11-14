@@ -677,9 +677,8 @@ def effect_popup(data: SiteData, f: Finding, sources: List[SourcePage], graph_hr
     and one link to the graph for how this factor connects to others."""
     base = '%s/%s' % (f.question, f.slug)
     raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
-    cert = ('<section class="ep-sec"><h4>Certainty measurement: %s%s</h4><p class="why-intro">Certainty is how '
-            'much you can trust this result. It starts at the level of the best kind of study, then moves up or '
-            'down one level for each check below.</p>%s'
+    # what certainty means is explained once, above the chart (and behind the "?"), not in every popup
+    cert = ('<section class="ep-sec"><h4>Certainty measurement: %s%s</h4>%s'
             '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
             % (span(base + '/certainty', CERT_WORD[f.certainty]), LEVELS_BTN, level_track(f.certainty_rationale), raw))
     finding_sources(sources, f, f.question)  # writes sources-<slug>.html
@@ -796,7 +795,11 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
             '<p class="cc-read"><strong>How to read:</strong> each bar is one finding, a factor\'s effect on one '
             'outcome. Bar length is the certainty of the evidence (Very low, Low, Moderate, High), not the size of '
             'the effect. Colour, symbol and word give the direction; the number is how many studies.%s '
-            'Select a bar for the certainty rationale and the quoted sources.</p>'
+            'Select a bar for how its certainty was measured and the quoted sources.</p>'
+            '<p class="cc-read"><strong>How certainty is measured:</strong> every finding starts at the level of '
+            'its best kind of study (experiments with untreated plots start at High), then moves down one level '
+            'for each problem (only one study, studies disagree, nothing to compare against) and up one level for '
+            'each strength (three or more studies agree, the studies show how it works).</p>'
             '<ul class="cc-key" aria-label="Legend">%s</ul>%s'
             '<div class="cchart"><div class="cc-axis" aria-hidden="true"><span class="cc-out"></span>'
             '<span class="cc-dir">Direction</span><span class="cc-ticks">%s</span><span class="cc-q"></span></div>'
