@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 from load import (CERTAINTIES, EFFECT_DIRECTIONS, REFERENCE_DIRECTIONS, Finding, Gap,
                   Question, Quote, SiteData, slug)
 from summarize import CERT_WORD, Prose
+from graph_svg import FLOW as GRAPH_FLOW
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -250,7 +251,7 @@ $body
 <footer class="site"><p>Data: Evidence Jam 2026 Lane 3 answer pack (rule <code>$rule</code>), built from the
 Lane 2 CAMO causal graph. Every direction, certainty and count on this site is read from the pack's
 answer files. Site code: MIT licence. Built $date.</p></footer>
-</body>
+$script</body>
 </html>
 """)
 
@@ -278,14 +279,16 @@ def build_date() -> str:
     return datetime.date.today().isoformat()
 
 
-def page(data: SiteData, filename: str, title: str, description: str, body: str) -> str:
+def page(data: SiteData, filename: str, title: str, description: str, body: str,
+         script: Optional[str] = None) -> str:
     nav = []
     for href, label in nav_items(data):
         cur = ' aria-current="page"' if href == filename else ''
         nav.append('<li><a href="%s"%s>%s</a></li>' % (href, cur, esc(label)))
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
+    tag = '<script src="%s" defer></script>\n' % esc(script) if script else ''
     return SHELL.substitute(title=esc(title), description=esc(description), nav=''.join(nav),
-                            body=body, rule=esc(rule), date=build_date())
+                            body=body, rule=esc(rule), date=build_date(), script=tag)
 
 
 # --------------------------------------------------------------- pages
@@ -587,38 +590,69 @@ def edge_title(g: Any, e: Dict[str, Any]) -> str:
     return '%s → %s' % (src, g.node(e['target'])['label'])
 
 
+def _swatch(cls: str, word: str) -> str:
+    return ('<span><svg width="30" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" '
+            'class="lg sw %s"/></svg> %s</span>' % (cls, word))
+
+
+COLOUR_KEY = ''.join(_swatch(c, w) for c, w in (('up', 'Green: increase ↑'), ('down', 'Red: decrease ↓'),
+                                                ('mixed', 'Blue: mixed ⇅'),
+                                                ('none', 'Grey: no effect – or unclear ?')))
+
+
+def _box_row(cls: str, dashed_word: str, meaning: str) -> str:
+    return ('<div><dt><svg width="34" height="20" aria-hidden="true"><rect x="1" y="2" width="32" height="16" '
+            'rx="3" class="lg-box %s"/></svg> %s</dt><dd>%s</dd></div>' % (cls, dashed_word, meaning))
+
+
+BOX_KEY = (_box_row('', 'White box', 'Something you do: a planting-stock choice or a site treatment')
+           + _box_row('condition', 'Beige box', 'A site or seedling condition the treatments change')
+           + _box_row('outcome', 'Pale green box, thick border', 'An outcome: seedling survival or growth')
+           + _box_row('combination', 'Dashed box with “+”', 'Two treatments applied together; thin lines '
+                      'join it to each treatment'))
+
+
 def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
     g = data.q1_graph
     q1 = data.questions.get('q1')
     body = ('<h1>Tree planting as a causal graph</h1>'
             '<p class="lead">Each arrow is a body of evidence. Select one to read its sources.</p>'
-            '<p>Planting-stock traits and site treatments (left) act on seedling survival and growth '
-            '(right), directly and through the conditions they change (middle). '
+            '<p>Planting-stock traits and site treatments (%s) act on seedling survival and growth '
+            '(%s), directly and through the conditions they change (middle). ' % (
+                ('top', 'bottom') if GRAPH_FLOW == 'down' else ('left', 'right')) +
             'A table of every arrow follows the graph.</p>')
     body += ('<h2>How to read the graph</h2><dl class="legend">'
-             '<div><dt>↑ ↓ ⇅ – ?</dt><dd>Direction: what happens to the target (increase, decrease, '
-             'mixed, no effect, unclear). The symbol and the word carry the meaning; colour repeats it.</dd></div>'
-             '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="48" y2="5" '
-             'class="lg high"/></svg> solid</dt><dd>High certainty</dd></div>'
-             '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="48" y2="5" '
-             'class="lg moderate"/></svg> long dashes</dt><dd>Moderate certainty</dd></div>'
-             '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="48" y2="5" '
-             'class="lg low"/></svg> short dashes</dt><dd>Low or very low certainty (the label says which)</dd></div>'
-             '<div><dt>Number on a label</dt><dd>How many studies the arrow rests on</dd></div>'
-             '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="48" y2="5" '
-             'class="lg gapline"/></svg> grey, “no evidence”</dt><dd>A pairing looked for and not found. '
-             'Not a negative result.</dd></div>'
-             '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="40" y2="5" '
-             'class="lg modline"/><circle cx="43" cy="5" r="3.5" class="lg-ring"/></svg> dotted, ends on an arrow'
-             '</dt><dd>Moderation: the source changes the size of the arrow it points at</dd></div>'
-             '<div><dt>Box with “+”</dt><dd>Two treatments applied together; thin lines join it to each '
-             'treatment</dd></div></dl>')
+             '<div><dt><span class="lg-sym">↑ ↓ ⇅ – ?</span></dt><dd>Direction, the large symbol on each '
+             'label: what happens to the target (increase, decrease, mixed, no effect, unclear). The symbol '
+             'carries the meaning; colour repeats it.</dd></div>'
+             '<div><dt>Colour of an arrow</dt><dd class="key-list">%s</dd></div>'
+             '<div><dt><span class="lg-sym">⇅ ↑5 ↓1</span> On a mixed arrow</dt><dd>How many studies found an '
+             'increase (↑) and a decrease (↓), so you can see which way it leans. The other studies found '
+             'mixed results or no effect; select the arrow for the full split. “↑0 ↓0” means no study '
+             'went clearly either way.</dd></div>'
+             '<div><dt><span class="lg-sym">7</span> Number on a label</dt><dd>How many studies the arrow '
+             'rests on</dd></div>'
+             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
+             'class="lg high"/></svg> thick, solid</dt><dd>High certainty</dd></div>'
+             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
+             'class="lg moderate"/></svg> medium, long dashes</dt><dd>Moderate certainty</dd></div>'
+             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
+             'class="lg low"/></svg> thin, short dashes</dt><dd>Low certainty</dd></div>'
+             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
+             'class="lg very_low"/></svg> thinnest, dots</dt><dd>Very low certainty</dd></div>'
+             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
+             'class="lg gapline"/></svg> faint grey, “no evidence”</dt><dd>A pairing looked for and not '
+             'found. Not a negative result.</dd></div>'
+             '<div><dt><svg width="48" height="14" aria-hidden="true"><line x1="0" y1="7" x2="38" y2="7" '
+             'class="lg very_low"/><circle cx="41" cy="7" r="5" class="lg-ring"/></svg> ends in a circle on an '
+             'arrow</dt><dd>Moderation: the source changes how strong the arrow it points at is</dd></div>'
+             '%s</dl>' % (COLOUR_KEY, BOX_KEY))
     body += ('<figure class="graph"><!--GRAPH--><figcaption>%s boxes linked by %s arrows, each a body of '
-             'evidence, and %s %s looked for and not found. Every arrow is a link to its sources '
-             'below.</figcaption></figure>'
+             'evidence, and %s %s looked for and not found. Select an arrow to read its evidence '
+             'and sources.</figcaption></figure>'
              % (span('q1graph/count/nodes', len(g.nodes)), span('q1graph/count/edges', len(g.edges)),
                 span('q1graph/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings')))
-    body += ('<p class="callout paths" role="note">A route through the middle column joins separate bodies of '
+    body += ('<p class="callout paths" role="note">A route through a middle box joins separate bodies of '
              'evidence. It is not one tested effect.</p>')
     body += limits_box('q1graph', g.limitations, g.raw.get('rule'), g.raw.get('how_built'),
                        heading='Before you trace a path')
@@ -646,22 +680,25 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
         finding = ''
         for fs, eid in data.graph_join.items():
             if eid == e['id']:
-                finding = ' This arrow is the finding <a href="q1.html#f-%s">on the Q1 answer page</a>.' % esc(fs)
+                finding = ('<p>This arrow is the finding <a href="q1.html#f-%s">on the Q1 answer page</a>.</p>'
+                           % esc(fs))
+        meaning = esc(e.get('direction_meaning') or '')
+        # .back-graph is left out when graph.js shows this section in its side panel
         body += ('<section class="edge-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
-                 '<div class="badges">%s %s %s</div><p>%s</p><p>%s <a href="#edge-%s">Back to the graph</a>.%s</p>'
-                 '%s</section>'
+                 '<div class="badges">%s %s %s</div><p>%s</p>%s%s'
+                 '<p class="back-graph"><a href="#edge-%s">Back to the graph</a></p>%s</section>'
                  % (es, es, es, esc(title), direction_badge(e['direction'], base + '/direction'),
                     certainty_badge(e['certainty'], e.get('certainty_rationale'), title, base),
                     counts(base, e['studies'], e['claims']),
                     vote_split(base, e.get('study_directions') or {}, False),
-                    esc(e.get('direction_meaning') or ''), es, finding, boxes))
+                    '<p>%s</p>' % meaning if meaning else '', finding, es, boxes))
     for gp in g.gaps:
         gs = slug(gp['id'])
         lbl = '%s → %s' % (g.node(gp['source'])['label'], g.node(gp['target'])['label'])
         body += ('<section class="edge-panel gap-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
                  '<div class="gap" role="note"><strong>Not studied:</strong> no claim in this body of research '
                  'tested this pairing. That is not evidence of no effect. <span class="searched">Searched for: '
-                 '%s</span></div><p><a href="#gapedge-%s">Back to the graph</a>.</p></section>'
+                 '%s</span></div><p class="back-graph"><a href="#gapedge-%s">Back to the graph</a></p></section>'
                  % (gs, gs, gs, esc(lbl), esc(gp.get('searched_for', '')), gs))
 
     rows = []
@@ -676,7 +713,7 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
         'Every arrow on the graph, with the same data as text',
         ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
     return page(data, 'q1-graph.html', 'Q1 graph · Tree planting', 'The tree-planting answer drawn as a '
-                'causal graph, with the sources behind every arrow.', body)
+                'causal graph, with the sources behind every arrow.', body, script='static/graph.js')
 
 
 # --------------------------------------------------------------- method
@@ -731,7 +768,7 @@ def render_method(data: SiteData) -> str:
         'mean the treatment fails. Gaps are shown in grey with a dashed border and the words “Not '
         'studied”, never as a weak or negative result.</p>'
         '<h2>Paths on the graph</h2>'
-        '<p>On the tree-planting graph, a route through a middle-column condition (for example site '
+        '<p>On the tree-planting graph, a route through a middle condition (for example site '
         'preparation → competing vegetation → growth) joins two separate bodies of evidence, mostly from '
         'different papers. It is not one tested effect, and the site never multiplies arrows into a '
         'pathway strength.</p>'
@@ -747,7 +784,7 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg'):
+    for f in ('style.css', 'favicon.svg', 'graph.js'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     sources: List[SourcePage] = []
     pages: Dict[str, str] = {'index.html': render_index(data, prose)}

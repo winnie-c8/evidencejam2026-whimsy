@@ -37,7 +37,7 @@ Audience: restoration practitioners (non-coders, e.g. conservation authorities, 
 
 ## Code layout
 - `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; template-only, LLM off), `check.py` (built-in checker)
-- `static/style.css`
+- `static/style.css`; `static/graph.js` (Q1 graph only: drag boxes/arrows, pin highlight, filters, sort, side panel with sources; its routing mirrors `route_all` in graph_svg.py, keep them in step). `FLOW` in graph_svg.py switches the graph between top-down ('down', default) and left-to-right ('right')
 - `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + 22 mutation tests), `tests/a11y/` (axe + phone width, CI only)
 - `.github/workflows/check.yml` runs all of this on PRs.
 - Page contract the checkers rely on: `id="f-<slug>"` findings, `id="gap-<slug>"` gaps, `id="edge-<slug>"` SVG arrows, `id="e-<slug>"` evidence sections, `data-check="<q>/<slug>/direction|certainty|studies"`, `data-claim="<edge id>"`. If you change markup, update the mutation patterns in tests/test_checkers.py.

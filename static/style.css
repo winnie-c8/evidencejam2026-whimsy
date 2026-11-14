@@ -6,10 +6,10 @@
   --line: #c8c8c8;
   --link: #0b57d0;
   --focus: #0b57d0;
-  --dir-up: #1b6e3a;
-  --dir-down: #8a3b00;
-  --dir-mixed: #5b3f99;
-  --dir-none: #4a4a4a;
+  --dir-up: #1b6e3a;     /* green: increase */
+  --dir-down: #c0262d;   /* red: decrease */
+  --dir-mixed: #1a5fb4;  /* blue: mixed */
+  --dir-none: #5f5f5f;   /* grey: no effect / unclear */
   --gap: #767676;
   --d-thin: #eef3fa;
   --d-some: #cfdff3;
@@ -40,7 +40,6 @@ code { font-size: .95em; }
 
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 a.edge:focus-visible, a.gap-link:focus-visible { outline: 3px solid var(--focus); }
-a.edge:focus-visible .vis, a.edge:hover .vis { stroke-width: 4; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -121,17 +120,20 @@ ul.cells > li { border-bottom: 1px solid #eee; padding: .25rem 0; }
 
 /* Q1 graph */
 figure.graph { margin: 1rem 0; }
-figure.graph svg { display: block; max-width: 1000px; height: auto; }
+figure.graph svg { display: block; max-width: 1194px; height: auto; }
 dl.legend { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .25rem 1rem; }
 dl.legend > div { display: contents; }
 dl.legend dt { font-weight: 600; }
 dl.legend dd { margin: 0; }
-.lg { stroke: var(--ink); stroke-width: 2; fill: none; }
-.lg.moderate { stroke-dasharray: 10 5; }
-.lg.low { stroke-dasharray: 3 4; }
-.lg.gapline { stroke: var(--gap); stroke-dasharray: 6 6; }
-.lg.modline { stroke-dasharray: 1 4; stroke-linecap: round; }
-.lg-ring { fill: var(--bg); stroke: var(--ink); stroke-width: 1.5; }
+/* Certainty is the line itself: thicker and more solid = more certain. Legend samples use the same values. */
+.lg { stroke: var(--ink); fill: none; }
+.lg.high, svg .vis.c-high { stroke-width: 5; }
+.lg.moderate, svg .vis.c-moderate { stroke-width: 3; stroke-dasharray: 11 6; }
+.lg.low, svg .vis.c-low { stroke-width: 2; stroke-dasharray: 5 5; }
+.lg.very_low, svg .vis.c-very_low { stroke-width: 1.5; stroke-dasharray: 1 5; stroke-linecap: round; }
+.lg.gapline { stroke: var(--gap); stroke-width: 1.5; stroke-dasharray: 4 6; opacity: .45; }
+.lg-ring { fill: var(--bg); stroke: var(--ink); stroke-width: 2.5; }
+.lg-sym { font-size: 1.35rem; font-weight: 700; }
 
 svg .node rect { fill: var(--bg); stroke: var(--ink); stroke-width: 1.5; }
 svg .node.k-condition rect { fill: #f3f0e8; }
@@ -141,17 +143,16 @@ svg .node text { font-size: 14px; fill: var(--ink); }
 svg .colhead { font-size: 13px; font-weight: 700; fill: var(--muted); }
 svg .member { stroke: var(--muted); stroke-width: 1; fill: none; }
 svg .hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; }
-svg .vis { fill: none; stroke-width: 2.25; }
-svg .c-high { }
-svg .c-moderate { stroke-dasharray: 10 5; }
-svg .c-low, svg .c-very_low { stroke-dasharray: 3 4; }
+svg .vis { fill: none; }
 svg .d-increase .vis { stroke: var(--dir-up); }
 svg .d-decrease .vis { stroke: var(--dir-down); }
 svg .d-mixed .vis { stroke: var(--dir-mixed); }
 svg .d-no_effect .vis, svg .d-unclear .vis { stroke: var(--dir-none); }
-svg .mod .vis { stroke-dasharray: 1 4; stroke-linecap: round; stroke-width: 2.5; }
-svg .ring { fill: var(--bg); stroke-width: 2; }
+svg .ring { fill: var(--bg); stroke-width: 3; }
 svg .d-increase .ring { stroke: var(--dir-up); }
+svg .d-decrease .ring { stroke: var(--dir-down); }
+svg .d-mixed .ring { stroke: var(--dir-mixed); }
+svg .d-no_effect .ring, svg .d-unclear .ring { stroke: var(--dir-none); }
 svg marker path { stroke: none; }
 svg .ah-increase { fill: var(--dir-up); }
 svg .ah-decrease { fill: var(--dir-down); }
@@ -159,12 +160,85 @@ svg .ah-mixed { fill: var(--dir-mixed); }
 svg .ah-none { fill: var(--dir-none); }
 svg .lbl rect { fill: var(--bg); stroke: var(--line); }
 svg .lbl text { font-size: 12px; font-weight: 600; }
+svg .lbl .sym { font-size: 22px; font-weight: 700; }
+svg .lbl .n { font-size: 20px; font-weight: 700; }
+svg .lbl .split { font-size: 18px; font-weight: 700; }
+svg .lbl .sub { font-size: 12px; font-weight: 600; }
 svg .d-increase .lbl text { fill: var(--dir-up); }
 svg .d-decrease .lbl text { fill: var(--dir-down); }
 svg .d-mixed .lbl text { fill: var(--dir-mixed); }
 svg .d-no_effect .lbl text, svg .d-unclear .lbl text { fill: var(--dir-none); }
-svg .gap-link .vis { stroke: var(--gap); stroke-dasharray: 6 6; stroke-width: 2; }
+/* "no evidence": a faint thin dashed line, so it never reads as a result. Its label stays at full contrast. */
+svg .gap-link .vis { stroke: var(--gap); stroke-dasharray: 4 6; stroke-width: 1.5; opacity: .45; }
+svg .gap-link .lbl rect { stroke-dasharray: 3 3; }
 svg .gap-link .lbl text { fill: var(--gap); font-style: italic; font-weight: 400; }
+svg .member { stroke-width: 1.5; }
+
+/* graph.js: dragging, highlighting, side panel */
+button { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--ink); border-radius: 4px; padding: .3rem .8rem; cursor: pointer; }
+button:hover { background: var(--panel); }
+.graph-tools p { margin: .5rem 0; }
+.tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .5rem 0; }
+.seg { display: flex; flex-wrap: wrap; gap: .25rem; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+button[aria-pressed="true"]::before { content: "✓ "; }  /* pressed is shown by a tick too, not by colour alone */
+.tool-status { min-height: 1.5em; color: var(--muted); }
+svg .node { cursor: grab; }
+svg .node.dragging { cursor: grabbing; }
+svg .node.dragging rect { stroke-width: 3; }
+svg .node.pinned rect { stroke-width: 3.5; stroke: var(--focus); }
+svg a.edge, svg a.gap-link { cursor: pointer; }
+svg a.dragging { cursor: grabbing; }
+.fig-state { display: block; margin-top: .25rem; font-weight: 600; color: var(--ink); }
+
+/* side panel: how the studies split (counts also written out in words below the bar) */
+.votes-head { margin: .75rem 0 .25rem; font-weight: 600; }
+.votebar { display: flex; gap: 2px; max-width: 26rem; border-radius: 4px; overflow: hidden; }
+.votebar span { flex-basis: 2.8em; padding: .2rem .35rem; color: #fff; font-weight: 700; white-space: nowrap; text-align: center; }
+.vote-increase { background: var(--dir-up); }
+.vote-decrease { background: var(--dir-down); }
+.vote-mixed { background: var(--dir-mixed); }
+.vote-no_effect, .vote-unclear { background: var(--dir-none); }
+
+/* legend keys */
+.key-list { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
+.key-list > span svg { vertical-align: middle; }
+.lg.sw { stroke-width: 5; }
+.lg.sw.up { stroke: var(--dir-up); }
+.lg.sw.down { stroke: var(--dir-down); }
+.lg.sw.mixed { stroke: var(--dir-mixed); }
+.lg.sw.none { stroke: var(--dir-none); }
+.lg-box { stroke: var(--ink); stroke-width: 1.5; fill: var(--bg); }
+.lg-box.condition { fill: #f3f0e8; }
+.lg-box.outcome { fill: #eaf2ea; stroke-width: 2.5; }
+.lg-box.combination { fill: #f6f6f4; stroke-dasharray: 4 2; }
+@media (min-width: 700px) { svg .node { touch-action: none; } }  /* on a phone a touch on a box still scrolls the page */
+svg a.edge, svg a.gap-link { transition: opacity .12s; }
+svg.hl a.edge:not(.on), svg.hl a.gap-link:not(.on) { opacity: .2; }
+/* faded boxes stay opaque, so arrows never show through them */
+svg.hl .node:not(.on) rect { stroke: var(--line); }
+svg.hl .node:not(.on) text { fill: var(--muted); }
+/* filter buttons: hidden arrows are gone (not focusable); an arrow kept only because a
+   moderation arrow points at it is faded */
+svg a.filtered { display: none; }
+svg a.context { opacity: .3; }
+svg a.sel .lbl rect { stroke: var(--ink); stroke-width: 2; }
+@media (prefers-reduced-motion: reduce) { svg a.edge, svg a.gap-link { transition: none; } }
+
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: min(28rem, 100%); overflow-y: auto;
+  background: var(--bg); border-left: 1px solid var(--line); box-shadow: -6px 0 18px rgba(0, 0, 0, .18); padding: 0 1rem 2rem; }
+.drawer[hidden] { display: none; }
+.drawer-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; background: var(--bg); border-bottom: 1px solid var(--line); padding: 1rem 0 .5rem; }
+.drawer-head h2 { margin: 0; font-size: 1.15rem; }
+.drawer-head h2:focus { outline: none; }
+.drawer-head h2:focus-visible { outline: 3px solid var(--focus); }
+.drawer-body h3 { font-size: 1.05rem; margin: 1.25rem 0 .25rem; }
+.drawer-body .badges { margin-top: .75rem; }
+.drawer-body details.cert { display: block; }
+.drawer-sources { margin-top: .75rem; }
+@media (min-width: 1100px) { html.drawer-open body { padding-right: 28rem; } }
+
 .edge-panel { border-top: 1px solid var(--line); padding-top: .25rem; }
 .edge-panel:target { background: #fffbe6; }
 a.srclink { white-space: nowrap; }
