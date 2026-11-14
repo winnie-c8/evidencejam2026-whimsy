@@ -474,12 +474,16 @@ class Checker:
                         if dc.endswith('/' + field) and field not in shown:
                             shown[field] = n.text()
                 if e['direction'] == 'mixed' and e['kind'] != 'moderation':
-                    # A mixed arrow shows how many studies went up and down ("⇅ ↑5 ↓1"); the
-                    # values themselves are checked against the pack by check_every_value.
+                    # A mixed arrow shows how many studies went up and down ("⇅ ↑5 ↓1"), leaving
+                    # out a zero ("⇅ ↑1", "⇅"); the values themselves are checked against the
+                    # pack by check_every_value. The ⇅ must be there, so it can't pass for ↑.
                     dcs = {n.attrs.get('data-check', '') for n in a.iter()}
+                    sd = e.get('study_directions') or {}
                     for d_ in ('increase', 'decrease'):
-                        self.ok(f'q1graph/{s}/study_directions/{d_}' in dcs,
-                                f'{where}: mixed arrow does not show how many studies found {d_}')
+                        if sd.get(d_, 0):
+                            self.ok(f'q1graph/{s}/study_directions/{d_}' in dcs,
+                                    f'{where}: mixed arrow does not show how many studies found {d_}')
+                    self.ok('⇅' in a.text(), f'{where}: mixed arrow does not show the mixed symbol ⇅')
                 elif self.ok('studies' in shown, f'{where}: studies not visible on the arrow (needs hover?)'):
                     self.ok(str(shown_value('studies', shown['studies'])) == str(e['studies']),
                             f'{where}: arrow shows studies "{shown["studies"]}", pack says "{e["studies"]}"')

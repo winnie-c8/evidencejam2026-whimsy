@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 from load import (CERTAINTIES, COMPARISON, EFFECT_DIRECTIONS, EFFECTS, GAPMAP, REFERENCE_DIRECTIONS,
                   Finding, Gap, Question, Quote, SiteData, slug)
 from summarize import CERT_WORD, Prose
-from graph_svg import FLOW as GRAPH_FLOW
+from graph_svg import FLOW as GRAPH_FLOW, SYM as GRAPH_SYM, order_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -662,9 +662,8 @@ SHELL = Template("""<!doctype html>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 $layout
-<footer class="site"><p>Data: Evidence Jam 2026 Lane 3 answer pack (rule <code>$rule</code>), built from the
-Lane 2 CAMO causal graph. Every direction, certainty and count on this site is read from the pack's
-answer files. Site code: MIT licence. Built $date.</p></footer>
+<footer class="site"><p>Data: Evidence Jam 2026 Lane 3 answer pack, rule <code>$rule</code> · MIT licence ·
+built $date</p></footer>
 $script</body>
 </html>
 """)
@@ -704,7 +703,7 @@ def side_nav(data: SiteData, filename: str, jumps: Optional[List[Tuple[str, str]
         if qid in data.graphs:
             qs.append(item(graph_file(qid), '↳', '%s graph' % question_name(q), 'sub'))
     more = item('method.html', '?', 'How it works') + item('index.html', '⌂', 'Home')
-    return ('<aside class="side"><a class="brand" href="index.html">whimsy<span class="sr-only">: home</span></a>'
+    return ('<aside class="side">'
             '<nav aria-label="Questions"><ol class="qnav">%s</ol><ul class="qnav more">%s</ul></nav></aside>'
             % (''.join(qs), more))
 
@@ -716,17 +715,37 @@ def build_date() -> str:
     return datetime.date.today().isoformat()
 
 
+# Home page tree (static/tree.svg) that turns as you scroll; static/tree.js splits it into layers.
+# Kept in an inert <template> so it costs nothing until the script uses it; decorative only.
+with open(os.path.join(ROOT, 'static', 'tree.svg'), encoding='utf-8') as _f:
+    TREE_HTML = ('<div class="home-tree" id="treeStage" aria-hidden="true"><div class="tree-scene"></div></div>'
+                 '<template id="treeSvg">%s</template>' % _f.read().strip())
+
+
 def page(data: SiteData, filename: str, title: str, description: str, body: str, *,
          side: bool = True, jumps: Optional[List[Tuple[str, str]]] = None,
-         script: Optional[str] = None) -> str:
-    """Home has a top nav and the big headline; every other page has the left sidebar."""
+         script: Optional[str] = None, home_menu: Optional[str] = None) -> str:
+    """Every page has the same top bar (Figma "home page" frame): a thin line across the top of
+    the screen, the boxed menu hanging from it (the line is the boxes' top edge) and the WHIMSY
+    logo, which always links home. The bar stays at the top while scrolling.
+    Home (home_menu given) then has the tree and a numbered menu of its own sections on the left;
+    every other page has the left sidebar, styled the same way."""
     main = '<main id="main" tabindex="-1">\n%s\n</main>' % body
-    if side:
-        layout = '<div class="layout">%s%s</div>' % (side_nav(data, filename, jumps), main)
+    top = [('index.html', 'Home')] + [(graph_file(q), 'Graph') for q in data.graphs] + \
+          [('method.html', 'Method')]
+    boxed = ''.join('<li><a href="%s"%s>%s</a></li>' % (esc(h), ' aria-current="page"' if h == filename else '',
+                                                       esc(t)) for h, t in top)
+    header = ('<header class="site-top"><div class="site-top-in"><a class="logo" href="index.html">'
+              '<img src="static/logo.svg" alt="Whimsy: home" width="293" height="51"></a><nav aria-label="Main"><ul class="boxnav">%s</ul></nav>'
+              '</div></header>' % boxed)
+    if home_menu is not None:
+        layout = ('%s<div class="home-grid"><div class="home-side">%s'
+                  '<nav class="home-menu" aria-label="On this page">%s</nav></div>%s</div>'
+                  % (header, TREE_HTML, home_menu, main))
+    elif side:
+        layout = '%s<div class="layout">%s%s</div>' % (header, side_nav(data, filename, jumps), main)
     else:
-        nav = ''.join('<li><a href="%s"%s>%s</a></li>' % (href, ' aria-current="page"' if href == filename else '',
-                                                           esc(label)) for href, label in nav_items(data))
-        layout = ('<header class="site"><nav aria-label="Main"><ul>%s</ul></nav></header>%s' % (nav, main))
+        layout = header + main
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
     tag = '<script src="%s" defer></script>\n' % esc(script) if script else ''
     return SHELL.substitute(title=esc(title), description=esc(description), layout=layout,
@@ -736,49 +755,70 @@ def page(data: SiteData, filename: str, title: str, description: str, body: str,
 # --------------------------------------------------------------- pages
 
 def render_index(data: SiteData, prose: Prose) -> str:
-    """Home: big headline, one sentence, the questions as 01 / 02 / 03 rows with their real short
-    answers, and a small key for reading the site."""
-    rows = []
+    """Home, laid out as the Figma "home page" frame: each section has a big blue heading over a
+    thin rule, with its text indented below; a numbered menu on the left jumps to the sections.
+    Content: the headline, one sentence, how to use the site, each question with its real short
+    answer, and a small key for reading the site."""
+    def section(sid: str, heading: str, inner: str, level: int = 2, cls: str = '') -> str:
+        return ('<section class="hsec%s" id="%s" aria-labelledby="%s-h"><h%d id="%s-h">%s</h%d>'
+                '<div class="hsec-body">%s</div></section>'
+                % (' ' + cls if cls else '', sid, sid, level, sid, heading, level, inner))
+
+    menu = []      # (anchor, mark, label) for the left menu
+    sections = []
+    m = data.manifest.get('graph') or {}
+    papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
+              if m.get('source_documents') else '')
+    sections.append(section(
+        'top', 'restoration evidence',
+        '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
+        'and where nothing has been studied. Works offline.</p>' % (number_word(len(data.questions)), papers),
+        level=1))
+    menu.append(('#guide', '?', 'How to use this site'))
+    sections.append(section(
+        'guide', 'How to use this site',
+        '<ol>'
+        '<li><strong>Pick a question</strong> below or in the menu.</li>'
+        '<li><strong>Read the short answer.</strong> The best-supported findings in a line or two, and how '
+        'sure we can be of them.</li>'
+        '<li><strong>Scan “At a glance”.</strong> Every factor, which way it pushes the outcome, how sure '
+        'we can be (<span class="bars b3" aria-hidden="true"></span> 1 to 4) and how many studies.</li>'
+        '<li><strong>Open a finding</strong> to see why it got that certainty and the sentences quoted '
+        'from the papers, with links to each paper.</li>'
+        '<li><strong>Read “things this answer can’t tell you”</strong> before acting on it. It says how '
+        'the studies were picked and grouped, in the data team’s own words.</li></ol>', cls='guide'))
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
         if qid in data.graphs:
             graph = (' · <a href="%s">See it as a graph<span class="sr-only">: %s</span></a>'
                      % (graph_file(qid), esc(question_name(q))))
-        rows.append(
-            '<li class="qrow"><span class="n" aria-hidden="true">%02d</span><div>'
-            '<h2 id="card-%s"><a href="%s.html">%s</a></h2><p class="q">%s</p>%s'
-            '<p class="go"><a href="%s.html">Read the answer →<span class="sr-only"> %s</span></a>%s</p></div></li>'
-            % (n, esc(qid), esc(qid), esc(question_name(q)), esc(q.text), short_box(prose.short_answer[qid].html),
-               esc(qid), esc(question_name(q)), graph))
-    m = data.manifest.get('graph') or {}
-    papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
-              if m.get('source_documents') else '')
-    key = ('<section class="key-strip" aria-labelledby="key-h"><h2 id="key-h">How to read this site</h2><ul>'
-           '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
-           '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
-           '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
-           '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
-           '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
-           '(not “doesn’t work”)</li>'
-           '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
-           '</ul><p class="go"><a href="method.html">How it works →</a></p></section>')
-    guide = ('<section class="guide" aria-labelledby="guide-h"><h2 id="guide-h">How to use this site</h2><ol>'
-             '<li><strong>Pick a question</strong> below or in the sidebar.</li>'
-             '<li><strong>Read the short answer.</strong> The best-supported findings in a line or two, and how '
-             'sure we can be of them.</li>'
-             '<li><strong>Scan “At a glance”.</strong> Every factor, which way it pushes the outcome, how sure '
-             'we can be (<span class="bars b3" aria-hidden="true"></span> 1 to 4) and how many studies.</li>'
-             '<li><strong>Open a finding</strong> to see why it got that certainty and the sentences quoted '
-             'from the papers, with links to each paper.</li>'
-             '<li><strong>Read “things this answer can’t tell you”</strong> before acting on it. It says how '
-             'the studies were picked and grouped, in the data team’s own words.</li></ol></section>')
-    body = ('<h1 class="mega">restoration evidence</h1>'
-            '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
-            'and where nothing has been studied. Works offline.</p>%s'
-            '<h2 class="rows-h">The questions</h2><ol class="qrows">%s</ol>%s'
-            % (number_word(len(data.questions)), papers, guide, ''.join(rows), key))
+        menu.append(('%s.html' % qid, '%02d' % n, question_name(q)))   # the question's own page
+        sections.append(section(
+            'card-%s' % qid,
+            '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(question_name(q))),
+            '<p class="q">%s</p>%s<p class="go"><a href="%s.html">Read the answer →<span class="sr-only"> %s'
+            '</span></a>%s</p>' % (esc(q.text), short_box(prose.short_answer[qid].html), esc(qid),
+                                    esc(question_name(q)), graph), cls='qsec'))
+    menu.append(('#key', '·', 'How to read this site'))
+    sections.append(section(
+        'key', 'How to read this site',
+        '<ul>'
+        '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
+        '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
+        '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
+        '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
+        '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
+        '(not “doesn’t work”)</li>'
+        '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
+        '</ul><p class="go"><a href="method.html">How it works →</a></p>', cls='key-strip'))
+    # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
+    menu_html = '<ol class="qnav">%s</ol>' % ''.join(
+        '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
+        % (esc(h[1:] if h.startswith('#') else 'card-' + h[:-len('.html')]), esc(h), esc(mk), esc(t))
+        for h, mk, t in menu)
     return page(data, 'index.html', 'Restoration evidence', 'Plain answers to restoration questions, '
-                'with certainty, gaps and sources.', body)
+                'with certainty, gaps and sources.', ''.join(sections), home_menu=menu_html,
+                script='static/tree.js')
 
 
 def number_word(n: int) -> str:
@@ -1073,26 +1113,111 @@ def edge_title(g: Any, e: Dict[str, Any]) -> str:
     return '%s → %s' % (src, g.node(e['target'])['label'])
 
 
-def _swatch(cls: str, word: str) -> str:
-    return ('<span><svg width="30" height="12" aria-hidden="true"><line x1="0" y1="6" x2="30" y2="6" '
-            'class="lg sw %s"/></svg> %s</span>' % (cls, word))
+def _line(cls: str, width: int = 34) -> str:
+    return ('<svg width="%d" height="12" aria-hidden="true"><line x1="0" y1="6" x2="%d" y2="6" class="lg %s"/></svg>'
+            % (width, width, cls))
 
 
-COLOUR_KEY = ''.join(_swatch(c, w) for c, w in (('up', 'Green: increase ↑'), ('down', 'Red: decrease ↓'),
-                                                ('mixed', 'Blue: mixed ⇅'),
-                                                ('none', 'Grey: no effect – or unclear ?')))
+def _key_item(sample: str, word: str) -> str:
+    return '<li>%s <span>%s</span></li>' % (sample, word)
 
 
-def _box_row(cls: str, dashed_word: str, meaning: str) -> str:
-    return ('<div><dt><svg width="34" height="20" aria-hidden="true"><rect x="1" y="2" width="32" height="16" '
-            'rx="3" class="lg-box %s"/></svg> %s</dt><dd>%s</dd></div>' % (cls, dashed_word, meaning))
+def _key_group(title: str, items: List[str]) -> str:
+    return '<div class="gkey-g"><h3>%s</h3><ul>%s</ul></div>' % (title, ''.join(items))
 
 
-BOX_KEY = (_box_row('', 'White box', 'Something you do: a planting-stock choice or a site treatment')
-           + _box_row('condition', 'Beige box', 'A site or seedling condition the treatments change')
-           + _box_row('outcome', 'Pale green box, thick border', 'An outcome: seedling survival or growth')
-           + _box_row('combination', 'Dashed box with “+”', 'Two treatments applied together; thin lines '
-                      'join it to each treatment'))
+# The graph's key: one meaning per visual channel.
+GRAPH_KEY = ''.join([
+    _key_group('Colour + symbol = direction', [
+        _key_item(_line('sw up'), '<b class="t-up">↑</b> increase'),
+        _key_item(_line('sw down'), '<b class="t-down">↓</b> decrease'),
+        _key_item(_line('sw mixed'), '<b class="t-mixed">⇅</b> mixed: studies disagree'),
+        _key_item(_line('sw none'), '<b class="t-none">–</b> no effect found (<b>?</b> unclear)')]),
+    _key_group('Thickness = number of studies', [
+        _key_item(_line('w-1'), '1 study'), _key_item(_line('w-2'), '2–3'),
+        _key_item(_line('w-3'), '4–6'), _key_item(_line('w-4'), '7 or more')]),
+    _key_group('Line style = certainty', [
+        _key_item(_line('w-2 high'), 'solid: high'), _key_item(_line('w-2 moderate'), 'long dashes: moderate'),
+        _key_item(_line('w-2 low'), 'short dashes: low'), _key_item(_line('w-2 very_low'), 'very short dashes: very low')]),
+    _key_group('Badges, just above each arrowhead', [
+        '<li><span class="kb t-up">↑ 7</span> <span>direction and number of studies</span></li>',
+        '<li><span class="kb t-mixed">⇅ ↑4 ↓1</span> <span>mixed: 4 studies found an increase, 1 a decrease; '
+        'the others mixed or no effect. A zero is left out.</span></li>',
+        '<li><span class="kb t-mixed">⇅</span> <span>mixed, no study clearly either way</span></li>']),
+    _key_group('Shapes', [
+        _key_item('<svg width="34" height="20" aria-hidden="true"><rect x="1" y="2" width="32" height="16" rx="3" '
+                  'class="lg-box"/></svg>', 'something you do'),
+        _key_item('<svg width="34" height="20" aria-hidden="true"><rect x="1" y="2" width="32" height="16" rx="3" '
+                  'class="lg-box condition"/></svg>', 'a condition the treatments change'),
+        _key_item('<svg width="34" height="20" aria-hidden="true"><rect x="1" y="2" width="32" height="16" rx="3" '
+                  'class="lg-box outcome"/></svg>', 'an outcome'),
+        _key_item('<svg width="34" height="20" aria-hidden="true"><path d="M1,10 L8,2 H26 L33,10 L26,18 H8 Z" '
+                  'class="lg-box combination"/></svg>', 'two treatments applied together; thin lines join it '
+                  'to each one'),
+        _key_item('<svg width="34" height="14" aria-hidden="true"><line x1="0" y1="7" x2="34" y2="7" '
+                  'class="lg sw up"/><circle cx="17" cy="7" r="5" class="lg-ring"/></svg>',
+                  'moderation: a ring on an arrow means another treatment changes how strong that arrow is'),
+        _key_item('<svg width="34" height="12" aria-hidden="true"><line x1="0" y1="6" x2="34" y2="6" '
+                  'class="lg gapline"/></svg>', '“not studied”: looked for and not found. Not a negative '
+                  'result.')]),
+])
+
+
+def matrix_view(g: Any, gp_: str) -> str:
+    """The same arrows as a grid: what you do (and the conditions) as rows, the conditions and
+    outcomes as columns. A cell shows the direction (symbol and colour), the number of studies
+    and the certainty, and links to the arrow's evidence; an empty cell has no arrow."""
+    rows, _ = order_rows(g)
+    kind = {n['id']: n.get('kind') for n in g.nodes}
+    label = {n['id']: n['label'] for n in g.nodes}
+    combos = [k for k in rows[1] if kind[k] == 'combination']
+    conds = [k for k in rows[1] if kind[k] != 'combination']
+    cols = conds + rows[2]
+    effects = {(e['source'], e['target']): e for e in g.edges if e.get('kind') == 'effect'}
+    gaps = {(gp['source'], gp['target']): gp for gp in g.gaps}
+
+    def cell(s: str, t: str) -> str:
+        if s == t:
+            return '<td class="mx self"><span aria-hidden="true">·</span><span class="sr-only">same box</span></td>'
+        e = effects.get((s, t))
+        if e is not None:
+            n = e['studies']
+            cert = certainty_text(e['certainty']).lower()
+            words = '%s → %s: %s, %s certainty, %d %s' % (
+                label[s], label[t], e['direction'].replace('_', ' '), cert, n, 'study' if n == 1 else 'studies')
+            return ('<td class="mx d-%s"><a href="#e-%s" aria-label="%s"><span class="mx-main">'
+                    '<span class="mx-sym">%s</span> %d</span><span class="mx-cert">%s</span></a></td>'
+                    % (esc(e['direction']), esc(slug(e['id'])), esc(words), GRAPH_SYM[e['direction']], n, esc(cert)))
+        gp = gaps.get((s, t))
+        if gp is not None:
+            return ('<td class="mx gap"><a href="#e-%s" aria-label="%s → %s: not studied">not studied</a></td>'
+                    % (esc(slug(gp['id'])), esc(label[s]), esc(label[t])))
+        return '<td class="mx none"><span class="sr-only">no arrow</span></td>'
+
+    head = ('<tr><td></td><th scope="colgroup" colspan="%d">Conditions they change</th>'
+            '<th scope="colgroup" colspan="%d">Seedling outcomes</th></tr>' % (len(conds), len(rows[2])))
+    head += '<tr><th scope="col">Cause</th>%s</tr>' % ''.join('<th scope="col">%s</th>' % esc(label[c]) for c in cols)
+    body = []
+    for title, keys in (('Planting stock &amp; site treatments', rows[0] + combos), ('Conditions, as causes', conds)):
+        body.append('<tr class="mx-group"><th scope="colgroup" colspan="%d">%s</th></tr>' % (len(cols) + 1, title))
+        for k in keys:
+            body.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(label[k]), ''.join(cell(k, c) for c in cols)))
+    mods = []
+    for e in g.edges:
+        if e.get('kind') == 'moderation':
+            t = g.edge(e['target_edge'])
+            mods.append('<a href="#e-%s">%s changes the effect of %s → %s</a> (%s %s, %d %s, %s certainty)'
+                        % (esc(slug(e['id'])), esc(label[e['source']]), esc(label[t['source']]),
+                           esc(label[t['target']]), GRAPH_SYM[e['direction']], e['direction'].replace('_', ' '),
+                           e['studies'], 'study' if e['studies'] == 1 else 'studies',
+                           esc(certainty_text(e['certainty']).lower())))
+    note = ('<p class="mx-note">Not a cell in the grid: %s.</p>' % '; '.join(mods)) if mods else ''
+    return ('<section id="matrix" class="gmatrix" aria-labelledby="matrix-h"><h2 id="matrix-h">Matrix view</h2>'
+            '<p>The same arrows as a grid. Each cell shows the direction (symbol and colour), the number of '
+            'studies and the certainty, and links to the evidence. An empty cell means there is no arrow.</p>'
+            '<div class="table-wrap"><table class="matrix"><caption class="sr-only">Every arrow as a grid: '
+            'causes in rows, what they act on in columns</caption><thead>%s</thead><tbody>%s</tbody></table></div>'
+            '%s</section>' % (head, ''.join(body), note))
 
 
 def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> str:
@@ -1108,37 +1233,14 @@ def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> st
             '<p class="lead">Each arrow is a body of evidence. Select one to read its sources.</p>'
             '<p>%sA table of every arrow follows the graph.</p>'
             % (esc(name), esc(GRAPH_INTRO.get(qid, DEFAULT_GRAPH_INTRO) % ends)))
-    body += ('<h2 id="read">How to read the graph</h2><dl class="legend">'
-             '<div><dt><span class="lg-sym">↑ ↓ ⇅ – ?</span></dt><dd>Direction, the large symbol on each '
-             'label: what happens to the target (increase, decrease, mixed, no effect, unclear). The symbol '
-             'carries the meaning; colour repeats it.</dd></div>'
-             '<div><dt>Colour of an arrow</dt><dd class="key-list">%s</dd></div>'
-             '<div><dt><span class="lg-sym">⇅ ↑5 ↓1</span> On a mixed arrow</dt><dd>How many studies found an '
-             'increase (↑) and a decrease (↓), so you can see which way it leans. The other studies found '
-             'mixed results or no effect; select the arrow for the full split. “↑0 ↓0” means no study '
-             'went clearly either way.</dd></div>'
-             '<div><dt><span class="lg-sym">7</span> Number on a label</dt><dd>How many studies the arrow '
-             'rests on</dd></div>'
-             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
-             'class="lg high"/></svg> thick, solid</dt><dd>High certainty</dd></div>'
-             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
-             'class="lg moderate"/></svg> medium, long dashes</dt><dd>Moderate certainty</dd></div>'
-             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
-             'class="lg low"/></svg> thin, short dashes</dt><dd>Low certainty</dd></div>'
-             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
-             'class="lg very_low"/></svg> thinnest, dots</dt><dd>Very low certainty</dd></div>'
-             '<div><dt><svg width="48" height="12" aria-hidden="true"><line x1="0" y1="6" x2="48" y2="6" '
-             'class="lg gapline"/></svg> faint grey, “no evidence”</dt><dd>A pairing looked for and not '
-             'found. Not a negative result.</dd></div>'
-             '<div><dt><svg width="48" height="14" aria-hidden="true"><line x1="0" y1="7" x2="38" y2="7" '
-             'class="lg very_low"/><circle cx="41" cy="7" r="5" class="lg-ring"/></svg> ends in a circle on an '
-             'arrow</dt><dd>Moderation: the source changes how strong the arrow it points at is</dd></div>'
-             '%s</dl>' % (COLOUR_KEY, BOX_KEY))
     body += ('<figure class="graph"><!--GRAPH--><figcaption>%s boxes linked by %s arrows, each a body of '
              'evidence, and %s %s looked for and not found. Select an arrow to read its evidence '
-             'and sources.</figcaption></figure>'
+             'and sources.</figcaption>'
+             '<div class="gkey" id="read" role="group" aria-labelledby="read-h"><h2 id="read-h">How to read the '
+             'graph</h2>%s</div></figure>'
              % (span(gp_ + '/count/nodes', len(g.nodes)), span(gp_ + '/count/edges', len(g.edges)),
-                span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings')))
+                span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings'), GRAPH_KEY))
+    body += matrix_view(g, gp_)
     body += ('<p class="callout paths" role="note">A route through a middle box joins separate bodies of '
              'evidence. It is not one tested effect.</p>')
     body += limits_box(gp_, g.limitations, g.raw.get('rule'), g.raw.get('how_built'),
@@ -1199,7 +1301,8 @@ def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> st
     body += '<h2 id="table">All arrows as a table</h2>' + table(
         'Every arrow on the graph, with the same data as text',
         ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
-    jumps = [('#read', 'How to read it'), ('#arrows', 'Evidence behind each arrow'), ('#table', 'All arrows as a table'),
+    jumps = [('#read', 'How to read it'), ('#matrix', 'Matrix view'), ('#arrows', 'Evidence behind each arrow'),
+             ('#table', 'All arrows as a table'),
              ('%s.html' % qid, 'Back to the answer')]
     return page(data, gfile, 'Q%d graph · %s' % (n, name), 'The %s answer drawn as a causal graph, with the '
                 'sources behind every arrow.' % name.lower().replace(' ', '-'), body, jumps=jumps,
@@ -1312,7 +1415,7 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg', 'graph.js'):
+    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'logo.svg'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')

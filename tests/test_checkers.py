@@ -120,6 +120,8 @@ MUTATIONS = [
     ('mixed graph arrow loses its split counts', 'q1-graph.html',
      r'(id="edge-competing-vegetation--to--growth".*?<g class="lbl">.*?)<tspan class="split"[^>]*>↓</tspan>'
      r'<tspan class="n" data-check="[^"]+">\d+</tspan>', r'\1', 1),
+    ('mixed graph arrow drawn as an increase (⇅ swapped for ↑)', 'q1-graph.html',
+     r'(id="edge-site-preparation--to--growth".*?<tspan class="sym" aria-hidden="true">)⇅', r'\1↑', 1),
     ('finding deleted', 'q1.html',
      r'<article class="fcard[^"]*" id="f-q1--seedling-size--growth".*?</article>', '', 1),
     ('certainty rationale removed', 'q2.html',

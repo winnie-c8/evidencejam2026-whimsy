@@ -5,17 +5,20 @@ direction; everything below the layout functions works for both.
 
   FLOW = 'down'  (default) rows, top to bottom:
       row 0: planting stock + site treatments
-      row 1: the conditions they change, and any combination box right under its members
+      row 1: the conditions they change, and any combination box (a hexagon) under its members
       row 2: seedling outcomes
+      The left-to-right order in each row is computed for the fewest line crossings
+      (order_rows), not fixed by hand.
   FLOW = 'right' columns, left to right, in the same order (combination under its members
       in column 0).
 
-Every arrow ends in a straight "tail" that holds its label (direction symbol + studies), so
-labels sit in a strip just before the box they point at and never pile up (top-down: two
-staggered rows of labels above the box). A mixed arrow's label shows how many studies went
-up and down ("⇅ ↑5 ↓1"). Top-down, the middle boxes cascade (left highest, right lowest) and an
-arrow that skips the middle row goes around the middle block in an outer "lane".
-Certainty is the line style (thickness + dashes).
+Every arrow ends in a straight "tail" that holds its badge (direction symbol + studies), so
+badges sit in one row just above the arrowheads and never pile up: top-down, each arrow into
+a box gets a slot as wide as its badge. A mixed arrow's badge shows how many studies went up
+and down, a zero left out ("⇅ ↑5 ↓1", "⇅ ↑1", "⇅"). Top-down, an arrow that skips the middle
+row runs down an outer channel just left or right of the middle boxes.
+One meaning per visual channel: colour = direction, thickness = number of studies, dash
+pattern = certainty. A moderation arrow ends in a small ring on the arrow it changes.
 
 static/graph.js re-runs the same routing (route_all below) when a box or arrow is dragged;
 keep the two in step. Every edge is an <a> to its evidence panel; all labels are SVG <text>.
@@ -23,6 +26,7 @@ keep the two in step. Every edge is an <a> to its evidence panel; all labels are
 from __future__ import annotations
 
 import html
+import itertools
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -33,16 +37,19 @@ FLOW = 'down'          # 'down' or 'right'
 # shared sizes
 NODE_PAD, LINE_H = 12, 18
 CHAR_W = 7.8           # px per char at 14 px
-LBL_CHAR_W = 7.0       # px per char at 12 px bold
-LBL_H = 20
-BIG_LBL_H = 30         # label with the large symbol and number
-SYM_W = 16             # width of the direction symbol at 22 px
-NUM_W = 12             # width of one digit at 20 px bold
-ARR_W = 12             # width of the ↑ / ↓ before a split count at 18 px
+GAP_CHAR_W = 6.8       # px per char of the small italic "not studied" tag
+LBL_H = 23             # every badge is one small line: "↑ 7" or "⇅ ↑4 ↓1"
+BIG_LBL_H = LBL_H
+LBL_PAD = 6            # badge padding, left and right
+SYM_W = 15             # width of the direction symbol at 17 px
+NUM_W = 9.5            # width of one digit at 15 px bold
+ARR_W = 10             # width of the ↑ / ↓ before a split count at 14 px
+SP_W = 4               # a space
 VTAIL = 20             # tail of an arrow entering a box from the side across the flow
-HEAD_GAP = 18          # space between a label and the box, for the arrowhead
+HEAD_GAP = 14          # space between a badge and the box, for the arrowhead
+PORT_PAD = 8           # free space between two badges side by side above a box
 MOD_INSET = 24         # a moderation arrow lands this far into the lane of the arrow it changes
-TIER = BIG_LBL_H + 4   # top-down: offset of the second (staggered) row of labels
+TIER = 0               # badges sit in one row (kept for graph.js, which reads data-tier)
 
 # left to right: columns x, width
 X0, W0 = 34, 200
@@ -58,13 +65,15 @@ TOP = 56
 
 # top to bottom
 BOX_W = 150            # narrowest box
-PORT_W = 54            # horizontal room per labelled incoming arrow (labels alternate rows)
+PORT_W = 54            # (left to right only) vertical room per labelled incoming arrow
 OUT_W = 14             # horizontal room per outgoing arrow
-STRIP_D = HEAD_GAP + BIG_LBL_H + TIER + 16   # straight tail above a box; holds two rows of labels
-GUTTER_D = 190         # free space between rows where arrows curve
-CASCADE = 64           # each middle box sits this much lower than the one to its left
-LANE_GAP = 40          # outer lanes: distance from the middle boxes
-LANE_SP = 13           # outer lanes: distance between neighbouring lanes
+IN_MARGIN = 10         # free space at each end of a box's row of incoming badges
+STRIP_D = HEAD_GAP + LBL_H + 26   # straight tail above a box; holds one row of badges
+GUTTER_D = 150         # free space between rows where arrows curve
+LANE_GAP = 34          # outer channels: distance from the middle boxes
+LANE_SP = 12           # outer channels: distance between neighbouring lanes
+MID_GAP = 40           # space between middle boxes
+COMB_TIP = 14          # a combination box is a hexagon; its pointed ends are this deep
 LEFT = 104             # margin for the row headings
 ROW_GAP_X = 30
 
@@ -112,7 +121,9 @@ class Box:
         self.col = col
         self.x = x
         self.w = w
-        self.lines = wrap(node['label'], w)
+        # a combination box is a hexagon, so its text needs room clear of the pointed ends
+        inset = 2 * COMB_TIP if node.get('kind') == 'combination' else 0
+        self.lines = wrap(node['label'], w - inset)
         self.h = 2 * NODE_PAD + LINE_H * len(self.lines)
         self.y = 0.0
 
@@ -152,32 +163,43 @@ def split_counts(e: Dict[str, Any]) -> Tuple[int, int]:
     return int(sd.get('increase', 0)), int(sd.get('decrease', 0))
 
 
+GAP_TAG = 'not studied'
+
+
+def weight_class(studies: int) -> int:
+    """Line thickness = number of studies, in four steps (1, 2-3, 4-6, 7+), explained in the legend."""
+    return 1 if studies <= 1 else 2 if studies <= 3 else 3 if studies <= 6 else 4
+
+
 def label_size(kind: str, e: Dict[str, Any]) -> Tuple[float, float]:
-    """A label shows a large direction symbol and the study count; certainty is the line style."""
+    """A badge shows the direction symbol and the study count ("↑ 7"); a mixed arrow shows how many
+    studies went up and down instead, leaving out a zero ("⇅ ↑4 ↓1", "⇅ ↑1", "⇅").
+    Certainty is the line's dash pattern, the number of studies also its thickness."""
     if kind == 'g':
-        return len('no evidence') * LBL_CHAR_W + 12, LBL_H
-    if kind == 'e' and e['direction'] == 'mixed':   # "⇅ ↑5 ↓1": how many studies went each way
-        up, down = split_counts(e)
-        w = SYM_W + 6 + (ARR_W + NUM_W * len(str(up))) + 8 + (ARR_W + NUM_W * len(str(down))) + 16
+        return len(GAP_TAG) * GAP_CHAR_W + 2 * LBL_PAD, LBL_H
+    w = 2 * LBL_PAD + SYM_W
+    if kind == 'e' and e['direction'] == 'mixed':
+        for n in split_counts(e):
+            if n:
+                w += SP_W + ARR_W + NUM_W * len(str(n))
     else:
-        w = SYM_W + 6 + NUM_W * len(str(e['studies'])) + 16
-    if kind == 'm':
-        return max(w, len('changes this effect') * LBL_CHAR_W + 12), BIG_LBL_H + 14
-    return w, BIG_LBL_H
+        w += SP_W + NUM_W * len(str(e['studies']))
+    return w, LBL_H
 
 
 def pack(keys: List[str], desired: Dict[str, float], size: Dict[str, float],
          pairs: List[Tuple[str, str]], box_gap: float = 34,
-         weight: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+         weight: Optional[Dict[str, float]] = None, fixed: bool = False) -> Dict[str, float]:
     """Place items along one line as near their desired centre as the gaps allow; return starts.
 
-    Order follows the desired centre (fewest crossings). Each same-row pair (an arrow from
-    one middle box to another) is kept adjacent with room for its arrow between. Positions
-    minimise the weighted squared distance from the desired centres (pool-adjacent-violators),
-    so a heavy item (a combination box under its members) moves least.
+    With fixed=True the items keep the order of `keys` (already chosen for fewest crossings);
+    otherwise the order follows the desired centre, and each same-row pair (an arrow from one
+    middle box to another) is kept adjacent. Positions minimise the weighted squared distance
+    from the desired centres (pool-adjacent-violators), so a heavy item (a combination box
+    under its members) moves least.
     """
-    order = sorted(keys, key=lambda k: (desired[k], k))
-    for a, b in pairs:
+    order = list(keys) if fixed else sorted(keys, key=lambda k: (desired[k], k))
+    for a, b in ([] if fixed else pairs):
         if a in order and b in order:
             i = min(order.index(a), order.index(b))
             block = sorted([a, b], key=lambda k: (desired[k], k))
@@ -310,48 +332,154 @@ def layout_right(g: Graph) -> Dict[str, Any]:
     return {'boxes': boxes, 'lanes': lanes, 'heads': heads, 'width': VIEW_W_R}
 
 
+def rows_of(g: Graph) -> Dict[str, int]:
+    """Top-down row of each box: 0 things you do, 1 conditions (and combinations), 2 outcomes."""
+    return {n['id']: {'planting_stock': 0, 'site_treatment': 0, 'combination': 1, 'condition': 1,
+                      'outcome': 2}.get(n.get('kind', ''), 1) for n in g.nodes}
+
+
+def order_rows(g: Graph) -> Tuple[Dict[int, List[str]], Dict[str, str]]:
+    """The left-to-right order of the boxes in each row, chosen for the fewest line crossings,
+    and the outer channel ('l' or 'r') each arrow that skips the middle row runs down.
+
+    Crossings are counted on the order alone (two arrows between the same pair of rows cross
+    when their ends are in opposite orders). An arrow that skips the middle row is counted as
+    passing just left or right of the middle row, whichever crosses less. A combination box
+    counts as joined to its members, so it ends up under them, and its members side by side.
+    The search: every order of the small rows (up to 6 boxes) for the current top row, then
+    every swap or move in the top row; repeated until nothing improves. Ties keep the
+    current order, so the result is deterministic.
+    """
+    row = rows_of(g)
+    links = links_of(g)
+    start = first_row_order(g)
+    rows = {0: start + [n['id'] for n in g.nodes if row[n['id']] == 0 and n['id'] not in start],
+            1: [n['id'] for n in g.nodes if row[n['id']] == 1],
+            2: [n['id'] for n in g.nodes if row[n['id']] == 2]}
+    e01 = [(e['source'], e['target']) for _, e in links if row[e['source']] == 0 and row[e['target']] == 1]
+    e01 += [(e['target'], e['source']) for _, e in links if row[e['source']] == 1 and row[e['target']] == 0]
+    e12 = [(e['source'], e['target']) for _, e in links if row[e['source']] == 1 and row[e['target']] == 2]
+    e02 = [(e['id'], e['source'], e['target']) for _, e in links if row[e['source']] == 0 and row[e['target']] == 2]
+    e11 = [(e['source'], e['target']) for _, e in links if row[e['source']] == row[e['target']] == 1]
+    combos = [(n['id'], [m for m in n.get('members') or [] if row.get(m) == 0])
+              for n in g.nodes if n.get('kind') == 'combination' and row[n['id']] == 1]
+    for c, ms in combos:
+        e01 += [(m, c) for m in ms]
+
+    def crosses(segs: List[Tuple[float, float]], a: float, b: float) -> int:
+        return sum(1 for x, y in segs if (x - a) * (y - b) < 0)
+
+    def evaluate(o0: List[str], o1: List[str], o2: List[str]) -> Tuple[float, Dict[str, str]]:
+        p0 = {k: i for i, k in enumerate(o0)}
+        p1 = {k: i for i, k in enumerate(o1)}
+        p2 = {k: i for i, k in enumerate(o2)}
+        lo, hi = -1, len(o1)
+        s01 = [(p0[a], p1[b]) for a, b in e01]
+        s12 = [(p1[a], p2[b]) for a, b in e12]
+        chan: Dict[str, str] = {}
+        longs: Dict[str, List[Tuple[float, float]]] = {'l': [], 'r': []}
+        for eid, a, b in e02:
+            cl = crosses(s01, p0[a], lo) + crosses(s12, lo, p2[b])
+            cr = crosses(s01, p0[a], hi) + crosses(s12, hi, p2[b])
+            near_left = p0[a] / max(1, len(o0) - 1) + p2[b] / max(1, len(o2) - 1) <= 1
+            chan[eid] = 'l' if (cl, not near_left) <= (cr, near_left) else 'r'
+            longs[chan[eid]].append((p0[a], p2[b]))
+        all01 = s01 + [(x, lo) for x, _ in longs['l']] + [(x, hi) for x, _ in longs['r']]
+        all12 = s12 + [(lo, y) for _, y in longs['l']] + [(hi, y) for _, y in longs['r']]
+        cost = 0.0
+        for segs in (all01, all12):
+            for i in range(len(segs)):
+                for j in range(i + 1, len(segs)):
+                    if (segs[i][0] - segs[j][0]) * (segs[i][1] - segs[j][1]) < 0:
+                        cost += 1
+        for side in 'lr':   # two arrows in one channel cross if they enter and leave in opposite orders
+            ls = longs[side]
+            for i in range(len(ls)):
+                for j in range(i + 1, len(ls)):
+                    if (ls[i][0] - ls[j][0]) * (ls[i][1] - ls[j][1]) < 0:
+                        cost += 1
+        for a, b in e11:    # an arrow inside the middle row: its two boxes side by side
+            cost += 2 * (abs(p1[a] - p1[b]) - 1)
+        for c, ms in combos:   # a combination's members side by side
+            if len(ms) > 1:
+                cost += 2 * (max(p0[m] for m in ms) - min(p0[m] for m in ms) - (len(ms) - 1))
+        # tie-break: shorter, more vertical arrows
+        n0, n1 = max(1, len(o0) - 1), max(1, len(o1) - 1)
+        cost += 0.001 * sum(abs(p0[a] / n0 - p1[b] / n1) for a, b in e01)
+        return cost, chan
+
+    def small_orders(r: int) -> List[List[str]]:
+        return [list(p) for p in itertools.permutations(rows[r])] if len(rows[r]) <= 6 else [rows[r]]
+
+    best, chan = evaluate(rows[0], rows[1], rows[2])
+    for _ in range(20):
+        improved = False
+        for o1 in small_orders(1):
+            for o2 in small_orders(2):
+                c, ch = evaluate(rows[0], o1, o2)
+                if c < best - 1e-9:
+                    best, chan, rows[1], rows[2], improved = c, ch, o1, o2, True
+        o0 = rows[0]
+        cands = []
+        for i in range(len(o0)):
+            for j in range(len(o0)):
+                if i != j:
+                    moved = o0[:i] + o0[i + 1:]
+                    moved.insert(j, o0[i])
+                    cands.append(moved)
+                    if i < j:
+                        swapped = list(o0)
+                        swapped[i], swapped[j] = swapped[j], swapped[i]
+                        cands.append(swapped)
+        for o in cands:
+            c, ch = evaluate(o, rows[1], rows[2])
+            if c < best - 1e-9:
+                best, chan, rows[0], improved = c, ch, o, True
+        if not improved:
+            break
+    return rows, chan
+
+
 def layout_down(g: Graph) -> Dict[str, Any]:
     links = links_of(g)
     mods = [e for e in g.edges if e.get('kind') == 'moderation']
-    row = {n['id']: {'planting_stock': 0, 'site_treatment': 0, 'combination': 1, 'condition': 1,
-                     'outcome': 2}.get(n.get('kind', ''), 1) for n in g.nodes}
+    row = rows_of(g)
+    orders, channel = order_rows(g)
 
-    # Boxes are wide enough for one labelled port per incoming arrow and room for outgoing ones.
-    n_in: Dict[str, int] = {}
+    # Boxes are wide enough for one badge per arrow coming in from above, side by side, and
+    # room for the outgoing arrows.
+    top_in: Dict[str, float] = {}
     n_out: Dict[str, int] = {}
-    for _, e in links:
+    for kind, e in links:
         if row[e['source']] < row[e['target']]:
-            n_in[e['target']] = n_in.get(e['target'], 0) + 1
+            top_in[e['target']] = top_in.get(e['target'], 0.0) + label_size(kind, e)[0] + PORT_PAD
         if row[e['source']] != row[e['target']]:
             n_out[e['source']] = n_out.get(e['source'], 0) + 1
     for m in mods:
         n_out[m['source']] = n_out.get(m['source'], 0) + 1
     boxes: Dict[str, Box] = {}
     for n in g.nodes:
-        w = max(BOX_W, PORT_W * (n_in.get(n['id'], 0) + 1), OUT_W * (n_out.get(n['id'], 0) + 1))
+        w = max(BOX_W, top_in.get(n['id'], 0.0) + 2 * IN_MARGIN, OUT_W * (n_out.get(n['id'], 0) + 1))
+        if n.get('kind') == 'combination':
+            w += 2 * COMB_TIP
         b = Box(n, row[n['id']], 0.0, w)
         b.h = max(b.h, 44)
         boxes[n['id']] = b
 
-    by_row = {r: [b.id for b in boxes.values() if b.col == r] for r in (0, 1, 2)}
+    by_row = orders
     row_h = {r: max([boxes[k].h for k in by_row[r]] or [44]) for r in (0, 1, 2)}
-    # The middle row is a cascade: each box a step lower than the one to its left.
-    middle_h = row_h[1] + CASCADE * max(0, len(by_row[1]) - 1)
     row_top = {0: 0.0}
     row_top[1] = row_top[0] + row_h[0] + GUTTER_D + STRIP_D
-    row_top[2] = row_top[1] + middle_h + GUTTER_D + STRIP_D
+    row_top[2] = row_top[1] + row_h[1] + GUTTER_D + STRIP_D
     for b in boxes.values():
         b.y = row_top[b.col]
 
-    # row 0 in a fixed order, a little extra space between the stock and the treatments
+    # top row in the chosen order
     x = 0.0
-    order = first_row_order(g)
-    for k, nid in enumerate(order):
-        if k and boxes[order[k - 1]].node.get('kind') == 'planting_stock' and                 boxes[nid].node.get('kind') != 'planting_stock':
-            x += 12
+    for nid in by_row[0]:
         boxes[nid].x = x
         x += boxes[nid].w + ROW_GAP_X
-    row0_mid = mean([boxes[k].cx for k in order], 0.0)
+    row0_mid = mean([boxes[k].cx for k in by_row[0]], 0.0)
 
     long_links = [e for _, e in links if row[e['source']] == 0 and row[e['target']] == 2]
     pairs = [(e['source'], e['target']) for _, e in links if row[e['source']] == row[e['target']] == 1]
@@ -367,41 +495,30 @@ def layout_down(g: Graph) -> Dict[str, Any]:
             return mean([boxes[m].cx for m in n.get('members') or [] if m in boxes], row0_mid)
         return mean(neighbours(k, (0, 2)), row0_mid)
 
-    for k in by_row[1]:
-        boxes[k].x = desired_middle(k) - boxes[k].w / 2
-
-    def place_outcomes() -> None:
-        desired = {k: mean([lane_x.get(e['id'], boxes[e['source']].cx) for _, e in links if e['target'] == k],
-                           row0_mid) for k in by_row[2]}
-        for k, s in pack(by_row[2], desired, {k: boxes[k].w for k in by_row[2]}, [], 60).items():
-            boxes[k].x = s
-
     combos = [k for k in by_row[1] if boxes[k].node.get('kind') == 'combination']
 
     def place_middle() -> None:
-        # the middle boxes side by side; a combination box is heavy, so it stays under its members
+        # the middle boxes side by side in the chosen order, close together; an arrow between
+        # two of them gets room for its badge
         desired = {k: desired_middle(k) for k in by_row[1]}
         size = {k: boxes[k].w for k in by_row[1]}
-        for k, s in pack(by_row[1], desired, size, pairs, weight={c: 60.0 for c in combos}).items():
+        for k, s in pack(by_row[1], desired, size, pairs, MID_GAP, weight={c: 4.0 for c in combos},
+                         fixed=True).items():
             boxes[k].x = s
-        # Arrows that skip the middle row go AROUND the middle boxes (and the arrows into and
-        # out of them): each takes a lane just outside the block on its nearer side. The arrow
-        # that comes from further out takes the outer lane, so the lanes don't cross.
+        # Arrows that skip the middle row run down a channel just outside it, on the side the
+        # ordering picked. In a channel the lanes go in the order of where the arrows end, so
+        # they fan out to the outcome boxes without crossing each other there.
         lane_x.clear()
         if not by_row[1]:
             return
         lo = min(boxes[k].x for k in by_row[1]) - LANE_GAP
         hi = max(boxes[k].right for k in by_row[1]) + LANE_GAP
-        left, right_ = [], []
-        for e in long_links:
-            s, t = boxes[e['source']], boxes[e['target']]
-            cost_l = abs(s.cx - lo) + abs(t.cx - lo)
-            cost_r = abs(s.cx - hi) + abs(t.cx - hi)
-            (left if cost_l <= cost_r else right_).append(e)
+        left = [e for e in long_links if channel.get(e['id']) == 'l']
+        right_ = [e for e in long_links if channel.get(e['id']) != 'l']
 
         def spread(e: Dict[str, Any]) -> Tuple[float, float, str]:
             s, t = boxes[e['source']], boxes[e['target']]
-            return (s.cx + t.cx) / 2, s.cx, e['id']
+            return t.cx, s.cx, e['id']
         left.sort(key=spread)
         right_.sort(key=spread)
         for i, e in enumerate(left):
@@ -409,33 +526,36 @@ def layout_down(g: Graph) -> Dict[str, Any]:
         for i, e in enumerate(right_):
             lane_x[e['id']] = hi + i * LANE_SP
 
-    place_outcomes()
-    for _ in range(4):
-        place_middle()
-        place_outcomes()
+    def place_outcomes() -> None:
+        desired = {k: mean([lane_x.get(e['id'], boxes[e['source']].cx) for _, e in links if e['target'] == k],
+                           row0_mid) for k in by_row[2]}
+        for k, s in pack(by_row[2], desired, {k: boxes[k].w for k in by_row[2]}, [], 60, fixed=True).items():
+            boxes[k].x = s
 
-    # the cascade: left to right, each middle box a step lower
-    for rank, k in enumerate(sorted(by_row[1], key=lambda k: (boxes[k].x, k))):
-        boxes[k].y = row_top[1] + rank * CASCADE
+    for k in by_row[1]:
+        boxes[k].x = desired_middle(k) - boxes[k].w / 2
+    place_middle()
+    for _ in range(4):
+        place_outcomes()
+        place_middle()
 
     left = min([b.x for b in boxes.values()] + list(lane_x.values()))
     for b in boxes.values():
         b.x += LEFT - left
     u1 = row_top[1] - STRIP_D
-    u2 = max([boxes[k].bottom for k in by_row[1]] or [row_top[1] + row_h[1]])
+    u2 = row_top[1] + row_h[1]
     lanes = {eid: (u1, u2, lx + LEFT - left) for eid, lx in lane_x.items()}
     width = max([b.right for b in boxes.values()] + [v[2] for v in lanes.values()]) + 24
     # headings in the left margin, level with each row
     texts = (['Planting stock', '& site', 'treatments'], ['Conditions', 'they change'], ['Seedling', 'outcomes'])
-    span_h = {0: row_h[0], 1: middle_h, 2: row_h[2]}
-    heads = [(12.0, row_top[r] + span_h[r] / 2 - 8 * (len(texts[r]) - 1) + 4, texts[r]) for r in (0, 1, 2)]
+    heads = [(12.0, row_top[r] + row_h[r] / 2 - 8 * (len(texts[r]) - 1) + 4, texts[r]) for r in (0, 1, 2)]
     # everything starts below a small top margin
     top = 20.0
     for b in boxes.values():
         b.y += top
     lanes = {eid: (v[0] + top, v[1] + top, v[2]) for eid, v in lanes.items()}
     heads = [(x_, y_ + top, t) for x_, y_, t in heads]
-    return {'boxes': boxes, 'lanes': lanes, 'heads': heads, 'width': width}
+    return {'boxes': boxes, 'lanes': lanes, 'heads': heads, 'width': width, 'orders': orders}
 
 
 def layout(g: Graph) -> Dict[str, Any]:
@@ -556,8 +676,17 @@ def route_all(boxes: Dict[str, Box], arrows: List[Dict[str, Any]]) -> Dict[str, 
         b = boxes[nid]
         lst.sort(key=lambda t: (t[0], t[1]))
         n = len(lst)
+        # Top-down, the arrows coming in from above each get a slot as wide as their badge, so
+        # the badges sit side by side in one row just above the arrowheads.
+        slots = [by_id[aid]['lw'] + PORT_PAD if role == 'in' else OUT_W for _, aid, role in lst]
+        total = sum(slots)
+        spaced = DOWN and side in 'tb' and total <= b.w
+        cum = (b.w - total) / 2
         for k, (_, aid, role) in enumerate(lst):
             f = (k + 1) / (n + 1)
+            if spaced:
+                f = (cum + slots[k] / 2) / b.w
+                cum += slots[k]
             if side == 'l':
                 p = (b.x, b.y + b.h * f)
             elif side == 'r':
@@ -597,7 +726,7 @@ def route_all(boxes: Dict[str, Box], arrows: List[Dict[str, Any]]) -> Dict[str, 
             lx, ly = p3[0] - HEAD_GAP - lw, p3[1] - lh / 2
         elif ti == 'r' and not DOWN:
             lx, ly = p3[0] + HEAD_GAP, p3[1] - lh / 2
-        elif ti == 't' and DOWN:
+        elif ti == 't' and DOWN:   # just above the arrowhead
             lx, ly = p3[0] - lw / 2, p3[1] - HEAD_GAP - lh - tier * TIER
         elif ti == 'b' and DOWN:
             lx, ly = p3[0] - lw / 2, p3[1] + HEAD_GAP + tier * TIER
@@ -703,13 +832,15 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
     n_eff, n_mod = len(effects), len(mods)
     out.append('<svg id="q1g" viewBox="0 0 %s %s" width="100%%" role="group" aria-labelledby="g-title g-desc" '
                'data-flow="%s" data-strip="%d" data-vtail="%d" data-mod-inset="%d" data-head-gap="%d" '
-               'data-tier="%d">' % (f1(lay['width']), f1(height), FLOW, STRIP, VTAIL, MOD_INSET, HEAD_GAP, TIER))
+               'data-tier="%d" data-port-pad="%d" data-out-w="%d">'
+               % (f1(lay['width']), f1(height), FLOW, STRIP, VTAIL, MOD_INSET, HEAD_GAP, TIER, PORT_PAD, OUT_W))
     out.append('<title id="g-title">Tree planting: what acts on seedling survival and growth</title>')
     where = (('at the top', 'in the middle', 'at the bottom') if DOWN else
              ('on the left', 'in the middle', 'on the right'))
     out.append('<desc id="g-desc">%d boxes and %d effect %s, %d moderation %s and %d %s marked as not '
                'studied. Planting-stock traits and site treatments are %s, the conditions they '
-               'change %s, seedling survival and growth %s. Each arrow links to its evidence.</desc>'
+               'change %s, seedling survival and growth %s. Arrows that skip the conditions run down '
+               'the outer edges. Each arrow links to its evidence.</desc>'
                % (len(g.nodes), n_eff, 'arrow' if n_eff == 1 else 'arrows', n_mod,
                   'arrow' if n_mod == 1 else 'arrows', len(g.gaps), 'pairing' if len(g.gaps) == 1 else 'pairings',
                   *where))
@@ -764,7 +895,7 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
                    'not studied in this body of research. Opens details."%s>'
                    % (gs, gs, esc(name(gp['source'])), esc(name(gp['target'])), data_attrs(gp['id'])))
         out.append('<path class="hit" d="%s"/><path class="vis" d="%s"/>' % (d, d))
-        out.append(label_svg(gp['id'], [('no evidence', False, 14)]))
+        out.append(label_svg(gp['id'], [(GAP_TAG, False, 16)]))
         out.append('</a>')
 
     # effect and moderation edges
@@ -788,43 +919,48 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
                 name(e['source']), name(e['target']), WORD[e['direction']], CERT[e['certainty']].lower(), studies,
                 split)
             cls = 'edge d-%s c-%s' % (e['direction'], e['certainty'])
-        # The label shows the direction symbol and the study count ("3"), or for a mixed arrow
-        # how many studies went up and down ("⇅ ↑5 ↓1"); the name says the same in words.
-        # Certainty is shown on the line itself: thicker and more solid = more certain.
-        out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s"%s data-n="%d">'
-                   % (es, cls, es, esc(aria), data_attrs(e['id']), n))
+        # One meaning per channel: colour = direction, thickness = number of studies (w-1..4),
+        # dash pattern = certainty (c-...). The badge shows the direction symbol and the study
+        # count ("↑ 3"), or for a mixed arrow how many studies went up and down, a zero left out
+        # ("⇅ ↑5 ↓1", "⇅ ↑1", "⇅"); the name says the same in words.
+        cls += ' w-%d' % weight_class(n)
+        split_all = ', '.join('%s %d' % (WORD.get(k, k), v)
+                              for k, v in sorted((e.get('study_directions') or {}).items(), key=lambda kv: -kv[1]))
+        out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s"%s data-n="%d" data-split="%s">'
+                   % (es, cls, es, esc(aria), data_attrs(e['id']), n, esc(split_all)))
         out.append('<path class="hit" d="%s"/>' % d)
         if e.get('kind') == 'moderation':
             out.append('<path class="vis c-%s" d="%s"/>' % (e['certainty'], d))
             rx, ry = routes[e['id']]['ring']
-            out.append('<circle class="ring" cx="%s" cy="%s" r="7"/>' % (f1(rx), f1(ry)))
+            out.append('<circle class="ring" cx="%s" cy="%s" r="6"/>' % (f1(rx), f1(ry)))
         else:
             out.append('<path class="vis c-%s" d="%s" marker-end="url(#ah-%s)"/>'
                        % (e['certainty'], d, ARROW[e['direction']]))
         if e['direction'] == 'mixed' and e.get('kind') != 'moderation':
             up, down = split_counts(e)
-            main = ('<tspan class="sym" aria-hidden="true">⇅</tspan> '
-                    '<tspan class="split" aria-hidden="true">↑</tspan>'
-                    '<tspan class="n" data-check="%s/%s/study_directions/increase">%d</tspan> '
-                    '<tspan class="split" aria-hidden="true">↓</tspan>'
-                    '<tspan class="n" data-check="%s/%s/study_directions/decrease">%d</tspan>'
-                    % (prefix, es, up, prefix, es, down))
+            main = '<tspan class="sym" aria-hidden="true">⇅</tspan>'
+            for sym, field, v in (('↑', 'increase', up), ('↓', 'decrease', down)):
+                if v:
+                    main += (' <tspan class="split" aria-hidden="true">%s</tspan>'
+                             '<tspan class="n" data-check="%s/%s/study_directions/%s">%d</tspan>'
+                             % (sym, prefix, es, field, v))
         else:
             main = ('<tspan class="sym" aria-hidden="true">%s</tspan> '
                     '<tspan class="n" data-check="%s/%s/studies">%d</tspan>' % (SYM[e['direction']], prefix, es, n))
-        parts = [(main, False, 22.0)]
-        if e.get('kind') == 'moderation':
-            # the name already says "changes the effect of"
-            parts.append(('<tspan class="sub">changes this effect</tspan>', True, 37.0))
-        out.append(label_svg(e['id'], parts))
+        out.append(label_svg(e['id'], [(main, False, 17.0)]))
         out.append('</a>')
 
     # boxes last, so they sit on top of any arrow a reader drags under them
     for b in boxes.values():
-        out.append('<g class="node k-%s" id="n-%s" data-id="%s" transform="translate(%s,%s)">'
-                   '<rect width="%s" height="%s" rx="6"/>'
-                   % (esc(b.node.get('kind', '')), esc(slug(b.id)), esc(b.id), f1(b.x), f1(b.y),
-                      f1(b.w), f1(b.h)))
+        if b.node.get('kind') == 'combination':   # a hexagon: two treatments applied together
+            shape = ('<path class="shape" d="M0,%s L%s,0 H%s L%s,%s L%s,%s H%s Z"/>'
+                     % (f1(b.h / 2), f1(COMB_TIP), f1(b.w - COMB_TIP), f1(b.w), f1(b.h / 2),
+                        f1(b.w - COMB_TIP), f1(b.h), f1(COMB_TIP)))
+        else:
+            shape = '<rect class="shape" width="%s" height="%s" rx="6"/>' % (f1(b.w), f1(b.h))
+        out.append('<g class="node k-%s" id="n-%s" data-id="%s" data-w="%s" data-h="%s" transform="translate(%s,%s)">%s'
+                   % (esc(b.node.get('kind', '')), esc(slug(b.id)), esc(b.id), f1(b.w), f1(b.h), f1(b.x), f1(b.y),
+                      shape))
         out.append('<text text-anchor="middle">')
         top = (b.h - LINE_H * len(b.lines)) / 2
         for i, line in enumerate(b.lines):

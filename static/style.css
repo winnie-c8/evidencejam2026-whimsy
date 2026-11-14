@@ -9,7 +9,30 @@
    Babel Sans) have trial, personal-use or commercial licences, so they can't be published in
    this public MIT repo. To use a web font: bundle it in static/fonts/ WITH its licence file
    (an open licence such as OFL), declare it here and put its name first in a stack below.
-   Nothing may load from the internet (the site must work offline). */
+   Nothing may load from the internet (the site must work offline).
+
+   Body text is Inter (SIL Open Font License, static/fonts/inter-LICENSE.txt), from the
+   official Inter 4.1 release. static/fonts/inter.woff2 is cut down to keep pages light: weights
+   400 to 700 only, text optical size, Latin characters only (31 KB instead of 352 KB). Any
+   character it lacks falls back to the system fonts after it in --font-body. */
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+/* Headings are Newsreader Light (SIL Open Font License, static/fonts/newsreader-LICENSE.txt),
+   from Google Fonts' repo (google/fonts, ofl/newsreader). Cut down to keep pages light: weight
+   300 only, optical size fixed at 48 (the headings are all large), Latin characters only
+   (20 KB instead of 451 KB). */
+@font-face {
+  font-family: "Newsreader";
+  src: url("fonts/newsreader-light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   /* colours, named as in Figma */
@@ -30,6 +53,7 @@
   --bg: var(--white);
   --panel: var(--cream);
   --line: var(--light-blue);
+  --rule: #c7c7c7;          /* Figma home page: thin grey rules under headings and menu rows */
   --muted: #555;           /* not in Figma yet */
 
   /* findings, gaps and the Q3 map: not in Figma yet */
@@ -50,9 +74,10 @@
   --target: #fffbe6;          /* section you jumped to */
 
   /* fonts */
-  --font-display: Georgia, "Times New Roman", serif;             /* logo, display titles */
-  --font-heading: Georgia, "Times New Roman", serif;             /* page and question headings */
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;   /* display titles */
+  --font-heading: "Newsreader", Georgia, "Times New Roman", serif;   /* page and question headings */
+  --heading-weight: 300;                                             /* Newsreader Light */
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-graph: "Arial Narrow", "Helvetica Neue", Arial, system-ui, sans-serif;  /* the Q1 graph */
 
   /* text sizes (Figma: 65, 40, 24, 18, 15.6 px) */
@@ -80,11 +105,11 @@ body {
   color: var(--text);
   background: var(--bg);
 }
-main, header.site nav, footer.site { max-width: 72rem; margin: 0 auto; padding: 0 var(--space-2); }
+main, footer.site { max-width: 72rem; margin: 0 auto; padding: 0 var(--space-2); }
 main { padding-bottom: var(--space-4); }
 main:focus { outline: none; }
 p, li, dd, .lead, figcaption { max-width: 68ch; }
-h1, h2 { font-family: var(--font-heading); font-weight: 400; color: var(--heading); }
+h1, h2 { font-family: var(--font-heading); font-weight: var(--heading-weight); color: var(--heading); }
 h1 { font-size: clamp(2.25rem, 4vw + 1rem, var(--text-display)); line-height: 1.1; margin: var(--space-3) 0 var(--space-2); max-width: 20em; }
 h2 { font-size: clamp(1.625rem, 2vw + 1rem, var(--text-heading)); line-height: 1.2; margin: var(--space-4) 0 var(--space-2); }
 h3 { font-size: var(--text-lg); line-height: 1.3; margin: var(--space-3) 0 var(--space-1); }
@@ -100,13 +125,12 @@ a.edge:focus-visible, a.gap-link:focus-visible { outline: 3px solid var(--focus)
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.skip { position: absolute; left: -9999px; top: 0; background: var(--bg); padding: var(--space-1) var(--space-2); z-index: 10; }
+.skip { position: absolute; left: -9999px; top: 0; background: var(--bg); padding: var(--space-1) var(--space-2); z-index: 25; }
 .skip:focus { left: var(--space-2); top: var(--space-1); }
 
-header.site { border-bottom: 1px solid var(--line); background: var(--panel); }
-header.site ul { list-style: none; margin: 0; padding: var(--space-1) 0; display: flex; flex-wrap: wrap; gap: .25rem var(--space-2); font-size: var(--text-sm); }
-header.site a[aria-current="page"] { font-weight: 700; color: var(--text); text-decoration-thickness: 3px; }
-footer.site { border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-sm); padding-top: var(--space-2); padding-bottom: var(--space-4); }
+/* one short line at the very bottom */
+footer.site { max-width: 90rem; padding: .6rem var(--space-4); border-top: 1px solid var(--rule); color: var(--muted); font-size: .8125rem; }
+footer.site p { margin: 0; max-width: none; }
 
 .lead { font-size: var(--text-lg); line-height: 1.4; }
 .short { font-size: var(--text-base); }
@@ -179,24 +203,74 @@ ul.cells > li { border-bottom: 1px solid var(--divider); padding: .25rem 0; }
 figure.graph svg text { font-family: var(--font-graph); }
 figure.graph { margin: var(--space-2) 0; }
 figure.graph svg { display: block; max-width: 1194px; height: auto; }
-dl.legend { display: grid; grid-template-columns: fit-content(45%) minmax(0, 1fr); gap: .25rem var(--space-2); }
-dl.legend > div { display: contents; }
-dl.legend dt { font-weight: 600; }
-dl.legend dd { margin: 0; }
-/* Certainty is the line itself: thicker and more solid = more certain. Legend samples use the same values. */
-.lg { stroke: var(--text); fill: none; }
-.lg.high, svg .vis.c-high { stroke-width: 5; }
-.lg.moderate, svg .vis.c-moderate { stroke-width: 3; stroke-dasharray: 11 6; }
-.lg.low, svg .vis.c-low { stroke-width: 2; stroke-dasharray: 5 5; }
-.lg.very_low, svg .vis.c-very_low { stroke-width: 1.5; stroke-dasharray: 1 5; stroke-linecap: round; }
-.lg.gapline { stroke: var(--gap); stroke-width: 1.5; stroke-dasharray: 4 6; opacity: .45; }
+/* One meaning per channel. Colour = direction, thickness = number of studies (w-1..4),
+   dash pattern = certainty (solid = high; no dotted lines). Legend samples use the same values. */
+.lg { stroke: var(--text); fill: none; stroke-width: 2.5; }
+.lg.high, svg .vis.c-high { stroke-dasharray: none; }
+.lg.moderate, svg .vis.c-moderate { stroke-dasharray: 16 5; }
+.lg.low, svg .vis.c-low { stroke-dasharray: 9 5; }
+.lg.very_low, svg .vis.c-very_low { stroke-dasharray: 5 5; }
+.lg.w-1, svg .w-1 .vis { stroke-width: 2; }
+.lg.w-2, svg .w-2 .vis { stroke-width: 3.25; }
+.lg.w-3, svg .w-3 .vis { stroke-width: 4.75; }
+.lg.w-4, svg .w-4 .vis { stroke-width: 6.5; }
+.lg.gapline { stroke: var(--gap); stroke-width: 1.5; stroke-dasharray: 6 6; }
 .lg-ring { fill: var(--bg); stroke: var(--text); stroke-width: 2.5; }
 .lg-sym { font-size: var(--text-lg); font-weight: 700; }
+/* the graph's key, a small panel in the figure's bottom corner */
+figure.graph { position: relative; }
+.gkey { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: var(--space-1) var(--space-2);
+  margin-top: var(--space-1); max-width: 1194px; font-size: .875rem; line-height: 1.3;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .25rem var(--space-3); }
+.gkey .gkey-g:last-child { grid-column: 1 / -1; }
+.gkey .gkey-g:last-child ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0 var(--space-3); }
+.gkey h2 { grid-column: 1 / -1; font-size: 1rem; margin: 0; }
+.gkey h3 { font-size: .875rem; margin: .25rem 0; color: var(--text); font-family: var(--font-body); }
+.gkey ul { list-style: none; margin: 0; padding: 0; }
+.gkey li { display: flex; align-items: flex-start; gap: .4rem; margin: .15rem 0; }
+.gkey li svg { margin-top: .2rem; }
+.gkey li svg { flex: none; }
+.gkey .kb { flex: none; border: 1px solid var(--line); border-radius: 4px; padding: 0 .3rem; font-weight: 700; white-space: nowrap; }
+.t-up { color: var(--dir-up); } .t-down { color: var(--dir-down); } .t-mixed { color: var(--dir-mixed); } .t-none { color: var(--dir-none); }
+/* hovering an arrow: a small tooltip with its full counts (the same words as its accessible name) */
+.gtip { position: fixed; z-index: 30; max-width: 20rem; pointer-events: none; background: var(--text); color: var(--bg);
+  border-radius: 4px; padding: .35rem .5rem; font-size: .8125rem; line-height: 1.35; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+.gtip[hidden] { display: none; }
+.gtip strong { display: block; }
+/* full screen (graph.js): the figure covers the window, under the evidence panel (z 20) and tooltip */
+.full-exit { display: none; }
+figure.graph.full { position: fixed; inset: 0; z-index: 18;  /* above the page's divider line (16), below the panel (20) */ margin: 0; padding: var(--space-1) var(--space-2);
+  background: var(--bg); overflow: auto; }
+figure.graph.full .full-exit { display: inline-block; margin-bottom: var(--space-1); }
+figure.graph.full svg { max-width: none; width: 100%; height: calc(100vh - 4.5rem); }
+html.graph-full body { overflow: hidden; }
+/* flow diagram / matrix switch (graph.js) */
+.view-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: var(--space-2) 0 var(--space-1); }
+/* matrix view: colour repeats the symbol, never carries the meaning alone */
+table.matrix { border-collapse: collapse; font-size: .875rem; }
+table.matrix th, table.matrix td { border: 1px solid var(--line); padding: .25rem .4rem; }
+table.matrix thead th { font-weight: 600; text-align: center; vertical-align: bottom; min-width: 5.5rem; }
+table.matrix tbody th { text-align: left; font-weight: 600; max-width: 14rem; }
+table.matrix tr.mx-group th { background: var(--panel); text-align: left; }
+td.mx { text-align: center; min-width: 5.5rem; }
+td.mx a { display: block; text-decoration: none; color: inherit; }
+td.mx a:hover .mx-main, td.mx a:focus .mx-main { text-decoration: underline; }
+.mx-main { display: block; font-weight: 700; font-size: 1rem; }
+.mx-cert { display: block; font-size: .75rem; color: var(--text); }
+td.mx.d-increase { background: #e6f2ea; color: var(--dir-up); }
+td.mx.d-decrease { background: #fbe9ea; color: var(--dir-down); }
+td.mx.d-mixed { background: #e7eff9; color: var(--dir-mixed); }
+td.mx.d-no_effect, td.mx.d-unclear { background: #efefef; color: var(--dir-none); }
+td.mx.gap { background: repeating-linear-gradient(135deg, var(--bg) 0 6px, #f2f2f2 6px 12px); outline: 1px dashed var(--gap);
+  outline-offset: -4px; font-style: italic; }
+td.mx.gap a { color: var(--gap); }
+td.mx.self { color: var(--muted); }
+.mx-note { font-size: .875rem; }
 
-svg .node rect { fill: var(--bg); stroke: var(--text); stroke-width: 1.5; }
-svg .node.k-condition rect { fill: var(--box-condition); }
-svg .node.k-outcome rect { fill: var(--box-outcome); stroke-width: 2.5; }
-svg .node.k-combination rect { fill: var(--box-combination); stroke-dasharray: 4 2; }
+svg .node .shape { fill: var(--bg); stroke: var(--text); stroke-width: 1.5; }
+svg .node.k-condition .shape { fill: var(--box-condition); }
+svg .node.k-outcome .shape { fill: var(--box-outcome); stroke-width: 2.5; }
+svg .node.k-combination .shape { fill: var(--box-combination); stroke-width: 2; }
 svg .node text { font-size: 14px; fill: var(--text); }
 svg .colhead { font-size: 13px; font-weight: 700; fill: var(--muted); }
 svg .member { stroke: var(--muted); stroke-width: 1; fill: none; }
@@ -206,7 +280,7 @@ svg .d-increase .vis { stroke: var(--dir-up); }
 svg .d-decrease .vis { stroke: var(--dir-down); }
 svg .d-mixed .vis { stroke: var(--dir-mixed); }
 svg .d-no_effect .vis, svg .d-unclear .vis { stroke: var(--dir-none); }
-svg .ring { fill: var(--bg); stroke-width: 3; }
+svg .ring { fill: var(--bg); stroke-width: 3; }  /* moderation marker on the arrow it changes */
 svg .d-increase .ring { stroke: var(--dir-up); }
 svg .d-decrease .ring { stroke: var(--dir-down); }
 svg .d-mixed .ring { stroke: var(--dir-mixed); }
@@ -217,19 +291,19 @@ svg .ah-decrease { fill: var(--dir-down); }
 svg .ah-mixed { fill: var(--dir-mixed); }
 svg .ah-none { fill: var(--dir-none); }
 svg .lbl rect { fill: var(--bg); stroke: var(--line); }
-svg .lbl text { font-size: 12px; font-weight: 600; }
-svg .lbl .sym { font-size: 22px; font-weight: 700; }
-svg .lbl .n { font-size: 20px; font-weight: 700; }
-svg .lbl .split { font-size: 18px; font-weight: 700; }
-svg .lbl .sub { font-size: 12px; font-weight: 600; }
+svg .lbl text { font-size: 15px; font-weight: 700; }
+svg .lbl .sym { font-size: 17px; }
+svg .lbl .n { font-size: 15px; }
+svg .lbl .split { font-size: 14px; }
 svg .d-increase .lbl text { fill: var(--dir-up); }
 svg .d-decrease .lbl text { fill: var(--dir-down); }
 svg .d-mixed .lbl text { fill: var(--dir-mixed); }
 svg .d-no_effect .lbl text, svg .d-unclear .lbl text { fill: var(--dir-none); }
-/* "no evidence": a faint thin dashed line, so it never reads as a result. Its label stays at full contrast. */
-svg .gap-link .vis { stroke: var(--gap); stroke-dasharray: 4 6; stroke-width: 1.5; opacity: .45; }
+/* "not studied": a thin, light grey dashed line with no arrowhead, so it never reads as a result.
+   Its tag stays at full contrast. */
+svg .gap-link .vis { stroke: var(--light-blue); stroke-dasharray: 6 6; stroke-width: 1.5; }
 svg .gap-link .lbl rect { stroke-dasharray: 3 3; }
-svg .gap-link .lbl text { fill: var(--gap); font-style: italic; font-weight: 400; }
+svg .gap-link .lbl text { fill: var(--gap); font-size: 12px; font-style: italic; font-weight: 400; }
 svg .member { stroke-width: 1.5; }
 
 /* graph.js: dragging, highlighting, side panel */
@@ -243,8 +317,8 @@ button[aria-pressed="true"]::before { content: "✓ "; }  /* pressed is shown by
 .tool-status { min-height: 1.5em; color: var(--muted); }
 svg .node { cursor: grab; }
 svg .node.dragging { cursor: grabbing; }
-svg .node.dragging rect { stroke-width: 3; }
-svg .node.pinned rect { stroke-width: 3.5; stroke: var(--focus); }
+svg .node.dragging .shape { stroke-width: 3; }
+svg .node.pinned .shape { stroke-width: 3.5; stroke: var(--focus); }
 svg a.edge, svg a.gap-link { cursor: pointer; }
 svg a.dragging { cursor: grabbing; }
 .fig-state { display: block; margin-top: .25rem; font-weight: 600; color: var(--text); }
@@ -269,12 +343,12 @@ svg a.dragging { cursor: grabbing; }
 .lg-box { stroke: var(--text); stroke-width: 1.5; fill: var(--bg); }
 .lg-box.condition { fill: var(--box-condition); }
 .lg-box.outcome { fill: var(--box-outcome); stroke-width: 2.5; }
-.lg-box.combination { fill: var(--box-combination); stroke-dasharray: 4 2; }
+.lg-box.combination { fill: var(--box-combination); stroke-width: 2; }
 @media (min-width: 700px) { svg .node { touch-action: none; } }  /* on a phone a touch on a box still scrolls the page */
 svg a.edge, svg a.gap-link { transition: opacity .12s; }
-svg.hl a.edge:not(.on), svg.hl a.gap-link:not(.on) { opacity: .2; }
+svg.hl a.edge:not(.on), svg.hl a.gap-link:not(.on), svg.hl .member:not(.on) { opacity: .15; }
 /* faded boxes stay opaque, so arrows never show through them */
-svg.hl .node:not(.on) rect { stroke: var(--line); }
+svg.hl .node:not(.on) .shape { stroke: var(--line); }
 svg.hl .node:not(.on) text { fill: var(--muted); }
 /* filter buttons: hidden arrows are gone (not focusable); an arrow kept only because a
    moderation arrow points at it is faded */
@@ -283,7 +357,12 @@ svg a.context { opacity: .3; }
 svg a.sel .lbl rect { stroke: var(--text); stroke-width: 2; }
 @media (prefers-reduced-motion: reduce) { svg a.edge, svg a.gap-link { transition: none; } }
 
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: min(28rem, 100%); overflow-y: auto;
+/* Evidence panel. From 700px wide it sits BESIDE the page, never over it: the page (and the
+   full-screen graph) is pushed left by the panel's width, so the graph shrinks to fit and nothing
+   is covered. On a phone there is no room beside it, so it covers the page (Close returns). */
+:root { --drawer-w: 100%; }
+@media (min-width: 700px) { :root { --drawer-w: min(28rem, 40vw); } }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: var(--drawer-w); overflow-y: auto; box-sizing: border-box;
   background: var(--bg); border-left: 1px solid var(--line); box-shadow: -6px 0 18px rgba(0, 0, 0, .18); padding: 0 var(--space-2) var(--space-4); }
 .drawer[hidden] { display: none; }
 .drawer-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between;
@@ -295,7 +374,10 @@ svg a.sel .lbl rect { stroke: var(--text); stroke-width: 2; }
 .drawer-body .badges { margin-top: var(--space-2); }
 .drawer-body details.cert { display: block; }
 .drawer-sources { margin-top: var(--space-2); }
-@media (min-width: 1100px) { html.drawer-open body { padding-right: 28rem; } }
+@media (min-width: 700px) {
+  html.drawer-open body { padding-right: var(--drawer-w); }
+  html.drawer-open figure.graph.full { right: var(--drawer-w); }
+}
 
 .edge-panel { border-top: 1px solid var(--line); padding-top: .25rem; }
 .edge-panel:target { background: var(--target); }
@@ -429,19 +511,20 @@ button.help:hover { background: var(--link); color: var(--bg); }
 :root { --navy: #1f2a5c; }  /* --cream comes from the design tokens above */
 
 /* sidebar layout */
-.layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2rem; max-width: 84rem; margin: 0 auto; padding: 0 16px; }
+.layout { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--space-4); margin: 0; padding: 0 var(--edge); }
 .layout main { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
-.side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding: 1.25rem 0; }
-.side .brand { display: block; font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--ink); text-decoration: none; margin-bottom: 1.25rem; }
-ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
-ul.qnav.more { margin-top: 1rem; }
-.qnav > li { border-bottom: 1px solid var(--line); }
-.qnav > li > a { display: flex; gap: .6rem; padding: .45rem 0; color: var(--ink); text-decoration: none; }
-.qnav > li > a:hover { color: var(--link); }
-.qnav > li > a[aria-current="page"] { font-weight: 700; color: var(--link); }
-.qnav .n { min-width: 1.6rem; color: var(--link); font-variant-numeric: tabular-nums; }
-.qnav li.sub > a { padding-left: .75rem; font-size: .95rem; }
-ul.jumps { list-style: none; margin: 0 0 .5rem 2.2rem; padding: 0; font-size: .9rem; }
+.side { position: sticky; top: var(--top-h); align-self: start; max-height: calc(100vh - var(--top-h)); overflow-y: auto; padding: var(--space-3) 0; }
+/* the left menu, on every page (home's section menu and the other pages' sidebar look the same) */
+ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+ul.qnav.more { margin-top: var(--space-3); }
+.qnav > li { max-width: none; border-bottom: 1px solid var(--rule); }
+.qnav > li > a { display: grid; grid-template-columns: 4rem minmax(0, 1fr); align-items: center;
+  padding: .45rem .25rem; color: var(--dark-navy); text-decoration: none; text-transform: uppercase;
+  font-size: var(--text-sm); letter-spacing: .02em; }
+.qnav > li > a:hover { color: var(--bright-blue); }
+.qnav > li > a[aria-current="page"] { font-weight: 700; color: var(--bright-blue); }
+.qnav .n { color: var(--bright-blue); font-size: var(--text-lg); line-height: 1; font-variant-numeric: tabular-nums; }
+ul.jumps { list-style: none; margin: 0 0 .5rem 4.25rem; padding: 0; font-size: var(--text-sm); }
 ul.jumps a { display: block; padding: .15rem 0; color: var(--muted); text-decoration: none; }
 ul.jumps a:hover { color: var(--link); text-decoration: underline; }
 .layout main h1 { margin-top: 1.5rem; }
@@ -464,8 +547,6 @@ li.qrow .q { color: var(--muted); margin: 0 0 .5rem; }
 .key-strip ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .75rem 2rem; }
 .key-strip li { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
 .qmark { font-size: 1.4rem; font-weight: 700; color: var(--link); }
-header.site { background: var(--bg); }
-header.site ul { font-size: .9rem; text-transform: uppercase; letter-spacing: .04em; }
 
 /* method tabs (in-page links: work with keyboard, no script) */
 nav.tabs ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 1rem 0 2rem; }
@@ -477,12 +558,12 @@ section.tab h2 { color: var(--link); }
 /* phones: the sidebar becomes a compact menu across the top */
 @media (max-width: 52rem) {
   .layout { display: block; }
-  .side { position: static; max-height: none; padding: .75rem 0 0; }
-  .side .brand { font-size: 1.3rem; margin-bottom: .5rem; }
+  .side { position: static; max-height: none; padding: var(--space-2) 0 0; }
   ol.qnav, ul.qnav { display: flex; flex-wrap: wrap; gap: 0 1rem; border: 0; }
   ul.qnav.more { margin-top: 0; }
   .qnav > li { border: 0; }
-  .qnav > li > a { padding: .3rem 0; }
+  .qnav > li > a { display: flex; gap: .4rem; padding: .3rem 0; }
+  .qnav .n { font-size: var(--text-sm); }
   ul.jumps { display: none; }
   li.qrow { grid-template-columns: 2.5rem minmax(0, 1fr); }
   li.qrow .n { font-size: 1.4rem; }
@@ -535,3 +616,97 @@ p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
 .grid-wrap thead th, .grid-wrap thead td { position: sticky; top: 0; z-index: 2; background: var(--panel); }
 .grid-wrap tbody th { position: sticky; left: 0; z-index: 1; background: var(--bg); }
 .grid-wrap thead td:first-child { left: 0; z-index: 3; }
+
+/* ------------------------------------------------------------------ home page (Figma "home page" frame)
+   WHIMSY logo and a boxed menu across the top; a numbered menu of the page's sections on the
+   left that stays in view; each section a big blue heading over a thin rule, text indented. */
+/* Top bar on every page: a thin line across the whole screen with the boxed menu hanging from
+   it (no top border on the boxes: the line is their top edge), and the logo, which goes home.
+   It stays at the top while scrolling; --top-h is its height, so the sidebars sit below it. */
+:root { --top-h: 6rem; --top-line: .75rem; --edge: 1.5rem; }   /* --edge: gap to the screen's left and right edges */
+html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page links land below the bar */
+.site-top { position: sticky; top: 0; z-index: 15; height: var(--top-h); box-sizing: border-box;
+  padding-top: calc(var(--top-line) + 1px);
+  background: linear-gradient(var(--rule), var(--rule)) 0 var(--top-line) / 100% 1px no-repeat, var(--bg); }
+.site-top-in { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2);
+  padding: 0 var(--edge); }
+/* the WHIMSY logo is an image (static/logo.svg, from Figma) that links home */
+.site-top .logo { display: block; margin-top: var(--space-2); line-height: 0; }
+.site-top .logo img { display: block; width: clamp(10rem, 16vw, 13rem); height: auto; }
+.site-top .logo:hover img { opacity: .75; }
+.boxnav { list-style: none; margin: 0; padding: 0; display: flex; border: 1px solid var(--text); border-top: 0; }
+.boxnav li { max-width: none; border-left: 1px solid var(--text); }
+.boxnav li:first-child { border-left: 0; }
+.boxnav a { display: block; padding: .3rem .7rem; font-size: .8125rem; text-transform: uppercase;
+  letter-spacing: .02em; color: var(--text); text-decoration: none; }
+.boxnav a:hover { text-decoration: underline; }
+.boxnav a[aria-current="page"] { font-weight: 700; }
+
+/* Left column on every page: --col wide, then a thin vertical line (fixed to the screen, from the
+   top line down) in the middle of the --gap before the content. --col-x is where the column starts,
+   lined up with the logo; 100% here is the screen width without the scrollbar. */
+.layout, .home-grid { --col-x: var(--edge); --gap: var(--space-4); }
+.layout, .home-grid { --col: clamp(16rem, 22vw, 19rem); }   /* same width on every page */
+.layout::before, .home-grid::before { content: ''; position: fixed; z-index: 16; top: var(--top-line); bottom: 0;
+  left: calc(var(--col-x) + var(--col) + var(--gap) / 2); border-left: 1px solid var(--rule); pointer-events: none; }
+
+.home-grid { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--gap);
+  margin: 0; padding: 0 var(--edge); }
+.home-grid main { max-width: 56rem; margin: 0; padding: var(--space-5) 0 var(--space-4); }
+/* pinned to the screen (fixed, not sticky) so it stays put even at the very bottom of the page;
+   the grid's first column stays empty to keep its place */
+.home-side { position: fixed; top: var(--top-h); bottom: 0; left: var(--col-x); width: var(--col);
+  box-sizing: border-box; display: flex; flex-direction: column; padding: var(--space-2) 0 var(--space-3); }
+.home-grid main { grid-column: 2; }
+/* home: the footer sits in the right column, clear of the menu, with its line only above the text */
+.home-grid + footer.site { border-top: 0; max-width: calc(56rem + var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4));
+  margin: 0; padding: 0 var(--edge) 0 calc(var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4)); box-sizing: border-box; }
+.home-grid + footer.site p { border-top: 1px solid var(--rule); padding: .6rem 0; }
+/* the turning tree (static/tree.js) fills the space above the menu; the menu stays at the bottom
+   of the column while the tree turns */
+.home-tree { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+/* the section being read: dark, with a line under it that fills as you read through it;
+   the others go grey (only once the script is running and a section is in view) */
+.home-menu.has-on .qnav > li > a, .home-menu.has-on .qnav .n { color: var(--muted); transition: color .2s; }
+.home-menu.has-on .qnav > li.on > a { color: var(--dark-navy); }
+.home-menu.has-on .qnav > li.on .n { color: var(--bright-blue); }
+.home-menu .qnav > li { position: relative; }
+.home-menu .qnav > li.on::after { content: ''; position: absolute; left: 0; bottom: -1px; height: 1px;
+  width: calc(var(--p, 0) * 100%); background: var(--dark-navy); }
+.home-menu .qnav > li > a:hover { color: var(--bright-blue); }
+@media (prefers-reduced-motion: reduce) { .home-menu .qnav a, .home-menu .qnav .n { transition: none; } }
+.home-tree .tree-scene { position: absolute; left: 50%; top: 50%; width: 386px; height: 526px; transform-origin: center; }
+.home-tree .tree-layer { position: absolute; inset: 0; transform-origin: 193px 300px; will-change: transform; }
+.home-tree .tree-layer svg { display: block; }
+.home-menu { flex: none; margin-top: var(--space-2); }   /* styled by .qnav, like the sidebar */
+
+.hsec { margin: 0 0 var(--space-5); }
+.hsec > h1, .hsec > h2 { margin: 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--rule);
+  font-family: var(--font-heading); font-weight: var(--heading-weight); color: var(--heading); max-width: none; }
+.hsec > h1 { font-size: clamp(2.5rem, 5vw, var(--text-display)); line-height: 1.1; letter-spacing: 0; }
+.hsec > h2 { font-size: clamp(1.75rem, 3vw, var(--text-heading)); line-height: 1.2; text-transform: none; letter-spacing: 0; }
+.hsec > h2 a { color: inherit; text-decoration: none; }
+.hsec > h2 a:hover { text-decoration: underline; }
+.hsec-body { padding: var(--space-3) 0 0 var(--space-4); }
+.hsec-body > :first-child { margin-top: 0; }
+.hsec .lead { font-size: var(--text-base); }
+.hsec.guide, .hsec.key-strip { border-top: 0; padding-top: 0; }
+.hsec.qsec .q { color: var(--text); }
+
+@media (max-width: 900px) {
+  :root { --top-h: 4.25rem; --top-line: .5rem; }
+  .site-top-in, .layout { padding: 0 var(--space-2); }
+  .site-top .logo { margin-top: .6rem; }
+  .site-top .logo img { width: 7.5rem; }
+  .boxnav a { padding: .15rem .45rem; font-size: .8125rem; }
+  .home-grid { display: block; padding: 0 var(--space-2); }
+  .home-side { position: static; width: auto; height: auto; padding: 0; }
+  footer.site { padding: .6rem var(--space-2); }
+  .home-grid + footer.site { padding: 0 var(--space-2); }
+  .layout::before, .home-grid::before { display: none; }
+  .home-tree { display: none; }
+  .home-menu { margin-top: var(--space-3); }
+  .home-grid main { padding-top: var(--space-4); }
+  .hsec { margin-bottom: var(--space-4); }
+  .hsec-body { padding-left: 0; }
+}

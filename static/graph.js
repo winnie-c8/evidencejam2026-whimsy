@@ -12,6 +12,7 @@
   var DOWN = svg.getAttribute('data-flow') === 'down';
   var STRIP = num('strip'), VTAIL = num('vtail'), MOD_INSET = num('mod-inset');
   var HEAD_GAP = num('head-gap'), TIER = num('tier');
+  var PORT_PAD = num('port-pad'), OUT_W = num('out-w');
   var VB = svg.viewBox.baseVal;
   var DIRS = { r: [1, 0], l: [-1, 0], b: [0, 1], t: [0, -1] };
   var INTO = { l: [1, 0], r: [-1, 0], t: [0, 1], b: [0, -1] };
@@ -32,10 +33,9 @@
   var boxes = {};
   each(svg.querySelectorAll('g.node'), function (el) {
     var m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(el.getAttribute('transform'));
-    var r = el.querySelector('rect');
     var kind = /\bk-(\w+)/.exec(el.getAttribute('class'));
     var b = { el: el, id: el.getAttribute('data-id'), x: +m[1], y: +m[2], kind: kind ? kind[1] : '',
-              w: +r.getAttribute('width'), h: +r.getAttribute('height'),
+              w: +el.getAttribute('data-w'), h: +el.getAttribute('data-h'),
               name: el.textContent.replace(/\s+/g, ' ').trim() };
     b.homeX = b.x; b.homeY = b.y;
     boxes[b.id] = b;
@@ -178,8 +178,14 @@
         return (sortByCertainty ? byCertainty(p, q) : 0) || p[0] - q[0] ||
           (p[1] < q[1] ? -1 : p[1] > q[1] ? 1 : 0);
       });
+      // top-down, arrows coming in from above get a slot as wide as their badge (one row of badges)
+      var slots = e.list.map(function (it) { return it[2] === 'in' ? byId[it[1]].lw + PORT_PAD : OUT_W; });
+      var total = slots.reduce(function (s, v) { return s + v; }, 0);
+      var spaced = DOWN && (e.side === 't' || e.side === 'b') && total <= b.w;
+      var cum = (b.w - total) / 2;
       e.list.forEach(function (it, k) {
         var f = (k + 1) / (n + 1), p;
+        if (spaced) { f = (cum + slots[k] / 2) / b.w; cum += slots[k]; }
         if (e.side === 'l') p = [b.x, b.y + b.h * f];
         else if (e.side === 'r') p = [right(b), b.y + b.h * f];
         else if (e.side === 't') p = [b.x + b.w * f, b.y];
@@ -324,6 +330,9 @@
     var on = relatedTo(target);
     on.arrows.forEach(function (el) { el.classList.add('on'); });
     Object.keys(on.nodes).forEach(function (id) { if (boxes[id]) boxes[id].el.classList.add('on'); });
+    members.forEach(function (p) {
+      if (on.nodes[p.getAttribute('data-c')] && on.nodes[p.getAttribute('data-m')]) p.classList.add('on');
+    });
   }
 
   function pointedAt(el) {
@@ -343,6 +352,56 @@
   });
   svg.addEventListener('focusin', function (ev) { hoverKey = pointedAt(ev.target); highlight(); });
   svg.addEventListener('focusout', function () { hoverKey = null; highlight(); });
+
+  // ---------------------------------------------------------------- tooltip: an arrow's full counts
+
+  var tip = document.createElement('div');
+  tip.className = 'gtip';
+  tip.hidden = true;
+  tip.setAttribute('aria-hidden', 'true');   // the arrow's accessible name already says all of this
+  document.body.appendChild(tip);
+
+  function fillTip(link) {
+    var name = (link.getAttribute('aria-label') || '').replace(/\s*Opens (evidence|details)\.\s*$/, '');
+    var cut = name.indexOf(': ');
+    tip.textContent = '';
+    var head = document.createElement('strong');
+    head.textContent = cut > 0 ? name.slice(0, cut) : name;
+    tip.appendChild(head);
+    var rest = cut > 0 ? name.slice(cut + 2) : '';
+    tip.appendChild(document.createTextNode(rest.charAt(0).toUpperCase() + rest.slice(1)));
+    var split = link.getAttribute('data-split');
+    if (split) {
+      tip.appendChild(document.createElement('br'));
+      tip.appendChild(document.createTextNode('Studies by direction: ' + split));
+    }
+  }
+  function placeTip(x, y) {
+    tip.hidden = false;
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.min(x + 14, window.innerWidth - w - 8), top = y + 18;
+    if (top + h > window.innerHeight - 8) top = y - h - 12;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+  }
+  var tipFor = null;
+  svg.addEventListener('pointermove', function (ev) {
+    var link = !drag && ev.pointerType !== 'touch' && ev.target.closest && ev.target.closest('a.edge, a.gap-link');
+    if (!link) { tip.hidden = true; tipFor = null; return; }
+    if (link !== tipFor) { fillTip(link); tipFor = link; }
+    placeTip(ev.clientX, ev.clientY);
+  });
+  svg.addEventListener('pointerleave', function () { tip.hidden = true; tipFor = null; });
+  svg.addEventListener('focusin', function (ev) {
+    var link = ev.target.closest && ev.target.closest('a.edge, a.gap-link');
+    if (!link) return;
+    fillTip(link);
+    tipFor = link;
+    var r = link.querySelector('.lbl rect') || link;
+    var b = r.getBoundingClientRect();
+    placeTip(b.left, b.bottom - 10);
+  });
+  svg.addEventListener('focusout', function () { tip.hidden = true; tipFor = null; });
 
   // ---------------------------------------------------------------- dragging boxes and arrows
 
@@ -450,8 +509,73 @@
     '<div class="tool-row">' +
     '<button type="button" class="direct" aria-pressed="false">Direct effects only</button>' +
     '<button type="button" class="sort" aria-pressed="false">Sort by certainty</button>' +
-    '<button type="button" class="reset">Reset layout</button></div>';
+    '<button type="button" class="reset">Reset layout</button>' +
+    '<button type="button" class="full" aria-pressed="false">Full screen</button></div>';
   figure.parentNode.insertBefore(tools, figure);
+
+  // Full screen: the figure covers the window (and the browser goes full screen where it can).
+  // The whole page goes full screen, not just the figure, so the evidence panel still opens.
+  var fullBtn = tools.querySelector('.full');
+  var exitBtn = document.createElement('button');
+  exitBtn.type = 'button';
+  exitBtn.className = 'full-exit';
+  exitBtn.textContent = 'Exit full screen';
+  figure.insertBefore(exitBtn, figure.firstChild);
+  var isFull = false;
+  function setFull(on) {
+    if (on === isFull) return;
+    isFull = on;
+    figure.classList.toggle('full', on);
+    document.documentElement.classList.toggle('graph-full', on);
+    fullBtn.setAttribute('aria-pressed', String(on));
+    var root = document.documentElement;
+    if (on && root.requestFullscreen && !document.fullscreenElement) {
+      root.requestFullscreen().catch(function () {});   // refused (e.g. iPhone): the overlay still works
+    } else if (!on && document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(function () {});
+    }
+    (on ? exitBtn : fullBtn).focus();
+  }
+  fullBtn.addEventListener('click', function () { setFull(!isFull); });
+  exitBtn.addEventListener('click', function () { setFull(false); });
+  // Esc in browser full screen leaves it without a keydown event; follow it
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && isFull) setFull(false);
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && isFull && !document.documentElement.classList.contains('drawer-open')) setFull(false);
+  });
+
+  // Flow diagram or matrix: the same arrows two ways. Without this script both are shown.
+  var matrix = document.getElementById('matrix');
+  if (matrix) {
+    var toggle = document.createElement('div');
+    toggle.className = 'view-toggle';
+    toggle.innerHTML = '<span id="view-label">View:</span><div class="seg" role="group" aria-labelledby="view-label">' +
+      '<button type="button" data-view="flow" aria-pressed="true">Flow diagram</button>' +
+      '<button type="button" data-view="matrix" aria-pressed="false">Matrix</button></div>';
+    tools.parentNode.insertBefore(toggle, tools);
+    // the matrix moves up to where the diagram is, so switching doesn't jump down the page
+    figure.parentNode.insertBefore(matrix, figure.nextSibling);
+    var setView = function (v) {
+      var m = v === 'matrix';
+      if (m) setFull(false);
+      figure.hidden = m;
+      tools.hidden = m;
+      matrix.hidden = !m;
+      each(toggle.querySelectorAll('button'), function (b) {
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v));
+      });
+    };
+    each(toggle.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
+    });
+    setView(location.hash === '#matrix' || location.hash === '#matrix-h' ? 'matrix' : 'flow');
+    window.addEventListener('hashchange', function () {
+      if (location.hash === '#matrix') setView('matrix');
+      else if (/^#(read|q1g|edge-)/.test(location.hash)) setView('flow');
+    });
+  }
 
   var certFilter = 'all';
   var directOnly = false;
