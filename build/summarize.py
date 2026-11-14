@@ -12,7 +12,7 @@ import html
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from load import Finding, SiteData
+from load import EFFECTS, GAPMAP, Finding, SiteData
 
 DIR_PHRASE = {
     'increase': 'studies found it increases', 'decrease': 'studies found it decreases',
@@ -25,12 +25,8 @@ DIR_PHRASE = {
 
 CERT_WORD = {'high': 'High', 'moderate': 'Moderate', 'low': 'Low', 'very_low': 'Very low'}
 
-SHORT_ANSWER = {
-    'q1': "Each finding below shows its direction, certainty and number of studies; "
-          "open one to read the studies behind it.",
-    'q3': "Most combinations have not been studied. Where evidence exists, many cells "
-          "rest on a single study.",
-}
+GAPMAP_SHORT_ANSWER = ("Most combinations have not been studied. Where evidence exists, many cells "
+                       "rest on a single study.")
 DEFAULT_SHORT_ANSWER = ("Each finding below shows its direction, certainty and number of "
                         "studies; open one to read the studies behind it.")
 
@@ -161,7 +157,7 @@ def effects_short_answer(q) -> ProseItem:
 
 def gap_map_short_answer(q) -> ProseItem:
     """Q3-style questions: the gap message, plus what the most-studied cells say."""
-    base = SHORT_ANSWER['q3']
+    base = GAPMAP_SHORT_ANSWER
     by_id = {f.id: f for f in q.findings}
     dense = [by_id[i] for i in (q.extra['summary'].get('densest') or []) if i in by_id]
     if not dense:
@@ -177,10 +173,10 @@ def gap_map_short_answer(q) -> ProseItem:
         lead = '%s of the %s most-studied combinations' % (_cap(NUMBER_WORD.get(n_mixed, str(n_mixed))), count)
         tail = ' have mixed results.'
     rng_t = ' (%d to %d studies each)' % (lo.studies, hi.studies)
-    rng_h = ' (%s to %s studies each)' % (_span('q3/%s/studies' % lo.slug, str(lo.studies)),
-                                          _span('q3/%s/studies' % hi.slug, str(hi.studies)))
+    rng_h = ' (%s to %s studies each)' % (_span('%s/%s/studies' % (q.qid, lo.slug), str(lo.studies)),
+                                          _span('%s/%s/studies' % (q.qid, hi.slug), str(hi.studies)))
     text = '%s %s%s%s' % (base, lead, rng_t, tail)
-    html_ = '%s <a href="q3.html#densest">%s</a>%s%s' % (_esc(base), _esc(lead), rng_h, _esc(tail))
+    html_ = '%s <a href="%s.html#densest">%s</a>%s%s' % (_esc(base), q.qid, _esc(lead), rng_h, _esc(tail))
     return ProseItem(text, html_)
 
 
@@ -194,11 +190,12 @@ def short_answer_template(qid: str, data: SiteData) -> ProseItem:
     note = sa.get('time_to_reference_note')
     if note:
         return ProseItem(note, _span("%s/short_answer/time_to_reference_note" % qid, note))
-    if 'summary' in q.extra:
+    kind = data.kinds[qid]  # the same shape detection the page layout uses (load.detect_kind)
+    if kind == GAPMAP:
         return gap_map_short_answer(q)
-    if q.findings and not any(f.reference for f in q.findings):
+    if kind == EFFECTS:
         return effects_short_answer(q)
-    text = SHORT_ANSWER.get(qid, DEFAULT_SHORT_ANSWER)
+    text = DEFAULT_SHORT_ANSWER
     return ProseItem(text, _esc(text))
 
 
