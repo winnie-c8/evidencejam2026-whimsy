@@ -1,0 +1,99 @@
+# Runs on every pull request and every push to main.
+# Rule: nothing reaches main unless this passes (set "check-site" jobs as required
+# status checks in Settings -> Branches -> main).
+#
+# What it proves, each time, from a fresh checkout like the judges':
+#   - ./build.sh site/ works with no BRINE_* env vars (no LLM) and with no network
+#   - on regular Linux and on ARM64 (the judges' DGX Spark is aarch64)
+#   - every number, gap, quote and graph rule matches the answer pack (two checkers;
+#     the offline build is checked too)
+#   - the checkers themselves catch deliberate breakage (mutation tests)
+#   - axe-core: 0 accessibility violations; no sideways scrolling at phone width
+name: check-site
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: check-site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    name: build + data checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Environment
+        run: uname -m && python3 --version
+
+      - name: No secrets committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then echo "::error::.env is committed"; exit 1; fi
+
+      - name: build.sh is executable
+        run: test -x build.sh
+
+      - name: Build (no LLM env vars, --strict so self-check problems fail)
+        run: ./build.sh site/ --strict
+
+      - name: Build again with the network switched off
+        # The README allows no network at build time except the LLM endpoint.
+        run: sudo env PYTHONDONTWRITEBYTECODE=1 unshare --net -- ./build.sh /tmp/site-offline/ --strict
+
+      - name: Offline build output is checked too
+        run: python3 tests/check_independent.py /tmp/site-offline/
+
+      - name: Built-in check (build/check.py)
+        run: python3 build/check.py site/
+
+      - name: Independent check (tests/check_independent.py)
+        run: python3 tests/check_independent.py site/
+
+      - name: Checker tests (mutations, on the site built above)
+        run: SITE_DIR=site python3 -m unittest discover -s tests -v
+
+      - name: Upload built site
+        if: matrix.os == 'ubuntu-24.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site/
+          retention-days: 7
+
+  accessibility:
+    name: accessibility (axe + phone width)
+    needs: build-and-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tests/a11y/package-lock.json
+
+      - name: Install browser check tools (CI only, never part of build.sh)
+        working-directory: tests/a11y
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: axe-core + phone width + graph keyboard focus
+        working-directory: tests/a11y
+        run: node a11y.mjs ../../site

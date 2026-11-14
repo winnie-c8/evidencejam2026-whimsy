@@ -1,0 +1,13 @@
+{
+  "name": "site-a11y-check",
+  "private": true,
+  "description": "CI-only browser checks (axe-core + phone width). Not part of build.sh; the judges' build never installs this.",
+  "type": "module",
+  "scripts": {
+    "check": "node a11y.mjs ../../site"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "playwright": "1.48.2"
+  }
+}
