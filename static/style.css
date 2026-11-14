@@ -314,6 +314,7 @@ a.srclink { white-space: nowrap; }
 .fcard.fdir-mixed { border-left-color: var(--s-mixed); }
 .fcard.fdir-no-effect, .fcard.fdir-comparable { border-left-color: var(--s-none); }
 .fcard:target { box-shadow: 0 0 0 3px var(--focus); }
+.fcard.epop:target { box-shadow: none; }  /* inside a popup the popup itself shows where you are */
 .fcard p, .fcard li { max-width: none; }
 
 /* the closed line */
@@ -617,12 +618,17 @@ details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0
   border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .pop-x:hover { background: var(--panel); }
 
-/* Q1 popup card ("track" cards): study colours match the chart's direction colours */
-.fcard.track { --s-up: var(--dir-up); --s-down: var(--dir-down); --s-mixed: var(--dir-mixed); }
-.fcard.track.fdir-mixed { border-left-color: var(--dir-mixed); }
-.fcard.track .fmore { display: none; }
-/* "Why High?" as steps on the four levels: one dot per step shows the level after it */
-.panel.why-track { grid-column: 1 / -1; position: relative; }
+/* Q1 popup: one column. Study colours match the chart's direction colours */
+.fcard.epop { --s-up: var(--dir-up); --s-down: var(--dir-down); --s-mixed: var(--dir-mixed);
+  border: 0; border-left: 0; padding: 0; background: none; }
+.ep-head { border-bottom: 1px solid var(--line); padding-bottom: .6rem; margin-bottom: .2rem; }
+.ep-head h3 { margin: 0 0 .4rem; font-size: 1.25rem; line-height: 1.3; }
+.ep-res { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; max-width: none; }
+.ep-sec { padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.ep-sec h4 { margin: 0 0 .35rem; font-size: 1.05rem; display: flex; align-items: center; gap: .5rem; }
+.ep-sec .cq { margin: .5rem 0; }
+.ep-graph { margin: .8rem 0 0; font-weight: 600; }
+.pop.fpop:has(.epop) { max-width: min(44rem, calc(100vw - 32px)); }
 .why-intro { margin: .2rem 0 .6rem; max-width: none; }
 ol.track { list-style: none; padding: 0; margin: 0 0 .5rem; }
 ol.track li { display: grid; grid-template-columns: minmax(0, 1fr) 14rem; gap: .75rem; align-items: center;
@@ -655,3 +661,15 @@ table.levels th { white-space: nowrap; }
 .cc-filter button[aria-pressed="true"] { background: var(--link); color: var(--bg); }
 .cc-filter select { font: inherit; font-size: .9rem; padding: .2rem .4rem; min-height: 2rem; max-width: 100%; }
 .cc-count { margin: 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; flex-basis: 100%; }
+
+/* Q1: two treatments applied together, one card per thing the claims say */
+.ix-sec { margin: 2rem 0 1.5rem; }
+.ix-intro { max-width: 46rem; }
+.ixcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 1rem; margin-top: .75rem; }
+.ixc { border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; background: var(--bg); min-width: 0; }
+.ixc h3 { margin: 0 0 .25rem; font-size: 1.05rem; line-height: 1.35; }
+.ixk { margin: 0 0 .5rem; color: var(--muted); font-size: .9rem; }
+.ixl { list-style: none; margin: 0; padding: 0; }
+.ixq { margin: 0; padding: .6rem 0; border-top: 1px solid var(--line); max-width: none; }
+.ixq .cq { margin: .4rem 0 0; }
+.ixg { margin: .5rem 0 0; }

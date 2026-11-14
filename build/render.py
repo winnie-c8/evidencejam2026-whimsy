@@ -200,8 +200,8 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
 # from the glance table or gap map) opens it. Without script it is just one click away.
 OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
                   'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
-                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details");'
-                  'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover()}catch(x){}}'
+                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details:not(.raw)");'
+                  'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover();setTimeout(function(){pp.scrollTop=0},50)}catch(x){}}'
                   'else e.scrollIntoView();}addEventListener("hashchange",openTarget);openTarget();</script>')
 
 
@@ -594,8 +594,7 @@ def card_name(f: Finding, subject: bool) -> str:
 
 def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
                  tag: str = '', level: int = 3, extra: str = '', links: str = '',
-                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False,
-                 track: bool = False) -> str:
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False) -> str:
     """One finding. Closed it is one line: direction, name, certainty, study split, Details.
     Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
     base = '%s/%s' % (f.question, f.slug)
@@ -609,10 +608,8 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
                '<span class="fcert"><span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
                '<span class="fsplit">%s %s</span></span>'
                % (chip(f.direction, base + '/direction'), level, card_name(f, subject), tag, level,
-                  0 if track else CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
+                  CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
                   split_bar(f), split_short(f, base)))
-    if track:
-        summary = summary.replace('<span class="bars b0" aria-hidden="true"></span> ', '')
     # panel 1: why that certainty, as a checklist; the exact rule text one click further
     raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
     score = rationale_score(f.certainty_rationale)
@@ -639,14 +636,6 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
            % (esc(cw), '' if compact else HELP_BTN,
               '<ul class="checks" data-rule></ul>' if compact else (('<ul class="checks">%s</ul>' % items) if items else ''),
               raw))
-    lt = level_track(f.certainty_rationale) if track else ''
-    if lt:
-        # Q1: a one-line explanation, then the steps on the four levels (a dot per step)
-        why = ('<section class="panel why-track"><h5>Certainty measurement: %s%s</h5><p class="why-intro">Certainty is how much '
-               'you can trust this result. It starts at the level of the best kind of study, then moves up or down '
-               'one level for each check below.</p>%s'
-               '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
-               % (esc(cw), LEVELS_BTN, lt, raw))
     # panel 2: sources, quotes first
     finding_sources(sources, f, f.question)  # writes sources-<slug>.html
     groups = paper_groups(f.quotes)
@@ -659,7 +648,34 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
     return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"%s><summary>%s</summary>'
             '<div class="panels">%s%s%s</div>%s</details></article>'
-            % ((' fref' if f.reference else '') + (' track' if lt else ''), esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
+            % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), ' open' if open_ else '', summary, why, src, pw, more))
+
+
+def effect_popup(data: SiteData, f: Finding, sources: List[SourcePage], graph_href: str) -> str:
+    """Q1 popup, one column, top to bottom: what was found (direction + study split), the
+    certainty measurement (the only place certainty is explained), what the studies say (quotes),
+    and one link to the graph for how this factor connects to others."""
+    base = '%s/%s' % (f.question, f.slug)
+    raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
+    cert = ('<section class="ep-sec"><h4>Certainty measurement: %s%s</h4><p class="why-intro">Certainty is how '
+            'much you can trust this result. It starts at the level of the best kind of study, then moves up or '
+            'down one level for each check below.</p>%s'
+            '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
+            % (span(base + '/certainty', CERT_WORD[f.certainty]), LEVELS_BTN, level_track(f.certainty_rationale), raw))
+    finding_sources(sources, f, f.question)  # writes sources-<slug>.html
+    groups = paper_groups(f.quotes)
+    quotes = ''.join(card_quote(qs[0]) for qs in groups[:QUOTES_IN_CARD])
+    all_link = ('<a class="srclink" href="sources-%s.html">All %d %s, %s %s →</a>'
+                % (esc(f.slug), len(groups), plural(len(groups), 'paper', 'papers'),
+                   span(base + '/claims', f.claims), plural(f.claims, 'quote', 'quotes')))
+    src = ('<section class="ep-sec"><h4>What the studies say</h4>%s<p class="go">%s</p></section>'
+           % (quotes, all_link))
+    graph = ('<p class="ep-graph"><a href="%s">How %s connects to other factors: see the graph →</a></p>'
+             % (graph_href, esc(_lower_first(f.subject_label)))) if graph_href else ''
+    return ('<article class="fcard epop fdir-%s" id="f-%s"><header class="ep-head"><h3>%s</h3>'
+            '<p class="ep-res">%s <span class="fsplit">%s %s</span></p></header>%s%s%s</article>'
+            % (esc(f.direction.replace('_', '-')), esc(f.slug), card_name(f, True),
+               chip(f.direction, base + '/direction'), split_bar(f), split_short(f, base), cert, src, graph))
 
 
 CHART_KEY = [('increase', 'Increases'), ('decrease', 'Decreases'), ('mixed', 'Mixed: the studies disagree'),
@@ -1019,15 +1035,15 @@ def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[Sour
     """EFFECTS layout (Q1 today). Main view: the certainty chart (each row opens its finding's card
     in a popup), combined treatments, graph link."""
     def popup(f: Finding) -> str:
-        graph = ''
+        href = ''
         if f.slug in data.graph_join:
-            graph = ('<a href="%s#e-%s">On the graph<span class="sr-only">: %s</span></a>'
-                     % (graph_file(q.qid), esc(slug(data.graph_join[f.slug])), esc(f.label)))
+            href = '%s#e-%s' % (graph_file(q.qid), esc(slug(data.graph_join[f.slug])))
+        elif q.qid in data.graphs:
+            href = graph_file(q.qid)
         return ('<div popover id="pop-%s" class="pop fpop" role="dialog" aria-label="%s">'
                 '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
                 '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
-                % (esc(f.slug), esc(f.label), esc(f.slug),
-                   finding_card(data, f, sources, level=3, links=graph, open_=True, track=True)))
+                % (esc(f.slug), esc(f.label), esc(f.slug), effect_popup(data, f, sources, href)))
 
     main = certainty_chart(q, {f.slug: popup(f) for f in by_strength(q.findings)}) + LEVELS_POPOVER
     main += interactions_section(data, q)
@@ -1035,45 +1051,52 @@ def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[Sour
         main += '<p class="graph-link"><a href="%s">See this answer as a graph →</a></p>' % graph_file(q.qid)
     jumps = [('#glance', 'Certainty chart')]
     if q.extra.get('interactions'):
-        jumps.append(('#ix-h', 'Combined treatments'))
+        jumps.append(('#ix-h', 'Two treatments together'))
     return question_page(data, prose, q, main, jumps=jumps)
 
 
 def interactions_section(data: SiteData, q: Question) -> str:
+    """Claims about two treatments at once, grouped by what they say (as the graph draws them):
+    applied together, one changing another's effect, or set aside. Each claim keeps its own
+    direction and quote, word for word; none is pooled into a bar."""
     inter = q.extra.get('interactions') or []
     if not inter:
         return ''
     g = data.graphs.get(q.qid)
-    rows = []
+    groups: Dict[str, Dict[str, Any]] = {}
     for i, it in enumerate(inter):
         eid = it['edge_id']
-        quote = q.evidence[eid]
-        shown = 'Not drawn on the graph.'
+        key, title, kind, href = 'other', 'Not drawn on the graph', '', ''
         if g is not None:
-            aside = [s for s in g.set_aside if s.get('edge_id') == eid]
+            aside = [x for x in g.set_aside if x.get('edge_id') == eid]
             if aside:
-                shown = 'Set aside, not drawn: %s.' % esc(aside[0].get('why', ''))
+                key, title = 'aside', 'Not drawn on the graph'
+                kind = 'Set aside: %s.' % (aside[0].get('why', '') or 'see the graph page')
             else:
                 for e in g.edges:
                     if eid in (e.get('edge_ids') or ()):
-                        src = g.node(e['source'])
+                        key, title, href = e['id'], edge_title(g, e), '%s#e-%s' % (graph_file(q.qid), slug(e['id']))
                         if e.get('kind') == 'moderation':
-                            kind = 'a moderation edge (an arrow pointing at another arrow)'
-                        elif src.get('kind') == 'combination':
-                            kind = 'a combination node (two treatments applied together)'
-                        else:
-                            kind = 'an edge'
-                        shown = 'Shown as %s: <a href="%s#e-%s">%s</a>.' % (
-                            kind, graph_file(q.qid), esc(slug(e['id'])), esc(edge_title(g, e)))
+                            kind = 'One treatment changing the effect of another'
+                        elif g.node(e['source']).get('kind') == 'combination':
+                            kind = 'Both treatments applied together'
                         break
-        rows.append('<tr id="ix-%d"><td>%s</td><td>%s</td><td>%s</td></tr>' % (
-            i + 1, evidence_box(quote, 1, 'ev-ix-%d' % (i + 1), q.qid, open_=True),
-            direction_badge(it['direction'], '%s/interactions/%d/direction' % (q.qid, i)), shown))
-    return fold('ix-h', 'Combined treatments', 2, '%d %s' % (len(rows), plural(len(rows), 'claim', 'claims')),
-                '<p>These claims are about two treatments together, or one treatment changing another\'s '
-                'effect. They are listed one by one, not pooled into the findings above.</p>%s'
-                % table('Claims about combined treatments', ['Claim', 'Direction', 'Shown on the graph as'],
-                        ''.join(rows), 'interactions'))
+        grp = groups.setdefault(key, {'title': title, 'kind': kind, 'href': href, 'items': []})
+        grp['items'].append('<li class="ixq" id="ix-%d" data-claim="%s">%s%s</li>'
+                            % (i + 1, esc(eid), chip(it['direction'], '%s/interactions/%d/direction' % (q.qid, i)),
+                               card_quote(q.evidence[eid])))
+    cards = []
+    for grp in groups.values():
+        n = len(grp['items'])
+        cards.append('<article class="ixc"><h3>%s</h3><p class="ixk">%s%s%d %s</p><ul class="ixl">%s</ul>%s</article>'
+                     % (esc(grp['title']), esc(grp['kind']), ' · ' if grp['kind'] else '', n,
+                        plural(n, 'claim', 'claims'), ''.join(grp['items']),
+                        ('<p class="ixg"><a href="%s">See it on the graph →</a></p>' % esc(grp['href']))
+                        if grp['href'] else ''))
+    return ('<section class="ix-sec" aria-labelledby="ix-h"><h2 id="ix-h">Two treatments applied together</h2>'
+            '<p class="ix-intro">These results come from applying two treatments at once, or from one treatment '
+            'changing another\'s effect. They are not part of any single bar above. Each claim is shown with its '
+            'own quote.</p><div class="ixcards">%s</div></section>' % ''.join(cards))
 
 
 # --------------------------------------------------------------- Q2 timeline
