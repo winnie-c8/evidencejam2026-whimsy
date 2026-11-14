@@ -130,6 +130,8 @@ def slug(s: str) -> str:
 def word_to_code(text: str) -> str:
     t = norm(text).lower()
     t = re.sub(r'\s*certainty$', '', t)
+    # plain words for the reference directions (Q2 chart), each meaning exactly one pack value
+    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference'}.get(t, t)
     return t.replace(' ', '_')
 
 
@@ -222,8 +224,8 @@ class Checker:
     def check_every_value(self, name: str, root: Node, prefix: str, items: List[dict],
                           interactions: Optional[List[dict]] = None) -> None:
         """Every number/grade shown ANYWHERE on the page (summary lists, tables, graph
-        labels) equals the pack: direction, certainty, studies, claims and the
-        per-direction study splits (study_directions/<dir>)."""
+        labels) equals the pack: direction, certainty, studies, claims, the
+        per-direction study splits (study_directions/<dir>) and time points."""
         by_slug = {slug(i['id']).split('--', 1)[-1] if prefix != 'q1graph' else slug(i['id']): i for i in items}
         by_slug.update({slug(i['id']): i for i in items})
         for n in root.iter():
@@ -242,6 +244,15 @@ class Checker:
                 item, field = by_slug.get(parts[1]), parts[2]
             elif len(parts) == 4 and parts[2] == 'study_directions':
                 item, field, split = by_slug.get(parts[1]), 'study_directions', parts[3]
+            elif len(parts) == 4 and parts[2] == 'time_points' and parts[3].isdigit():
+                # a marsh age shown anywhere (card, Q2 chart table) must be the pack's exact text
+                item = by_slug.get(parts[1])
+                if self.ok(item is not None, f'{name}: data-check "{dc}" refers to nothing in the pack'):
+                    tps = item.get('time_points') or []
+                    i = int(parts[3])
+                    want = norm(str(tps[i])) if i < len(tps) else None
+                    self.ok(norm(n.text()) == want, f'{name}: "{dc}" shows "{n.text()}", pack says "{want}"')
+                continue
             else:
                 continue
             if not self.ok(item is not None, f'{name}: data-check "{dc}" refers to nothing in the pack'):
