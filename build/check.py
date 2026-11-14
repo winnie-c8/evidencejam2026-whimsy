@@ -274,9 +274,11 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
             for gp in g.gaps:
                 if 'e-' + slug(gp['id']) not in p.ids:
                     problems.append('q1-graph.html: no gap panel id="e-%s"' % slug(gp['id']))
-            if p.ev_boxes != len(g.evidence):
-                problems.append('q1-graph.html: %d evidence boxes, graph evidence has %d'
-                                % (p.ev_boxes, len(g.evidence)))
+            # each arrow's quotes are on its own page, sources-e-<slug>.html
+            boxes = sum(sp.ev_boxes for n, sp in pages.items() if n.startswith('sources-e-'))
+            if boxes != len(g.evidence):
+                problems.append('graph source pages (sources-e-*.html): %d evidence boxes, graph evidence has %d'
+                                % (boxes, len(g.evidence)))
 
     # 5. Q3 cells
     q3 = data.questions.get('q3')

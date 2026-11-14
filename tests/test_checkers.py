@@ -117,11 +117,11 @@ MUTATIONS = [
      r'<tr id="f-q1--seedling-size--growth".*?</tr>', '', 1),
     ('certainty rationale removed', 'q2.html',
      r'(<details class="cert[^"]*"><summary>.*?</summary>)<p>.*?</p>', r'\1', 1),
-    ('source quote altered', 'q2.html',
+    ('source quote altered', 'sources-q2--created-marsh--abundance-density.html',
      r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
-    ('DOI link removed', 'q3.html',
+    ('DOI link removed', 'sources-q3--seeding--invasive-abundance.html',
      r'href="https://doi\.org/[^"]+"', 'href="#"', 1),
-    ('source detached from its finding', 'q1.html',
+    ('source detached from its finding', 'sources-q1--site-preparation--survival.html',
      r'<details class="ev" data-claim="camo:edge_0ec39c79a398".*?</dl></details>', '', 1),
     ('gap worded as a failure', 'q3.html',
      r'<strong>Not studied:</strong>', '<strong>Ineffective:</strong>', 1),
@@ -173,6 +173,17 @@ MUTATIONS = [
     ('form posting to an external site', 'index.html',
      r'</main>', '<form action="https://forms.example.com/x"></form></main>', 1),
     ('page in a subfolder loads an external script', 'extra/page.html', None, SUBFOLDER_PAGE, 0),
+    # source pages (quotes moved off the answer pages to keep them light)
+    ('finding no longer links to its source page', 'q3.html',
+     r'<a class="srclink" href="sources-q3--seeding--invasive-abundance\.html">', '<a class="srclink" href="#">', 1),
+    ('finding links to another finding\'s source page', 'q1.html',
+     r'href="sources-q1--site-preparation--survival\.html"', 'href="sources-q1--site-preparation--growth.html"', 1),
+    ('graph arrow no longer links to its source page', 'q1-graph.html',
+     r'href="sources-e-site-preparation--to--growth\.html"', 'href="#"', 1),
+    ('source quote altered on a graph source page', 'sources-e-vegetation-control--to--growth.html',
+     r'(<blockquote class="quote">)[^<]+', r'\1A sentence no paper wrote.', 1),
+    ('source page loads an external script', 'sources-q2--created-marsh--abundance-density.html',
+     r'</head>', '<script src="https://cdn.example.com/lib.js"></script></head>', 1),
 ]
 
 

@@ -295,8 +295,10 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
 
     def label_svg(key: str, parts: List[str], cls: str = 'lbl') -> str:
         l = labels[key]
-        texts = ''.join('<text x="%s" y="%s" text-anchor="middle">%s</text>'
-                        % (f1(l['x'] + l['w'] / 2), f1(l['y'] + 14 + i * 14), p) for i, p in enumerate(parts))
+        # a space ends every line but the last, so the lines read as words, not "1changes"
+        texts = ''.join('<text x="%s" y="%s" text-anchor="middle">%s%s</text>'
+                        % (f1(l['x'] + l['w'] / 2), f1(l['y'] + 14 + i * 14), p,
+                           ' ' if i < len(parts) - 1 else '') for i, p in enumerate(parts))
         return ('<g class="%s"><rect x="%s" y="%s" width="%s" height="%s" rx="4"/>%s</g>'
                 % (cls, f1(l['x']), f1(l['y']), f1(l['w']), f1(l['h']), texts))
 
@@ -330,6 +332,12 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
             aria = '%s to %s: %s, %s certainty, %s. Opens evidence.' % (
                 name(e['source']), name(e['target']), WORD[e['direction']], CERT[e['certainty']].lower(), studies)
             cls = 'edge d-%s c-%s' % (e['direction'], e['certainty'])
+        # The accessible name starts with the label's visible words (WCAG 2.5.3 "label in name"),
+        # so someone using voice control can say what they see.
+        visible = '%s · %d' % (CERT[e['certainty']], n)
+        if e.get('kind') == 'moderation':
+            visible += ' changes this effect'
+        aria = '%s. %s' % (visible, aria)
         out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s">' % (es, cls, es, esc(aria)))
         out.append('<path class="hit" d="%s"/>' % d)
         if e.get('kind') == 'moderation':

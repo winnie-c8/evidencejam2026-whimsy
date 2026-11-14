@@ -12,7 +12,8 @@ Exit code 0 = PASS, 1 = at least one problem.
 
 Page contract it relies on (from the MVP renderer):
   id="f-<slug>"    one element per finding/trend, containing its direction,
-                   certainty, studies (data-check spans), rationale and sources
+                   certainty, studies (data-check spans), rationale, and its sources or a
+                   link to sources-<slug>.html, the page that holds its quotes
   id="gap-<slug>"  one element per gap
   id="edge-<slug>" one SVG <a> per graph edge; id="e-<slug>" its evidence section
   data-claim="<edge id>" on each source; data-check="<...>/direction|certainty|studies"
@@ -134,6 +135,9 @@ CSS_EXTERNAL = re.compile(r'url\(\s*["\']?\s*(?:https?:)?//|@import\s+(?:url\()?
 
 # ------------------------------------------------------------------ checker
 
+SOURCES_PAGE = re.compile(r'^sources-[a-z0-9-]+\.html$')
+
+
 class Checker:
     def __init__(self, site: str, answers: str) -> None:
         self.site, self.answers = site, answers
@@ -235,11 +239,21 @@ class Checker:
             self.ok(str(got) == str(want), f'{name}: "{dc}" shows "{shown}", pack says "{want}"')
 
     def check_claims(self, where: str, el: Node, edge_ids: List[str], evidence: dict) -> None:
+        """Each source must be shown with its finding: inside its block, or on the
+        sources-*.html page that the block links to (one click away)."""
         claims: Dict[str, List[Node]] = {}
-        for n in el.iter():
-            c = n.attrs.get('data-claim')
-            if c:
-                claims.setdefault(c, []).append(n)
+        roots = [el]
+        for a in el.iter():
+            href = a.attrs.get('href', '') if a.tag == 'a' else ''
+            if SOURCES_PAGE.match(href):
+                linked = self.page(href)
+                if self.ok(linked is not None, f'{where}: links to missing source page {href}'):
+                    roots.append(linked)
+        for root in roots:
+            for n in root.iter():
+                c = n.attrs.get('data-claim')
+                if c:
+                    claims.setdefault(c, []).append(n)
         for eid in edge_ids:
             if not self.ok(eid in claims, f'{where}: source {eid} not shown with this finding'):
                 continue
