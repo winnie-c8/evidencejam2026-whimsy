@@ -885,7 +885,7 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         dense.append('<li><a href="#%s">%s</a>: %s · %s · %s</li>' % (
             q3_cell_id(f.subject_id, f.outcome_id), esc(f.subject_label + ' × ' + f.outcome_label), d,
             span('q3/%s/certainty' % f.slug, certainty_text(f.certainty)), n))
-    body += ('<h2>Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
+    body += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
              'order.</p><ol class="densest">%s</ol>' % ''.join(dense))
 
     body += '<h2>Every combination</h2>'

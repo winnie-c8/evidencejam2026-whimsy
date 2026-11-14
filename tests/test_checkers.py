@@ -136,7 +136,7 @@ MUTATIONS = [
     ('external stylesheet added', 'q2.html',
      r'</head>', '<link rel="stylesheet" href="//fonts.example.com/a.css"></head>', 1),
     ('index no longer links to Q3', 'index.html',
-     r'href="q3\.html"', 'href="#"', 0),
+     r'href="q3\.html[^"]*"', 'href="#"', 0),
     ('graph node label removed from SVG text', 'q1-graph.html',
      r'(<tspan[^>]*>)Site preparation(</tspan>)', r'\1\2', 1),
     ('arrow label removed (certainty only on hover)', 'q1-graph.html',
@@ -191,6 +191,17 @@ MUTATIONS = [
      r'(<div class="sources">)', r'<p>Created marshes recover in 10 years.</p>\1', 1),
     ('Q3 row drops what was searched for', 'q3.html',
      r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
+    # 2.8 short answers built from the data
+    ('short answer says "decreases" for an increase', 'q1.html',
+     r'(<span data-group="increase/high">.*?) increase it</span>', r'\1 decrease it</span>', 1),
+    ('short answer certainty word changed', 'index.html',
+     r'(<span data-cert="high">with )high certainty', r'\1moderate certainty', 1),
+    ('short answer lists a finding under the wrong group', 'q1.html',
+     r'(<span data-group="decrease/high"><a href=")[^"]+', r'\1q1.html#f-q1--site-preparation--growth', 1),
+    ('short answer links to a missing finding', 'index.html',
+     r'(<span data-group="increase/high"><a href=")[^"]+', r'\1q1.html#f-q1--nothing', 1),
+    ('Q3 short answer study count changed', 'q3.html',
+     r'(<p class="short">.*?\(<span data-check="q3/[^"]+/studies">)\d+', r'\g<1>99', 1),
 ]
 
 
