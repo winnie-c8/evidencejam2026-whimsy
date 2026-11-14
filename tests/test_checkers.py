@@ -30,12 +30,23 @@ SITE: str = ''
 TMP: str = ''
 
 
+# SITE_DIR=site/  reuse an existing build (CI builds once, then runs these tests on it)
+# COMPARE_BUILTIN=1  also run build/check.py on every mutation and print a comparison table
+#                    (informational and slower: one extra process per mutation)
+COMPARE_BUILTIN = os.environ.get('COMPARE_BUILTIN') == '1'
+
+
 def setUpModule() -> None:
     global SITE, TMP
     TMP = tempfile.mkdtemp(prefix='site-test-')
+    if os.environ.get('SITE_DIR'):
+        SITE = os.path.abspath(os.environ['SITE_DIR'])
+        if not os.path.isfile(os.path.join(SITE, 'index.html')):
+            raise RuntimeError('SITE_DIR=%s has no index.html; build it first' % SITE)
+        return
     SITE = os.path.join(TMP, 'site')
     env = {k: v for k, v in os.environ.items() if not k.startswith('BRINE_')}
-    r = subprocess.run(['bash', os.path.join(ROOT, 'build.sh'), SITE], cwd=ROOT, env=env,
+    r = subprocess.run(['bash', os.path.join(ROOT, 'build.sh'), SITE, '--strict'], cwd=ROOT, env=env,
                        capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError('build failed (exit %d):\n%s\n%s' % (r.returncode, r.stdout, r.stderr))
@@ -46,10 +57,16 @@ def tearDownModule() -> None:
 
 
 def mutated(page: str, pattern: str, repl: str, count: int = 1) -> str:
-    """Copy the built site, apply one regex edit to one page, return the copy's path."""
+    """Copy the built site, apply one regex edit to one page (created if pattern is
+    None), return the copy's path."""
     dst = tempfile.mkdtemp(prefix='mut-', dir=TMP)
     shutil.copytree(SITE, dst, dirs_exist_ok=True)
     path = os.path.join(dst, page)
+    if pattern is None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            fh.write(repl)
+        return dst
     with open(path, encoding='utf-8') as fh:
         html = fh.read()
     new, n = re.subn(pattern, repl, html, count=count, flags=re.S)
@@ -69,6 +86,12 @@ def builtin_fails(site: str) -> bool:
     r = subprocess.run([sys.executable, os.path.join(ROOT, 'build', 'check.py'), site,
                         '--answers', os.path.join(ROOT, 'answers')], capture_output=True, text=True)
     return r.returncode != 0
+
+
+SUBFOLDER_PAGE = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>x</title>'
+                  '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                  '<script src="https://cdn.example.com/lib.js"></script></head>'
+                  '<body><main><h1>x</h1></main></body></html>')
 
 
 class CleanBuild(unittest.TestCase):
@@ -128,6 +151,28 @@ MUTATIONS = [
      r'</main>', '<h1>Another</h1></main>', 1),
     ('lang attribute removed', 'q1.html',
      r'<html lang="en"', '<html', 1),
+    # added after review on #40
+    ('arrow screen-reader name says "very low" for "low"', 'q1-graph.html',
+     r'(id="edge-seedling-size--to--survival" aria-label="[^"]*?): increase, low certainty', r'\1: increase, very low certainty', 1),
+    ('arrow screen-reader name says "1 study" for 11', 'q1-graph.html',
+     r'(id="edge-site-preparation--to--growth" aria-label="[^"]*?)11 studies', r'\g<1>1 study', 1),
+    ('"no evidence" gap arrow removed from the SVG', 'q1-graph.html',
+     r'<a href="#e-nursery-fertilization--to--survival" class="gap-link".*?</a>', '', 1),
+    ('claim count changed', 'q1.html',
+     r'(data-check="q1/q1--site-preparation--survival/claims">)12<', r'\g<1>13<', 1),
+    ('study split (votes) changed', 'q3.html',
+     r'(data-check="q3/[^"/]+/study_directions/increase">)\d+<', r'\g<1>99<', 1),
+    ('Q2 time point removed', 'q2.html',
+     r'(data-check="q2/q2--created-marsh--abundance-density/time_points/0">)[^<]+', r'\1', 1),
+    ('Q2 "how long" answer moved below the findings', 'q2.html',
+     r'(<div class="callout" role="note" aria-label="How long">.*?</div>)(.*?)(</main>)', r'\2\1\3', 1),
+    ('external SVG image via xlink:href', 'q1.html',
+     r'</main>', '<svg><image xlink:href="https://img.example.com/a.png"/></svg></main>', 1),
+    ('external image via inline style', 'q2.html',
+     r'</main>', '<div style="background:url(//img.example.com/a.png)"></div></main>', 1),
+    ('form posting to an external site', 'index.html',
+     r'</main>', '<form action="https://forms.example.com/x"></form></main>', 1),
+    ('page in a subfolder loads an external script', 'extra/page.html', None, SUBFOLDER_PAGE, 0),
 ]
 
 
@@ -137,17 +182,21 @@ class Mutations(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print('\n  mutation                                            independent  build/check.py')
+        if not COMPARE_BUILTIN:
+            return
+        print('\n  mutation                                                independent  build/check.py')
         for name, ind, built in cls.summary:
-            print('  %-52s %-12s %s' % (name, 'caught' if ind else 'MISSED', 'caught' if built else 'missed'))
+            print('  %-56s %-12s %s' % (name, 'caught' if ind else 'MISSED', 'caught' if built else 'missed'))
 
 
 def _make(name, page, pattern, repl, count):
     def test(self):
         site = mutated(page, pattern, repl, count)
         problems = independent(site)
-        Mutations.summary.append((name, bool(problems), builtin_fails(site)))
+        if COMPARE_BUILTIN:
+            Mutations.summary.append((name, bool(problems), builtin_fails(site)))
         self.assertTrue(problems, 'independent checker missed: %s' % name)
+        shutil.rmtree(site, ignore_errors=True)
     test.__doc__ = name
     return test
 

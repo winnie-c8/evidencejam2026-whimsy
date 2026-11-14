@@ -5,7 +5,8 @@
 # What it proves, each time, from a fresh checkout like the judges':
 #   - ./build.sh site/ works with no BRINE_* env vars (no LLM) and with no network
 #   - on regular Linux and on ARM64 (the judges' DGX Spark is aarch64)
-#   - every number, gap, quote and graph rule matches the answer pack (two checkers)
+#   - every number, gap, quote and graph rule matches the answer pack (two checkers;
+#     the offline build is checked too)
 #   - the checkers themselves catch deliberate breakage (mutation tests)
 #   - axe-core: 0 accessibility violations; no sideways scrolling at phone width
 name: check-site
@@ -44,12 +45,15 @@ jobs:
       - name: build.sh is executable
         run: test -x build.sh
 
-      - name: Build (no LLM env vars)
-        run: ./build.sh site/
+      - name: Build (no LLM env vars, --strict so self-check problems fail)
+        run: ./build.sh site/ --strict
 
       - name: Build again with the network switched off
         # The README allows no network at build time except the LLM endpoint.
-        run: sudo env PYTHONDONTWRITEBYTECODE=1 unshare --net -- ./build.sh /tmp/site-offline/
+        run: sudo env PYTHONDONTWRITEBYTECODE=1 unshare --net -- ./build.sh /tmp/site-offline/ --strict
+
+      - name: Offline build output is checked too
+        run: python3 tests/check_independent.py /tmp/site-offline/
 
       - name: Built-in check (build/check.py)
         run: python3 build/check.py site/
@@ -57,8 +61,8 @@ jobs:
       - name: Independent check (tests/check_independent.py)
         run: python3 tests/check_independent.py site/
 
-      - name: Checker tests (mutations)
-        run: python3 -m unittest discover -s tests -v
+      - name: Checker tests (mutations, on the site built above)
+        run: SITE_DIR=site python3 -m unittest discover -s tests -v
 
       - name: Upload built site
         if: matrix.os == 'ubuntu-24.04'

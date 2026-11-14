@@ -11,23 +11,47 @@
 // Exit 0 = PASS, 1 = problems found.
 
 import { spawn } from 'node:child_process';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { join, relative, resolve, sep } from 'node:path';
 import { chromium } from 'playwright';
 import AxeBuilder from '@axe-core/playwright';
 
 const site = resolve(process.argv[2] || '../../site');
-const port = 8000 + Math.floor(Math.random() * 1000);
-const base = `http://127.0.0.1:${port}`;
-const pages = readdirSync(site).filter((f) => f.endsWith('.html')).sort();
 const problems = [];
+
+// Every .html under site/, including subfolders.
+function htmlFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+    const p = join(dir, d.name);
+    if (d.isDirectory()) return htmlFiles(p);
+    return d.name.endsWith('.html') ? [relative(site, p).split(sep).join('/')] : [];
+  });
+}
+const pages = htmlFiles(site).sort();
+
+// Ask the OS for a free port, so we never test some other server that happens to be running.
+const port = await new Promise((res, rej) => {
+  const s = createServer();
+  s.once('error', rej);
+  s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); });
+});
+const base = `http://127.0.0.1:${port}`;
 
 const server = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '-d', site], { stdio: 'ignore' });
 const stop = () => server.kill();
 
 async function waitForServer() {
+  // Up AND serving this site: the served index.html must be byte-identical to ours.
+  const expected = readFileSync(join(site, 'index.html'), 'utf8');
   for (let i = 0; i < 50; i++) {
-    try { if ((await fetch(base + '/index.html')).ok) return; } catch { /* not up yet */ }
+    try {
+      const r = await fetch(base + '/index.html');
+      if (r.ok) {
+        if ((await r.text()) === expected) return;
+        throw new Error(`port ${port} is serving a different site`);
+      }
+    } catch (e) { if (String(e.message).includes('different site')) throw e; }
     await new Promise((r) => setTimeout(r, 100));
   }
   throw new Error('http.server did not start');

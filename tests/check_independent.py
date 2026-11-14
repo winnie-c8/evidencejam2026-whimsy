@@ -114,6 +114,24 @@ def word_to_code(text: str) -> str:
     return t.replace(' ', '_')
 
 
+REQUIRED_FIELDS = ('direction', 'certainty', 'studies', 'claims')
+
+
+def shown_value(field: str, text: str) -> str:
+    """Page text -> pack value. Counts must be the whole text, so "11" never passes for 1."""
+    if field in ('studies', 'claims'):
+        return norm(text).replace(',', '')
+    return word_to_code(text)
+
+
+# Attributes that make the browser fetch something. Only <a href="https://doi.org/...">
+# may point off-site; anything else breaks the offline requirement.
+FETCH_ATTRS = ('src', 'href', 'xlink:href', 'srcset', 'data', 'poster', 'action', 'formaction',
+               'background', 'manifest', 'ping')
+EXTERNAL = re.compile(r'(?:^|[\s,(\'"])(?:https?:)?//', re.I)
+CSS_EXTERNAL = re.compile(r'url\(\s*["\']?\s*(?:https?:)?//|@import\s+(?:url\()?\s*["\']?\s*(?:https?:)?//', re.I)
+
+
 # ------------------------------------------------------------------ checker
 
 class Checker:
@@ -156,38 +174,52 @@ class Checker:
             return json.load(fh)
 
     def check_values(self, where: str, el: Node, item: dict) -> None:
+        """The finding's own block shows all its pooled values, its rationale and time points."""
         found = {}
         for n in el.iter():
             dc = n.attrs.get('data-check', '')
-            for field in ('direction', 'certainty', 'studies'):
+            for field in REQUIRED_FIELDS:
                 if dc.endswith('/' + field) and '/claim/' not in dc and field not in found:
                     found[field] = n.text()
-        for field in ('direction', 'certainty', 'studies'):
+        for field in REQUIRED_FIELDS:
             if not self.ok(field in found, f'{where}: no {field} shown'):
                 continue
             want = item[field]
-            got = found[field].replace(',', '') if field == 'studies' else word_to_code(found[field])
+            got = shown_value(field, found[field])
             self.ok(str(got) == str(want), f'{where}: {field} shows "{found[field]}", pack says "{want}"')
-        rationale = norm(item['certainty_rationale'])
-        self.ok(rationale in el.text(), f'{where}: certainty rationale missing or altered')
+        text = el.text()
+        self.ok(norm(item['certainty_rationale']) in text, f'{where}: certainty rationale missing or altered')
+        # Time points by their own element and exact value (a text search would be fooled
+        # by the same words inside the finding's source quotes).
+        tps = {n.attrs['data-check'].rsplit('/', 1)[-1]: n.text() for n in el.iter()
+               if '/time_points/' in n.attrs.get('data-check', '')}
+        for i, tp in enumerate(item.get('time_points') or []):
+            self.ok(tps.get(str(i)) == norm(str(tp)),
+                    f'{where}: time point {i} should read "{tp}", page shows "{tps.get(str(i), "nothing")}"')
 
     def check_every_value(self, name: str, root: Node, prefix: str, items: List[dict],
                           interactions: Optional[List[dict]] = None) -> None:
-        """Every direction/certainty/studies value shown ANYWHERE on the page (summary
-        lists, tables, graph labels), not just inside each finding's own block."""
+        """Every number/grade shown ANYWHERE on the page (summary lists, tables, graph
+        labels) equals the pack: direction, certainty, studies, claims and the
+        per-direction study splits (study_directions/<dir>)."""
         by_slug = {slug(i['id']).split('--', 1)[-1] if prefix != 'q1graph' else slug(i['id']): i for i in items}
         by_slug.update({slug(i['id']): i for i in items})
         for n in root.iter():
             dc = n.attrs.get('data-check', '')
             parts = dc.split('/')
-            if not dc or parts[0] != prefix or parts[-1] not in ('direction', 'certainty', 'studies'):
+            if not dc or parts[0] != prefix or len(parts) < 3 or parts[1] == 'claim':
                 continue
-            field = parts[-1]
-            if len(parts) == 3:
-                item = by_slug.get(parts[1])
-            elif len(parts) == 4 and parts[1] == 'interactions' and interactions is not None:
+            split = None
+            if parts[1] == 'interactions':
+                if interactions is None or len(parts) != 4 or parts[3] not in REQUIRED_FIELDS:
+                    continue
                 idx = int(parts[2]) if parts[2].isdigit() else -1
                 item = interactions[idx] if 0 <= idx < len(interactions) else None
+                field = parts[3]
+            elif len(parts) == 3 and parts[2] in REQUIRED_FIELDS:
+                item, field = by_slug.get(parts[1]), parts[2]
+            elif len(parts) == 4 and parts[2] == 'study_directions':
+                item, field, split = by_slug.get(parts[1]), 'study_directions', parts[3]
             else:
                 continue
             if not self.ok(item is not None, f'{name}: data-check "{dc}" refers to nothing in the pack'):
@@ -195,8 +227,12 @@ class Checker:
             if field not in item:
                 continue
             shown = n.text()
-            got = shown.replace(',', '') if field == 'studies' else word_to_code(shown)
-            self.ok(str(got) == str(item[field]), f'{name}: "{dc}" shows "{shown}", pack says "{item[field]}"')
+            if split is not None:
+                want = item['study_directions'].get(split, 0)
+                got = shown_value('studies', shown)
+            else:
+                want, got = item[field], shown_value(field, shown)
+            self.ok(str(got) == str(want), f'{name}: "{dc}" shows "{shown}", pack says "{want}"')
 
     def check_claims(self, where: str, el: Node, edge_ids: List[str], evidence: dict) -> None:
         claims: Dict[str, List[Node]] = {}
@@ -216,26 +252,42 @@ class Checker:
                 self.ok(any(h.startswith('https://doi.org/') and h.endswith(doi) for h in hrefs),
                         f'{where}: DOI link for {eid} ({ev["doi"]}) missing')
 
-    def check_gap(self, where: str, el: Optional[Node]) -> None:
+    def check_gap(self, where: str, el: Optional[Node], gap: dict) -> None:
         if not self.ok(el is not None, f'{where}: gap not shown'):
             return
         t = el.text().lower()
         self.ok('not studied' in t or 'no evidence' in t, f'{where}: gap does not say "Not studied"')
+        # Scan only OUR wording: strip the pack's own text (searched_for, labels) first,
+        # so neutral pack wording can never trip the check. Whole words only.
+        ours = t
+        pack_text = [gap.get('searched_for', '')] + [
+            (gap.get(k) or {}).get('label', '') if isinstance(gap.get(k), dict) else str(gap.get(k) or '')
+            for k in ('subject', 'outcome', 'source', 'target')]
+        for s in pack_text:
+            if s:
+                ours = ours.replace(norm(s).lower(), ' ')
         for w in NEGATIVE_WORDS:
-            self.ok(w not in t, f'{where}: gap is worded as a negative result ("{w}")')
+            self.ok(not re.search(r'(?<!\w)' + re.escape(w) + r'(?!\w)', ours),
+                    f'{where}: gap is worded as a negative result ("{w}")')
         for n in el.iter():
             dc = n.attrs.get('data-check', '')
             self.ok(not dc.endswith(('/direction', '/certainty')),
                     f'{where}: gap carries a direction/certainty ({dc}), so it looks like a result')
 
     # sections
+    def html_files(self) -> List[str]:
+        """Every .html under site/, including subfolders, as paths relative to site/."""
+        out = []
+        for dirpath, _, files in os.walk(self.site):
+            for f in files:
+                if f.endswith('.html'):
+                    out.append(os.path.relpath(os.path.join(dirpath, f), self.site).replace(os.sep, '/'))
+        return sorted(out)
+
     def check_pages_basic(self) -> None:
         for name in ['index.html', 'q1.html', 'q1-graph.html', 'q2.html', 'q3.html']:
-            if not self.ok(self.page(name) is not None, f'{name}: missing'):
-                continue
-        for name in sorted(os.listdir(self.site)):
-            if not name.endswith('.html'):
-                continue
+            self.ok(self.page(name) is not None, f'{name}: missing')
+        for name in self.html_files():
             root = self.page(name)
             tags = [n for n in root.iter()]
             html_el = [n for n in tags if n.tag == 'html']
@@ -248,21 +300,24 @@ class Checker:
                     f'{name}: no viewport meta')
             self.ok(not any(n.tag == 'canvas' for n in tags), f'{name}: uses <canvas> (labels must be DOM text)')
             for n in tags:
-                for attr in ('src', 'href', 'srcset', 'data', 'poster'):
+                for attr in FETCH_ATTRS:
                     v = n.attrs.get(attr, '')
-                    if re.match(r'\s*(https?:)?//', v):
-                        allowed = n.tag == 'a' and attr == 'href' and v.startswith('https://doi.org/')
+                    if v and EXTERNAL.search(v):
+                        allowed = (n.tag == 'a' and attr in ('href', 'xlink:href')
+                                   and v.strip().startswith('https://doi.org/'))
                         self.ok(allowed, f'{name}: external {n.tag} {attr}={v} (site must work offline)')
+                self.ok(not CSS_EXTERNAL.search(n.attrs.get('style', '')),
+                        f'{name}: inline style on <{n.tag}> loads an external resource')
+                if n.tag == 'meta' and n.attrs.get('http-equiv', '').lower() == 'refresh':
+                    self.ok(not EXTERNAL.search(n.attrs.get('content', '')), f'{name}: meta refresh to an external URL')
                 if n.tag == 'style':
-                    self.ok(not re.search(r'url\(\s*["\']?(https?:)?//|@import', n.text()),
-                            f'{name}: <style> loads an external resource')
+                    self.ok(not CSS_EXTERNAL.search(n.text()), f'{name}: <style> loads an external resource')
         for dirpath, _, files in os.walk(self.site):
             for f in files:
-                if f.endswith('.css'):
-                    with open(os.path.join(dirpath, f), encoding='utf-8') as fh:
-                        css = fh.read()
-                    self.ok(not re.search(r'url\(\s*["\']?(https?:)?//|@import\s+["\']?(https?:)?//', css),
-                            f'{f}: CSS loads an external resource')
+                if f.endswith(('.css', '.svg')):
+                    with open(os.path.join(dirpath, f), encoding='utf-8', errors='replace') as fh:
+                        body = fh.read()
+                    self.ok(not CSS_EXTERNAL.search(body), f'{f}: loads an external resource')
 
     def check_index(self) -> None:
         root = self.page('index.html')
@@ -294,7 +349,7 @@ class Checker:
         self.ok(sum(i.startswith('f-') for i in ids) == len(items),
                 f'{name}: {sum(i.startswith("f-") for i in ids)} findings shown, pack has {len(items)}')
         for g in data['gaps']:
-            self.check_gap(f'{name} {g["id"]}', ids.get('gap-' + slug(g['id'])))
+            self.check_gap(f'{name} {g["id"]}', ids.get('gap-' + slug(g['id'])), g)
         self.ok(sum(i.startswith('gap-') for i in ids) == len(data['gaps']),
                 f'{name}: {sum(i.startswith("gap-") for i in ids)} gaps shown, pack has {len(data["gaps"])}')
         text = root.text()
@@ -314,12 +369,16 @@ class Checker:
         text = root.text()
         self.ok(sa['time_to_reference'] is None, 'q2 pack: time_to_reference is no longer null; recheck the Q2 page')
         note = norm(sa['time_to_reference_note'])
-        pos_note = text.find(note)
-        self.ok(pos_note >= 0, 'q2.html: "no study says how long" note missing')
-        first = next((n for n in root.iter() if n.attrs.get('id', '').startswith('f-')), None)
-        if pos_note >= 0 and first is not None:
-            pos_first = text.find(first.text()[:60])
-            self.ok(pos_note < pos_first, 'q2.html: the "how long" answer must come before the findings')
+        # Compare ELEMENT order in the document (not text search, which repeated text can fool):
+        # the innermost element holding the note must come before the first finding.
+        order = {id(n): i for i, n in enumerate(root.iter())}
+        holders = [n for n in root.iter() if note in n.text()]
+        innermost = [n for n in holders if not any(c is not n and note in c.text() for c in n.iter())]
+        if self.ok(bool(innermost), 'q2.html: "no study says how long" note missing'):
+            first = next((n for n in root.iter() if n.attrs.get('id', '').startswith('f-')), None)
+            if first is not None:
+                self.ok(order[id(innermost[0])] < order[id(first)],
+                        'q2.html: the "how long" answer must come before the findings')
         for a in sa['lagging_attributes']:
             self.ok(norm(a) in text, f'q2.html: lagging attribute "{a}" missing')
 
@@ -347,14 +406,26 @@ class Checker:
             where = f'{name} {e["id"]}'
             a = svg_ids.get('edge-' + s)
             if self.ok(a is not None, f'{where}: arrow not drawn in the SVG'):
-                visible = a.text()
-                cert = e['certainty'].replace('_', ' ')
-                self.ok(cert in visible.lower(), f'{where}: certainty not visible on the arrow (needs hover?)')
-                self.ok(str(e['studies']) in visible, f'{where}: study count not visible on the arrow')
+                # Visible on the arrow itself (no hover): exact values from the label's
+                # data-check spans, so "Low" can't pass for "Very low" or "1" for "11".
+                shown = {}
+                for n in a.iter():
+                    dc = n.attrs.get('data-check', '')
+                    for field in ('certainty', 'studies'):
+                        if dc.endswith('/' + field) and field not in shown:
+                            shown[field] = n.text()
+                for field in ('certainty', 'studies'):
+                    if self.ok(field in shown, f'{where}: {field} not visible on the arrow (needs hover?)'):
+                        self.ok(str(shown_value(field, shown[field])) == str(e[field]),
+                                f'{where}: arrow shows {field} "{shown[field]}", pack says "{e[field]}"')
                 self.ok('d-' + e['direction'] in a.cls(), f'{where}: arrow not styled with its direction')
-                label = a.attrs.get('aria-label', '').lower()
-                self.ok(e['direction'].replace('_', ' ') in label and cert in label,
-                        f'{where}: arrow has no accessible name with direction and certainty')
+                # Screen-reader name: the exact phrase, anchored by ": " and ", " on each side.
+                label = norm(a.attrs.get('aria-label', '')).lower()
+                n_studies = e['studies']
+                phrase = ': %s, %s certainty, %d %s' % (e['direction'].replace('_', ' '),
+                                                        e['certainty'].replace('_', ' '), n_studies,
+                                                        'study' if n_studies == 1 else 'studies')
+                self.ok(phrase in label, f'{where}: accessible name should contain "{phrase}", got "{label}"')
                 self.ok(a.tag == 'a' and a.attrs.get('href', '').startswith('#'),
                         f'{where}: arrow is not a keyboard-reachable link to its evidence')
             sec = ids.get('e-' + s)
@@ -364,8 +435,13 @@ class Checker:
         self.ok(any(e['kind'] == 'moderation' and ('edge-' + slug(e['id'])) in svg_ids for e in g['edges']),
                 f'{name}: moderation edge not drawn')
         for gap in g['gaps']:
-            self.check_gap(f'{name} {gap["id"]}', ids.get('e-' + slug(gap['id'])))
-            self.ok(any('gap' in ' '.join(n.cls()) for n in svg.iter()), f'{name}: gap not drawn in the SVG')
+            self.check_gap(f'{name} {gap["id"]}', ids.get('e-' + slug(gap['id'])), gap)
+            # The specific gap arrow must be drawn, and named as "no evidence", not a result.
+            ga = svg_ids.get('gapedge-' + slug(gap['id']))
+            if self.ok(ga is not None, f'{name} {gap["id"]}: "no evidence" arrow not drawn in the SVG'):
+                gl = (ga.attrs.get('aria-label', '') + ' ' + ga.text()).lower()
+                self.ok('no evidence' in gl or 'not studied' in gl,
+                        f'{name} {gap["id"]}: gap arrow not labelled "no evidence"')
         for sa in g.get('set_aside', []):
             self.ok(norm(sa['why']) in page_text, f'{name}: set-aside claim {sa["edge_id"]} and its reason missing')
             if sa['edge_id'] in g['evidence']:
