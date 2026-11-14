@@ -37,7 +37,7 @@ Audience: restoration practitioners (non-coders, e.g. conservation authorities, 
 
 ## Code layout
 - `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; template-only, LLM off), `check.py` (built-in checker)
-- `static/style.css`
+- `static/style.css`; `static/graph.js` (Q1 graph only: drag boxes/arrows, pin highlight, filters, sort, side panel with sources; its routing mirrors `route_all` in graph_svg.py, keep them in step). `FLOW` in graph_svg.py switches the graph between top-down ('down', default) and left-to-right ('right')
 - **Add a new question:** drop its JSON in `answers/` and rebuild; the layout is picked from the data's shape (`detect_kind()` in `load.py`: gap map → comparison → effects → generic), and a `qN_..._graph.json` gets its own `qN-graph.html`. Per-question wording (`AUDIENCE`, `GRAPH_INTRO` in `render.py`) falls back to a default.
 - `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + mutation tests: each breaks the site on purpose and must be caught), `tests/a11y/` (axe, phone width, keyboard Tab order and focus outlines; CI only, needs Node)
 - `.github/workflows/check.yml` runs all of this on PRs.

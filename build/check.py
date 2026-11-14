@@ -145,6 +145,9 @@ def _pooled_field(item: Dict[str, Any], rest: List[str]) -> Tuple[str, Any]:
         v = item.get(field)
         if field == 'time_points':
             return 'text', v[int(rest[1])]
+        if field == 'study_directions' and v is not None:
+            # the pack leaves out a direction no study found; the graph shows it as 0 ("↑0 ↓0")
+            return 'int', v.get(rest[1], 0)
         return 'int', v[rest[1]]
     raise Unknown('field %s' % '/'.join(rest))
 

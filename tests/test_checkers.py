@@ -113,7 +113,13 @@ MUTATIONS = [
     ('direction changed', 'q3.html',
      r'(data-check="q3/[^"/]+/direction">)Mixed', r'\1Increase', 1),
     ('study count changed on a graph arrow', 'q1-graph.html',
-     r'(data-check="q1graph/site-preparation--to--growth/studies">)11<', r'\g<1>12<', 0),
+     r'(data-check="q1graph/fertilization-at-planting--to--growth/studies">)7<', r'\g<1>8<', 0),
+    ('split count changed on a mixed graph arrow', 'q1-graph.html',
+     r'(id="edge-site-preparation--to--growth".*?data-check="q1graph/site-preparation--to--growth/'
+     r'study_directions/increase">)5<', r'\g<1>6<', 1),
+    ('mixed graph arrow loses its split counts', 'q1-graph.html',
+     r'(id="edge-competing-vegetation--to--growth".*?<g class="lbl">.*?)<tspan class="split"[^>]*>↓</tspan>'
+     r'<tspan class="n" data-check="[^"]+">\d+</tspan>', r'\1', 1),
     ('finding deleted', 'q1.html',
      r'<article class="fcard[^"]*" id="f-q1--seedling-size--growth".*?</article>', '', 1),
     ('certainty rationale removed', 'q2.html',
@@ -190,6 +196,11 @@ MUTATIONS = [
      r'data-claim="camo:[^"]+"', 'data-claim="camo:edge_3fb326f2a6c3"', 1),
     ('made-up time span on a Q2 source page', 'sources-q2--created-marsh--abundance-density.html',
      r'(<div class="sources">)', r'<p>Created marshes recover in 10 years.</p>\1', 1),
+    # certainty is shown by the line style now (labels show the direction symbol + studies)
+    ('graph arrow drawn with a higher certainty than the pack', 'q1-graph.html',
+     r'(id="edge-seedling-size--to--survival".*?<path class="vis c-)low"', r'\1high"', 1),
+    ('graph arrow line has no certainty style', 'q1-graph.html',
+     r'(id="edge-site-preparation--to--growth".*?<path class="vis) c-high"', r'\1"', 1),
     ('Q3 row drops what was searched for', 'q3.html',
      r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
     # 2.8 short answers built from the data
