@@ -202,7 +202,18 @@ OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.g
                   'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
                   '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details");'
                   'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover()}catch(x){}}'
-                  'else e.scrollIntoView();}addEventListener("hashchange",openTarget);openTarget();</script>')
+                  'only(pp,e);e.scrollIntoView({block:"nearest"});}addEventListener("hashchange",openTarget);openTarget();'
+                  # in a row popup, show just one card (class "only"); "Show all" lifts it
+                  'function only(pp,t){if(!pp||!pp.classList.contains("rowpop"))return;var li=t.closest("li");if(!li)return;'
+                  'pp.querySelectorAll("ul.cells>li").forEach(function(x){x.classList.toggle("on",x===li)});'
+                  'pp.classList.add("only");}'
+                  # a button with data-open="<id>" opens its popup (popovertarget) and then that card in it
+                  'document.addEventListener("click",function(ev){var a=ev.target.closest(".show-all");'
+                  'if(a){a.closest("[popover]").classList.remove("only");return;}'
+                  'var b=ev.target.closest("[data-open]");if(!b)return;'
+                  'setTimeout(function(){var t=document.getElementById(b.getAttribute("data-open"));if(!t)return;'
+                  'var d=t.querySelector("details");if(d)d.open=true;only(t.closest("[popover]"),t);'
+                  't.scrollIntoView({block:"nearest"});},0);});</script>')
 
 
 # "?" button (top right of the Why box and the glance table) opening one popup per page.
@@ -223,6 +234,12 @@ GRADING_POPOVER = (
     '<p class="ex">Example: start 4, −1 studies disagree, +1 shows how it works = <strong>4 High</strong>.</p>'
     '<p><a href="method.html#certainty">Full method →</a> '
     '<button type="button" popovertarget="how-grading" popovertargetaction="hide">Close</button></p></div>')
+
+
+# "Full screen" for a wide map: shows the button only where the browser can do it; Esc exits.
+FULLSCREEN_JS = ('<script>document.querySelectorAll("[data-fs]").forEach(function(b){var el=document.getElementById('
+                 'b.getAttribute("data-fs"));if(!el||!el.requestFullscreen)return;b.hidden=false;'
+                 'b.addEventListener("click",function(){el.requestFullscreen().catch(function(){})});});</script>')
 
 
 def paper_groups(quotes: Iterable[Quote]) -> List[List[Quote]]:
@@ -783,7 +800,8 @@ def render_index(data: SiteData, prose: Prose) -> str:
 
 
 def number_word(n: int) -> str:
-    return {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six'}.get(n, str(n))
+    return {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight',
+            9: 'nine', 10: 'ten'}.get(n, str(n))
 
 
 def short_box(inner: str, sid: str = '') -> str:
@@ -1117,8 +1135,9 @@ OUTCOME_SLOT = '{outcome}'
 
 
 def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """GAPMAP layout (Q3 today). Main view: the gap map (sticky names), the ten most studied, then every studied combination
-    grouped by intervention, closed; a map cell opens its card. Gaps are in the shared Not studied."""
+    """GAPMAP layout (Q3 today). Main view: the gap map (sticky names) and the ten most studied. A filled
+    cell, or a row's "?", opens a popup with that intervention's findings (one popup per row, to keep the
+    page light); a cell opens straight onto its own card. Gaps are in the shared Not studied."""
     grid = data.grids[q.qid]
     qid = q.qid
     s = q.extra['summary']
@@ -1130,27 +1149,47 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
             'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
             '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
             '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
-            'dense</dt><dd>4 or more studies</dd></div></dl>'
-            '<p class="note">Each filled cell shows its number of studies and density word. Study counts '
-            'measure research effort, not effect size. Select a cell to open its finding. Scroll the map '
-            'sideways for more outcomes →</p>' % HELP_BTN)
+            'dense</dt><dd>4 or more studies</dd></div><div><dt><span class="bars b3" aria-hidden="true"></span> '
+            'bars</dt><dd>How sure we can be, 1 to 4 (not how much research)</dd></div></dl>'
+            '<p class="note">Each filled cell shows its number of studies and density word, then its certainty bars. Study counts '
+            'measure research effort, not effect size. Select a filled cell to open its finding. Scroll the map '
+            'sideways for more outcomes, or open it full screen.</p>' % HELP_BTN)
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
-    trs = []
+    trs, pops = [], []
     for rid, rlbl in grid['rows']:
-        tds = []
+        rpop = 'r-%s' % slug(rid)
+        tds, items = [], []
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
             if isinstance(item, Gap):
-                tds.append('<td class="empty" aria-label="Not studied" title="Not studied: %s">–</td>' % esc(item.label))
-            else:
-                dens = item.raw.get('density', '')
-                tds.append('<td class="d-%s"><a href="#%s">%s <span class="sr-only">%s, </span>%s</a></td>'
-                           % (esc(dens), q3_cell_id(rid, cid), span('%s/%s/studies' % (qid, item.slug), item.studies),
-                              esc(plural(item.studies, 'study', 'studies')), esc(dens)))
-        trs.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(rlbl), ''.join(tds)))
-    main += ('<div class="grid-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
+                tds.append('<td class="empty" aria-label="Not studied">–</td>')  # 261 of these: kept minimal
+                continue
+            dens = item.raw.get('density', '')
+            # a cell is a button: it opens its intervention's popup, on this combination's card
+            tds.append('<td class="d-%s"><button popovertarget="%s" data-open="%s"><span class="cl">%s '
+                       '<span class="sr-only">%s, </span>%s</span><span class="bars b%d" aria-hidden="true"></span>'
+                       '<span class="sr-only">, %s</span></button></td>'
+                       % (esc(dens), rpop, q3_cell_id(rid, cid), span('%s/%s/studies' % (qid, item.slug), item.studies),
+                          esc(plural(item.studies, 'study', 'studies')), esc(dens), CERT_BARS.get(item.certainty, 0),
+                          span('%s/%s/certainty' % (qid, item.slug), certainty_text(item.certainty))))
+            items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
+                data, item, sources, subject=False, level=4, quotes_shown=0, compact=True)))
+        n_f = len(items)
+        # under the name: how many of its combinations were studied (counted from the pack)
+        info = '<small class="rinfo">%d studied · %d not studied</small>' % (n_f, len(grid['cols']) - n_f)
+        trs.append('<tr><th scope="row"><span class="rname">%s</span>%s</th>%s</tr>' % (esc(rlbl), info, ''.join(tds)))
+        pops.append('<div popover id="%s" class="pop fpop rowpop" role="dialog" aria-label="%s">'
+                    '<button type="button" class="pop-x" popovertarget="%s" popovertargetaction="hide">'
+                    '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>'
+                    '<p class="pop-h">%s</p><p class="cnt">%d studied, %d not studied (listed under Not studied)</p>'
+                    '<ul class="cells">%s</ul><button type="button" class="show-all">Show all %d for %s</button></div>'
+                    % (rpop, esc(rlbl), rpop, esc(rlbl), n_f, len(grid['cols']) - n_f, ''.join(items), n_f, esc(rlbl)))
+    main += ('<p class="fs-row"><button type="button" class="fs-btn" data-fs="gapmap-wrap" hidden>'
+             '<span aria-hidden="true">⤢</span> Full screen</button></p>'
+             '<div class="grid-wrap" id="gapmap-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
              '<caption>Interventions (rows) by outcomes (columns): number of studies in each '
-             'combination</caption><thead><tr><td></td>%s</tr></thead><tbody>%s</tbody></table></div>'
+             'combination. Select a filled cell for its details.</caption><thead><tr><td></td>%s'
+             '</tr></thead><tbody>%s</tbody></table></div>'
              % (head, ''.join(trs)))
     by_id = {f.id: f for f in q.findings}
     dense = []
@@ -1160,23 +1199,16 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
         dense.append('<li><a href="#%s">%s</a>: %s · %s · %s</li>' % (
             q3_cell_id(f.subject_id, f.outcome_id), esc(f.subject_label + ' × ' + f.outcome_label), d,
             span('%s/%s/certainty' % (qid, f.slug), certainty_text(f.certainty)), n))
-    main += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
-             'order.</p><ol class="densest">%s</ol>' % ''.join(dense))
-    main += '<h2 id="every">Every studied combination</h2>'
-    for rid, rlbl in grid['rows']:
-        items = []
-        for cid, clbl in grid['cols']:
-            item = grid['cells'][(rid, cid)]
-            if isinstance(item, Gap):
-                continue
-            dens = '<p class="density">Evidence: <strong>%s</strong></p>' % esc(item.raw.get('density', ''))
-            items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
-                data, item, sources, subject=False, level=4, extra=dens, quotes_shown=0, compact=True)))
-        if items:
-            main += fold('r-%s' % slug(rid), esc(rlbl), 3, '%d studied' % len(items),
-                         '<ul class="cells">%s</ul>' % ''.join(items))
-    jumps = [('#map', 'Gap map'), ('#densest', 'Most studied'), ('#every', 'Every studied combination')]
-    return question_page(data, prose, q, main, jumps=jumps, short=short, scripts=CHECKS_JS)
+    # the top 3 show; the rest are one click away
+    more = ''
+    if len(dense) > 3:
+        more = ('<details class="more-densest"><summary>Show %d more</summary><ol class="densest" start="4">%s</ol></details>'
+                % (len(dense) - 3, ''.join(dense[3:])))
+    main += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s %s most-studied combinations, in its '
+             'order.</p><ol class="densest">%s</ol>%s' % (number_word(len(dense)), ''.join(dense[:3]), more))
+    main += ''.join(pops)
+    jumps = [('#map', 'Gap map'), ('#densest', 'Most studied')]
+    return question_page(data, prose, q, main, jumps=jumps, short=short, scripts=CHECKS_JS + FULLSCREEN_JS)
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:

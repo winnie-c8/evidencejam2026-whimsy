@@ -576,3 +576,45 @@ details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0
 .pop-x { position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border-radius: 50%;
   border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .pop-x:hover { background: var(--panel); }
+
+/* Q3 gap map: cells are buttons (no underline), more room, a "?" per row; details in popups */
+table.gapmap { font-size: .95rem; }
+table.gapmap th[scope="col"] { min-width: 7.5rem; padding: .6rem .5rem; }
+table.gapmap th[scope="row"] { min-width: 14rem; padding: .7rem .75rem; }
+table.gapmap td { padding: 0; }
+table.gapmap td.empty { padding: .7rem .5rem; }
+table.gapmap td button { display: block; width: 100%; min-height: 3rem; padding: .6rem .5rem; border: 0; background: transparent;
+  font: inherit; color: var(--text); cursor: pointer; text-align: center; }
+table.gapmap td.d-dense button { color: var(--d-dense-link, #08306b); font-weight: 600; }
+table.gapmap td button:hover { outline: 2px solid var(--link); outline-offset: -2px; }
+table.gapmap td button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+table.gapmap th[scope="row"] .rname { display: block; }
+table.gapmap th[scope="row"] .rinfo { display: block; margin-top: .2rem; font-size: .8rem; font-weight: 400; color: var(--muted); }
+table.gapmap td button .cl { text-decoration: underline; text-underline-offset: 3px; }  /* number + word: clickable */
+table.gapmap td button .bars { display: block; margin: .35rem auto 0; width: 3.3rem; height: .55rem; }
+table.gapmap td button .bars.b1 { --fill: .72rem; } table.gapmap td button .bars.b2 { --fill: 1.55rem; }
+table.gapmap td button .bars.b3 { --fill: 2.38rem; } table.gapmap td button .bars.b4 { --fill: 3.3rem; }
+table.gapmap td button .bars { background: repeating-linear-gradient(90deg, transparent 0 .72rem, var(--bg) .72rem .83rem),
+  linear-gradient(90deg, var(--c) 0 var(--fill), transparent var(--fill)); }
+.rowpop.only ul.cells > li:not(.on) { display: none; }
+.rowpop.only .cnt { display: none; }
+.rowpop:not(.only) .show-all { display: none; }
+.show-all { margin-top: .75rem; border: 1px solid var(--link); color: var(--link); background: var(--bg); border-radius: 999px;
+  padding: .3rem .9rem; font: inherit; cursor: pointer; }
+.show-all:hover { background: var(--link); color: var(--bg); }
+.fs-row { margin: .5rem 0; }
+.fs-btn { border: 1px solid var(--link); color: var(--link); background: var(--bg); border-radius: 999px;
+  padding: .3rem .9rem; font: inherit; cursor: pointer; }
+.fs-btn:hover { background: var(--link); color: var(--bg); }
+/* full screen: the map fills the screen and its columns tighten so most of it fits */
+.grid-wrap:fullscreen { max-height: none; background: var(--bg); padding: 1rem; overflow: auto; }
+.grid-wrap:fullscreen table.gapmap { font-size: .85rem; }
+.grid-wrap:fullscreen table.gapmap th[scope="col"] { min-width: 0; padding: .4rem .3rem; }
+.grid-wrap:fullscreen table.gapmap th[scope="row"] { min-width: 11rem; }
+.grid-wrap:fullscreen table.gapmap td button { min-height: 2.4rem; padding: .4rem .2rem; }
+.rowpop .pop-h { font-size: 1.2rem; font-weight: 700; margin: 0 0 .25rem; }
+.rowpop ul.cells { list-style: none; padding: 0; margin: .5rem 0 0; }
+.rowpop ul.cells > li { margin: .4rem 0; }
+.rowpop ul.cells > li:target .fcard { box-shadow: 0 0 0 3px var(--focus); }
+ol.densest { margin-bottom: .2rem; }
+details.more-densest > summary { cursor: pointer; color: var(--link); margin: 0 0 .5rem; }
