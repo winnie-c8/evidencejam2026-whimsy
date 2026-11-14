@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import datetime
 import html
+import json
 import os
+import re
 import shutil
 import sys
 from string import Template
@@ -132,12 +134,19 @@ def evidence_box(q: Quote, n: int, id_prefix: str, check_prefix: str, open_: boo
                % (esc(q.doi), esc(q.title), year, esc(q.doi)))
     else:
         src = '%s, %s. <small class="doi">(no DOI in pack)</small>' % (esc(q.title), year)
-    pred_pos, pred_neg = PREDICATE.get(q.predicate, (words(q.predicate), 'not ' + words(q.predicate)))
+    tested = ', '.join(words(t) for t in q.evidence_types) or 'design not given'
+    comp = COMPARATOR.get(q.comparator or '', words(q.comparator))
+    if comp and q.comparator not in ('not_reported', 'not_applicable'):
+        tested += ', compared with ' + comp
+    elif q.comparator == 'not_reported':
+        tested += ' (no comparison reported)'
+    found = DIR_SYMBOL.get(q.direction, ('', words(q.direction)))
     rows = [
         ('Claim', claim_sentence(q, check_prefix)),
-        ('Relation', esc(('not ' if q.negated else '') + words(q.predicate))),
-        ('Study design', esc(', '.join(words(t) for t in q.evidence_types) or 'not given')),
-        ('Compared with', esc(COMPARATOR.get(q.comparator or '', words(q.comparator) or 'not given'))),
+        ('How they tested it', esc(tested[:1].upper() + tested[1:])),
+        ('This study found', '<span aria-hidden="true">%s</span> %s' % (found[0], esc(found[1]))),
+        ('Study quality', '%s <span class="note">(this claim\'s own grade)</span>'
+         % esc(CERT_WORD.get(q.certainty_grade, words(q.certainty_grade) or 'not given'))),
         ('Ecosystem', esc(words(q.ecosystem_context) or 'not given')),
         ("Authors' wording", esc(CAUSAL_LANGUAGE.get(q.causal_language or '',
                                                      words(q.causal_language) or 'not given'))),
@@ -165,15 +174,68 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
                 'certainty grade (<a href="method.html#certainty">how certainty is graded</a>).</p>')
 
 
+# A link into something closed (paper 5 behind "Show the other papers", or a finding card
+# from the glance table or gap map) opens it. Without script it is just one click away.
+OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
+                  'location.hash.slice(1));var d=e&&(e.closest("details")||e.querySelector("details"));if(d){d.open=true;e.scrollIntoView();}}'
+                  'addEventListener("hashchange",openTarget);openTarget();</script>')
+
+
+# "?" button (top right of the Why box and the glance table) opening one popup per page.
+# Uses the browser's popover attribute: no script, keyboard and Esc work, closes on outside click.
+HELP_BTN = ('<button type="button" class="help" popovertarget="how-grading" aria-label="How grading works">'
+            '?</button>')
+GRADING_POPOVER = (
+    '<div id="how-grading" popover class="pop" role="dialog" aria-labelledby="how-grading-h">'
+    '<h2 id="how-grading-h">How grading works</h2>'
+    '<p>Each finding gets a certainty level from 1 to 4, shown as bars: '
+    '<strong>4</strong> High · <strong>3</strong> Moderate · <strong>2</strong> Low · <strong>1</strong> Very low.</p>'
+    '<ol><li><strong>Start</strong> from the best kind of study behind it: randomized experiments with an untreated '
+    'control start at 4; other controlled studies at 3; observation only at 2; models or case studies at 1.</li>'
+    '<li><strong>−1</strong> if there is only one study, if studies disagree, or if most claims have nothing to '
+    'compare against.</li>'
+    '<li><strong>+1</strong> if three or more studies agree, or if it shows how it works, not just that it works.</li>'
+    '<li>The level stays between 1 and 4, and one study never goes above 3.</li></ol>'
+    '<p class="ex">Example: start 4, −1 studies disagree, +1 shows how it works = <strong>4 High</strong>.</p>'
+    '<p><a href="method.html#certainty">Full method →</a> '
+    '<button type="button" popovertarget="how-grading" popovertargetaction="hide">Close</button></p></div>')
+
+
+def paper_groups(quotes: Iterable[Quote]) -> List[List[Quote]]:
+    """Quotes grouped by paper, in first-seen order (paper k is id="p-k" on the sources page)."""
+    groups: Dict[str, List[Quote]] = {}
+    for q in quotes:
+        groups.setdefault(q.document_id or q.doi or q.title, []).append(q)
+    return list(groups.values())
+
+
 def source_page_link(sources: List[SourcePage], quotes: Iterable[Quote], *, fname: str, id_prefix: str,
                      check_prefix: str, label: str, back: str, back_text: str, description: str) -> str:
-    """Add a page with these quotes (open, so the sentence shows at once) to sources; return a link to it."""
-    boxes = ''.join(evidence_box(q, i + 1, id_prefix, check_prefix, open_=True) for i, q in enumerate(quotes))
+    """Add a page with these quotes (open, so the sentence shows at once) to sources; return a link to it.
+
+    Quotes are grouped by paper. The first SHOW_PAPERS papers are shown; the rest sit in a
+    "Show all" <details> (no script needed, and still in the page for checkers and crawlers)."""
+    groups = paper_groups(quotes)
+    sections, n = [], 0
+    for k, qs in enumerate(groups):
+        head = '%s%s' % (esc(qs[0].title), ' (%s)' % esc(qs[0].year) if qs[0].year is not None else '')
+        boxes = []
+        for q in qs:
+            n += 1
+            boxes.append(evidence_box(q, n, id_prefix, check_prefix, open_=True))
+        sections.append('<section class="paper" id="p-%d"><h2>Paper %d of %d: %s</h2>%s</section>'
+                        % (k + 1, k + 1, len(groups), head, ''.join(boxes)))
+    shown = ''.join(sections[:SHOW_PAPERS])
+    if len(sections) > SHOW_PAPERS:
+        rest = len(sections) - SHOW_PAPERS
+        shown += ('<details class="more"><summary>Show the other %d %s</summary>%s</details>'
+                  % (rest, plural(rest, 'paper', 'papers'), ''.join(sections[SHOW_PAPERS:])))
+    boxes = shown
     back_link = '<p class="back"><a href="%s">%s</a></p>' % (esc(back), esc(back_text))
-    body = ('<h1>Sources: %s</h1>%s%s<div class="sources">%s</div>%s'
-            % (esc(label), back_link, SOURCES_NOTE, boxes, back_link))
+    body = ('<h1>Sources: %s</h1>%s%s<div class="sources">%s</div>%s%s'
+            % (esc(label), back_link, SOURCES_NOTE, boxes, back_link, OPEN_TARGET_JS))
     sources.append(SourcePage(fname, 'Sources · ' + label, description, body))
-    return ('<a class="srclink" href="%s">Read the sources<span class="sr-only"> for %s</span></a>'
+    return ('<a class="srclink" href="%s">Read all sources<span class="sr-only"> for %s</span></a>'
             % (esc(fname), esc(label)))
 
 
@@ -184,8 +246,357 @@ def finding_sources(sources: List[SourcePage], f: Finding, qid: str) -> str:
                             description='The quoted sentences behind one finding.')
 
 
+SHOW_PAPERS = 3  # papers shown at once on a sources page; the rest behind "Show all"
+
+# --------------------------------------------------------------- finding cards (#49)
+# Layer 1 is the card (direction, certainty bars, agreement bar, counts); layer 2 is
+# "See why" (the certainty reason in plain English, and on Q1 the possible pathways);
+# layer 3 is the sources page it links to.
+
+CERT_BARS = {'very_low': 1, 'low': 2, 'moderate': 3, 'high': 4}
+CERT_ORDER = ['high', 'moderate', 'low', 'very_low']
+QUOTES_IN_CARD = 2  # papers quoted inside an open card; the rest are on its sources page (Q3: 1, page weight)
+
+# How the study split names each direction ("5 of 7 found an increase").
+FOUND = {
+    'increase': 'an increase', 'decrease': 'a decrease', 'mixed': 'mixed results',
+    'no_effect': 'no effect', 'unclear': 'an unclear direction',
+    'below_reference': 'below the reference', 'comparable': 'comparable to the reference',
+    'above_reference': 'above the reference',
+}
+
+# The pack's certainty_rationale as a short tally. What the levels mean is explained once,
+# on the method page; the raw rationale is always shown too (small, grey).
+# The pack's certainty_rationale as a plain checklist (README "How certainty is graded").
+# ✓ / ✗ are text, so the meaning never rests on colour. The exact rationale is always shown too.
+START_CHECK = {
+    'high': ('✓', 'Proper experiments (treated vs. untreated plots)'),
+    'moderate': ('✓', 'Controlled studies, but not fully randomized'),
+    'low': ('✗', 'Observation only, no experiments'),
+    'very low': ('✗', 'Based on models or single case studies'),
+}
+STEP_CHECK = [
+    (re.compile(r'^-1 single study$'), ('✗', 'Only one study')),
+    (re.compile(r'^-1 studies disagree$'), ('✗', "Studies didn't all agree")),
+    (re.compile(r'^-1 most claims report no comparator$'), ('✗', 'Mostly no untreated site to compare against')),
+    (re.compile(r'^\+1 (\d+) studies agree$'), ('✓', '{0} studies agree')),  # the pack's word; not "same result"
+    (re.compile(r'^\+1 mechanistic and difference-making evidence$'), ('✓', 'Shows how it works, not just that it works')),
+]
+RATIONALE = re.compile(r'^start (high|moderate|low|very low) \([^)]*\)(.*?)\s*->\s*(high|moderate|low|very low)$')
+
+
+def norm_space(s: str) -> str:
+    return ' '.join(s.split())
+
+
+def rationale_checks(r: Optional[str]) -> List[Tuple[str, str]]:
+    """[(mark, text)] for a rationale; [] if it doesn't follow the pack's pattern."""
+    m = RATIONALE.match(norm_space(r or ''))
+    if not m:
+        return []
+    out = [START_CHECK[m.group(1)]]
+    for part in (p.strip() for p in m.group(2).split(';')):
+        if not part:
+            continue
+        for pat, (mark, text) in STEP_CHECK:
+            mm = pat.match(part)
+            if mm:
+                out.append((mark, text.format(*mm.groups())))
+                break
+        else:
+            out.append(('·', part))
+    return out
+
+
+LEVEL = {'very low': 1, 'low': 2, 'moderate': 3, 'high': 4}
+LEVEL_WORD = {1: 'Very low', 2: 'Low', 3: 'Moderate', 4: 'High'}
+
+
+def rationale_score(r: Optional[str]) -> Optional[Tuple[int, List[int], int, str]]:
+    """(start level, step changes, final level, cap note) using the 1-4 scale the bars show.
+    The pack's final grade is what is shown; the note says why a sum went past a limit."""
+    m = RATIONALE.match(norm_space(r or ''))
+    if not m:
+        return None
+    steps = [p.strip() for p in m.group(2).split(';') if p.strip()]
+    deltas = []
+    for p in steps:
+        mm = re.match(r'^([+-]\d+)\b', p)
+        deltas.append(int(mm.group(1)) if mm else 0)
+    start, final = LEVEL[m.group(1)], LEVEL[m.group(3)]
+    total = start + sum(deltas)
+    note = ''
+    if total != final:
+        if total > 4 and final == 4:
+            note = 'adds up to %d, capped at 4: High is the top level' % total
+        elif total < 1 and final == 1:
+            note = 'adds up to %d, kept at 1: Very low is the lowest level' % total
+        elif final == 3 and any('single study' in p for p in steps):
+            note = 'adds up to %d, capped at 3: one study never goes above Moderate' % total
+        else:
+            note = 'adds up to %d; the pack grades it %d' % (total, final)
+    return start, deltas, final, note
+
+
+def _checks_js() -> str:
+    """Builds the Why checklist in the browser from a card's exact rule text (used on Q3, where
+    the card repeats 123 times). The lookup tables come from START_CHECK / STEP_CHECK above."""
+    start = json.dumps({k: list(v) for k, v in START_CHECK.items()}, ensure_ascii=False)
+    steps = json.dumps([[pat.pattern, mk, t] for pat, (mk, t) in STEP_CHECK], ensure_ascii=False)
+    return ('<script>(function(){var ST=%s,SP=%s,LV={"very low":1,low:2,moderate:3,high:4},'
+            'LW={1:"Very low",2:"Low",3:"Moderate",4:"High"},'
+            'RX=/^start (high|moderate|low|very low) \\([^)]*\\)(.*?)\\s*->\\s*(high|moderate|low|very low)$/;'
+            'function e(t){var d=document.createElement("span");d.textContent=t;return d.innerHTML}'
+            'function li(mk,t,p){return \'<li><span class="mk" aria-hidden="true">\'+mk+\'</span><span class="sr-only">\''
+            '+({"✓":"For","✗":"Against"}[mk]||"Note")+\': </span><span class="t">\'+e(t)+\'</span><span class="pts">\'+p+\'</span></li>\'}'
+            'document.querySelectorAll("ul.checks[data-rule]").forEach(function(ul){'
+            'var r=ul.parentNode.querySelector("p.rule").textContent.replace(/\\s+/g," ").trim(),m=r.match(RX);'
+            'if(!m){ul.remove();return}var s=ST[m[1]],o=li(s[0],s[1],"start "+LV[m[1]]),tot=LV[m[1]],one=false;'
+            'm[2].split(";").forEach(function(p){p=p.trim();if(!p)return;var d=+((p.match(/^([+-]\\d+)/)||[0,0])[1]);'
+            'tot+=d;if(/single study/.test(p))one=true;for(var i=0;i<SP.length;i++){var x=p.match(new RegExp(SP[i][0]));'
+            'if(x){o+=li(SP[i][1],SP[i][2].replace("{0}",x[1]||""),d?(d>0?"+":"\u2212")+Math.abs(d):"");return}}'
+            'o+=li("·",p,"")});var f=LV[m[3]],n="";if(tot!==f){n="adds up to "+tot+(tot>4&&f==4?", capped at 4: High is '
+            'the top level":tot<1&&f==1?", kept at 1: Very low is the lowest level":f==3&&one?", capped at 3: one study '
+            'never goes above Moderate":"; the pack grades it "+f)}'
+            'o+=\'<li class="total"><span class="mk" aria-hidden="true">=</span><span class="t">\'+LW[f]+'
+            '(n?\' <span class="cap">(\'+e(n)+\')</span>\':"")+\'</span><span class="pts">\'+f+\'</span></li>\';'
+            'ul.innerHTML=o})})();</script>' % (start, steps))
+
+
+CHECKS_JS = _checks_js()
+
+
+def headline_reason(checks: List[Tuple[str, str]]) -> Optional[Tuple[str, str]]:
+    """For the closed card: the first ✗, or if none the strongest ✓ (agreement, then mechanism, then design)."""
+    for c in checks:
+        if c[0] == '✗':
+            return c
+    ok = [c for c in checks if c[0] == '✓']
+    for key in ('studies agree', 'how it works'):
+        for c in ok:
+            if key in c[1]:
+                return c
+    return ok[0] if ok else None
+
+
+CHIP = {'increase': ('▲', 'Increase', 's'), 'decrease': ('▼', 'Decrease', 's'), 'mixed': ('⇅', 'Mixed', ''),
+        'no_effect': ('–', 'No effect', ''), 'unclear': ('?', 'Unclear', ''),
+        'below_reference': ('▼', 'Below reference', ''), 'comparable': ('=', 'Comparable', ''),
+        'above_reference': ('▲', 'Above reference', '')}
+
+
+def chip(d: str, path: str) -> str:
+    """Direction chip. The checked word stays exactly the pack's word ("Increase"); the plain
+    "s" sits outside the data-check span so the chip reads "▲ Increases"."""
+    sym, word, tail = CHIP.get(d, ('', words(d), ''))
+    return ('<span class="dir chip dir-%s"><span aria-hidden="true">%s</span> %s%s</span>'
+            % (esc(d.replace('_', '-')), sym, span(path, word), tail))
+
+
+def _dot(k: str) -> str:
+    return '<i class="dot s-%s" aria-hidden="true"></i>' % esc(k.replace('_', '-'))
+
+
+def _keys(f_reference: bool, sd: Dict[str, int]) -> List[str]:
+    order = list(REFERENCE_DIRECTIONS if f_reference else EFFECT_DIRECTIONS)
+    return [k for k in order if k in sd] + sorted(k for k in sd if k not in order)
+
+
+def split_bar(f: Finding) -> str:
+    sd = f.study_directions
+    if not sd:
+        return ''
+    segs = ''.join('<i class="s-%s" style="flex-grow:%d"></i>' % (esc(k.replace('_', '-')), sd[k])
+                   for k in _keys(f.reference, sd))
+    return '<span class="agree" aria-hidden="true">%s</span>' % segs
+
+
+SHORT = {'increase': 'up', 'decrease': 'down', 'mixed': 'mixed', 'no_effect': 'no effect', 'unclear': 'unclear',
+         'below_reference': 'behind', 'comparable': 'matches', 'above_reference': 'ahead'}
+
+
+def split_short(f: Finding, base: str) -> str:
+    """"7 studies: 5 up · 1 mixed · 1 none" with a dot per direction; every number checked."""
+    sd = f.study_directions
+    head = '%s %s' % (span(base + '/studies', f.studies), plural(f.studies, 'study', 'studies'))
+    if not sd:
+        return head
+    keys = _keys(f.reference, sd)
+    if f.direction in keys:
+        keys.remove(f.direction)
+        keys.insert(0, f.direction)
+    return head + ': ' + ' · '.join('%s%s %s' % (_dot(k), span('%s/study_directions/%s' % (base, k), sd[k]),
+                                                   esc(SHORT.get(k, words(k)))) for k in keys)
+
+
+def tested_how(q: Quote) -> str:
+    t = ', '.join(words(x) for x in q.evidence_types) or 'study type not given'
+    return t[:1].upper() + t[1:]
+
+
+def card_quote(q: Quote) -> str:
+    """One quote, word for word, then where it is from."""
+    title = esc(q.title)
+    if q.doi:
+        title = '<a href="https://doi.org/%s">%s</a>' % (esc(q.doi), title)
+    year = ', %s' % esc(q.year) if q.year is not None else ''
+    return ('<figure class="cq"><blockquote class="quote">%s</blockquote><figcaption>%s%s · %s</figcaption></figure>'
+            % (esc(q.quote), title, year, esc(tested_how(q))))
+
+
+def pathways(data: SiteData, f: Finding) -> str:
+    """Q1 only: subject -> condition -> outcome routes in the graph, drawn as a vertical chain.
+    Each step is its own body of evidence with its own certainty; never combined (README)."""
+    g = data.q1_graph
+    if g is None:
+        return ''
+    effects = [e for e in g.edges if e.get('kind') == 'effect']
+    first = {e['target']: e for e in effects if e['source'] == f.subject_id}
+    chains = []
+    for e2 in effects:
+        e1 = first.get(e2['source'])
+        if e1 is None or e2['target'] != f.outcome_id or g.node(e2['source']).get('kind') != 'condition':
+            continue
+        parts = ['<li class="node">%s</li>' % esc(g.node(e1['source'])['label'])]
+        for e in (e1, e2):
+            s = slug(e['id'])
+            base = 'q1graph/' + s
+            parts.append('<li class="step"><span class="down" aria-hidden="true">↓</span> %s · %s · %s %s</li>'
+                         % (chip(e['direction'], base + '/direction'),
+                            span(base + '/certainty', certainty_text(e['certainty'])),
+                            span(base + '/studies', e['studies']), plural(e['studies'], 'study', 'studies')))
+            parts.append('<li class="node">%s</li>' % esc(g.node(e['target'])['label']))
+        chains.append('<ol class="chain">%s</ol>' % ''.join(parts))
+    graph = ''
+    if f.slug in data.graph_join:
+        graph = ('<p class="go"><a href="q1-graph.html#e-%s">See on the graph →<span class="sr-only"> %s</span></a></p>'
+                 % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
+    if not chains:
+        # a gap, shown as a gap: no study here links this factor to a condition on the way
+        conds = [n['label'] for n in g.nodes if n.get('kind') == 'condition']
+        names = ', '.join(c[:1].lower() + c[1:] for c in conds[:-1]) + ' or ' + conds[-1][:1].lower() + conds[-1][1:] \
+            if len(conds) > 1 else ''.join(conds)
+        return ('<section class="panel"><h5>Possible pathways</h5><p class="none-pw"><span class="gq" aria-hidden="true">'
+                '?</span> None in this research. No study here linked %s to %s.</p>%s</section>'
+                % (esc(_lower_first(f.subject_label)), esc(names), graph))
+    return ('<section class="panel"><h5>Possible pathways</h5><p class="warn">Each step is separate evidence, '
+            'mostly from different papers. Not one tested chain.</p>%s%s</section>' % (''.join(chains), graph))
+
+
+def _lower_first(s: str) -> str:
+    return s[:1].lower() + s[1:] if s[1:2].islower() else s
+
+
+def card_name(f: Finding, subject: bool) -> str:
+    """"Fertilization at planting → seedling growth & size"; the direction chip says which way."""
+    if f.reference or not subject:
+        return esc(f.outcome_label)
+    return ('%s <span class="arrow" aria-hidden="true">→</span><span class="sr-only">, effect on</span> %s'
+            % (esc(f.subject_label), esc(_lower_first(f.outcome_label))))
+
+
+def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
+                 tag: str = '', level: int = 3, extra: str = '', links: str = '',
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False) -> str:
+    """One finding. Closed it is one line: direction, name, certainty, study split, Details.
+    Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
+    base = '%s/%s' % (f.question, f.slug)
+    cw = CERT_WORD[f.certainty]
+    checks = rationale_checks(f.certainty_rationale)
+    reason = headline_reason(checks)
+    reason_html = (' · <span class="reason"><span class="mk">%s</span> %s</span>' % (esc(reason[0]), esc(reason[1]))
+                   if reason else '')
+    summary = ('<span class="fchip">%s</span><h%d class="fhead">%s%s</h%d>'
+               '<span class="fcert"><span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
+               '<span class="fsplit">%s %s</span><span class="fmore" aria-hidden="true">Details</span>'
+               % (chip(f.direction, base + '/direction'), level, card_name(f, subject), tag, level,
+                  CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
+                  split_bar(f), split_short(f, base)))
+    # panel 1: why that certainty, as a checklist; the exact rule text one click further
+    raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
+    score = rationale_score(f.certainty_rationale)
+    pts = []
+    if score and len(checks) == 1 + len(score[1]):
+        pts = ['start %d' % score[0]] + ['%+d' % d if d else '' for d in score[1]]
+        pts = [p.replace('-', '−') for p in pts]
+    items = ''.join('<li><span class="mk" aria-hidden="true">%s</span><span class="sr-only">%s: </span>'
+                    '<span class="t">%s</span><span class="pts">%s</span></li>'
+                    % (esc(mk), {'✓': 'For', '✗': 'Against'}.get(mk, 'Note'), esc(t), esc(pts[i] if pts else ''))
+                    for i, (mk, t) in enumerate(checks))
+    if pts:
+        items += ('<li class="total"><span class="mk" aria-hidden="true">=</span><span class="t">%s%s</span>'
+                  '<span class="pts">%d</span></li>'
+                  % (esc(LEVEL_WORD[score[2]]), (' <span class="cap">(%s)</span>' % esc(score[3])) if score[3] else '',
+                     score[2]))
+    if compact:
+        # Q3 repeats this 123 times: the checklist is built in the browser from the rule text
+        # below (CHECKS_JS); without script the exact rule text is still there.
+        items = ''
+    why = ('<section class="panel"><h5>Why “%s”?%s</h5>%s'
+           # the pack's exact rationale must be on the page (README; both checkers): kept, but quiet
+           '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
+           % (esc(cw), '' if compact else HELP_BTN,
+              '<ul class="checks" data-rule></ul>' if compact else (('<ul class="checks">%s</ul>' % items) if items else ''),
+              raw))
+    # panel 2: sources, quotes first
+    finding_sources(sources, f, f.question)  # writes sources-<slug>.html
+    groups = paper_groups(f.quotes)
+    quotes = ''.join(card_quote(qs[0]) for qs in groups[:quotes_shown])
+    all_link = ('<a class="srclink" href="sources-%s.html">All %d %s, %s %s →</a>'
+                % (esc(f.slug), len(groups), plural(len(groups), 'paper', 'papers'),
+                   span(base + '/claims', f.claims), plural(f.claims, 'quote', 'quotes')))
+    src = '<section class="panel"><h5>Sources</h5>%s<p class="go">%s</p></section>' % (quotes, all_link)
+    pw = pathways(data, f) if f.question == 'q1' else ''
+    more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
+    return ('<article class="fcard fdir-%s" id="f-%s"><details class="fd"><summary>%s</summary>'
+            '<div class="panels">%s%s%s</div>%s</details></article>'
+            % (esc(f.direction.replace('_', '-')), esc(f.slug), summary, why, src, pw, more))
+
+
+def at_a_glance(q: Question) -> str:
+    """Q1: factors as rows, outcomes as columns; each cell links to its card."""
+    subjects, outcomes, cells = [], [], {}
+    for f in q.findings:
+        if f.subject_id not in [x[0] for x in subjects]:
+            subjects.append((f.subject_id, f.subject_label))
+        if f.outcome_id not in [x[0] for x in outcomes]:
+            outcomes.append((f.outcome_id, f.outcome_label))
+        cells[(f.subject_id, f.outcome_id)] = f
+    for g in q.gaps:
+        if g.subject_id not in [x[0] for x in subjects]:
+            subjects.append((g.subject_id, g.subject_label))
+        cells[(g.subject_id, g.outcome_id)] = g
+    def strength(sid: str) -> Tuple[int, int]:
+        fs = [c for (s_, _), c in cells.items() if s_ == sid and isinstance(c, Finding)]
+        return (min((CERT_ORDER.index(f.certainty) for f in fs), default=9), -sum(f.studies for f in fs))
+    subjects.sort(key=lambda x: strength(x[0]))
+    head = ''.join('<th scope="col">%s</th>' % esc(lbl) for _, lbl in outcomes)
+    rows = []
+    for sid, slbl in subjects:
+        tds = []
+        for oid, _ in outcomes:
+            c = cells.get((sid, oid))
+            if c is None:
+                tds.append('<td class="none">–</td>')
+            elif isinstance(c, Gap):
+                tds.append('<td class="gapcell"><a href="#gap-%s"><span class="chip gapchip">'
+                           '<span aria-hidden="true">?</span> Not studied</span></a></td>' % esc(c.slug))
+            else:
+                b = '%s/%s' % (c.question, c.slug)
+                tds.append('<td><a href="#f-%s">%s <span class="bars b%d" aria-hidden="true"></span> %s · %s %s</a></td>'
+                           % (esc(c.slug), chip(c.direction, b + '/direction'), CERT_BARS.get(c.certainty, 0),
+                              span(b + '/certainty', CERT_WORD[c.certainty]), span(b + '/studies', c.studies),
+                              plural(c.studies, 'study', 'studies')))
+        rows.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(slbl), ''.join(tds)))
+    return ('<h2 id="glance">At a glance %s</h2><div class="table-wrap"><table class="glance"><caption>What each '
+            'factor does to seedlings: direction, certainty and number of studies. Select a cell for the '
+            'details.</caption><thead><tr><th scope="col">Factor</th>%s</tr></thead><tbody>%s</tbody></table></div>'
+            % (HELP_BTN, head, ''.join(rows)))
+
+
 def gap_marker(g: Gap, id_: Optional[str] = None) -> str:
-    return ('<div class="gap" role="note" id="%s"><strong>Not studied:</strong> %s. '
+    return ('<div class="gap" role="note" id="%s"><span class="gq" aria-hidden="true">?</span> '
+            '<strong>Not studied:</strong> %s. '
             '<span class="searched">Searched for: %s</span></div>'
             % (esc(id_ or 'gap-' + g.slug), esc(g.label), esc(g.searched_for)))
 
@@ -209,18 +620,6 @@ def finding_cells(f: Finding) -> Tuple[str, str, str]:
     return (direction_badge(f.direction, base + '/direction'),
             certainty_badge(f.certainty, f.certainty_rationale, f.label, base),
             counts(base, f.studies, f.claims))
-
-
-def finding_row(f: Finding, sentence_html: str, row_header: str, cells: List[str],
-                evidence_html: str) -> str:
-    d, c, n = finding_cells(f)
-    base = '%s/%s' % (f.question, f.slug)
-    tds = ''.join('<td>%s</td>' % x for x in cells + [d, c, n, evidence_html])
-    ncols = 1 + len(cells) + 4
-    return ('<tr id="f-%s" class="finding"><th scope="row">%s</th>%s</tr>'
-            '<tr class="sub"><td colspan="%d"><p>%s</p><p>%s</p></td></tr>'
-            % (esc(f.slug), row_header, tds, ncols, sentence_html,
-               vote_split(base, f.study_directions, f.reference)))
 
 
 def table(caption: str, headers: List[str], body: str, cls: str = 'findings') -> str:
@@ -336,25 +735,30 @@ def gaps_section(q: Question, heading: str = 'Not studied') -> str:
 
 def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     g = data.q1_graph
-    rows = []
-    for f in q.findings:
-        ev = ''
+    def card(f: Finding) -> str:
+        graph = ''
         if f.slug in data.graph_join:
-            ev += ('<a href="q1-graph.html#e-%s">On the graph<span class="sr-only">: %s</span></a>'
-                   % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
-        ev += finding_sources(sources, f, q.qid)
-        rows.append(finding_row(f, prose.finding_sentence[f.slug].html, esc(f.subject_label),
-                                [esc(f.outcome_label)], ev))
+            graph = ('<a href="q1-graph.html#e-%s">On the graph<span class="sr-only">: %s</span></a>'
+                     % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
+        return finding_card(data, f, sources, level=4, links=graph)
+
+    rank = {c: i for i, c in enumerate(['high', 'moderate', 'low', 'very_low'])}
+    groups: Dict[str, List[Finding]] = {}
+    for f in q.findings:
+        groups.setdefault(f.outcome_label, []).append(f)
     body = q_header(q, prose)
+    body += at_a_glance(q)
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     if g is not None:
         body += '<p class="graph-link"><a href="q1-graph.html">See this as a causal graph</a></p>'
-    body += ('<h2>Findings</h2>' + table(
-        'Each planting-stock trait or site factor and what studies found for seedling survival or growth',
-        ['Factor', 'Outcome', 'Direction', 'Certainty', 'Studies', 'Evidence'], ''.join(rows)))
+    body += ('<h2>Findings</h2><p class="note">Strongest evidence first. Select a finding for why it has '
+             'that certainty, its sources and, where the graph has them, possible pathways.</p>')
+    for outcome, fs in groups.items():
+        fs = sorted(fs, key=lambda f: (rank.get(f.certainty, 9), -f.studies))
+        body += '<h3>%s</h3><div class="cards">%s</div>' % (esc(outcome), ''.join(card(f) for f in fs))
     body += interactions_section(data, q)
     body += gaps_section(q)
-    return page(data, 'q1.html', 'Q1 · Tree planting', q.text, body)
+    return page(data, 'q1.html', 'Q1 · Tree planting', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS)
 
 
 def interactions_section(data: SiteData, q: Question) -> str:
@@ -426,26 +830,20 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     def rows(fs: Iterable[Finding]) -> str:
         out = []
         for f in fs:
-            head = esc(f.outcome_label)
-            if f.raw.get('lags'):
-                head += ' <span class="lags">Lags</span>'
-            ev = finding_sources(sources, f, q.qid)
-            out.append(finding_row(f, prose.finding_sentence[f.slug].html, head, [when(f)], ev))
-        return ''.join(out)
+            tag = ' <span class="lags">Lags</span>' if f.raw.get('lags') else ''
+            extra = '<div class="when-wrap"><span class="mlabel">When measured</span> %s</div>' % when(f)
+            out.append(finding_card(data, f, sources, tag=tag, extra=extra))
+        return '<div class="cards">%s</div>' % ''.join(out)
 
     body += ('<h2>Created marshes compared with natural ones</h2>'
              '<p class="note">“When measured” lists the ages of the marshes studied, not a time to '
              'recovery.</p>')
-    body += table('Each attribute of a created or restored marsh compared with a natural reference wetland',
-                  ['Attribute', 'When measured', 'Direction', 'Certainty', 'Studies', 'Evidence'],
-                  rows(q.findings))
+    body += rows(q.findings)
     if q.trends:
         body += '<h2>Change as marshes age</h2>'
-        body += table('How each attribute changes with time since the marsh was created or restored',
-                      ['Attribute', 'When measured', 'Direction', 'Certainty', 'Studies', 'Evidence'],
-                      rows(q.trends))
+        body += rows(q.trends)
     body += gaps_section(q)
-    return page(data, 'q2.html', 'Q2 · Created marshes', q.text, body)
+    return page(data, 'q2.html', 'Q2 · Created marshes', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS)
 
 
 def q3_cell_id(subject_id: str, outcome_id: str) -> str:
@@ -486,14 +884,14 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
              % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
                 span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html))
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += ('<h2>Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
+    body += ('<h2>Gap map %s</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
              ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
              'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
              '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
              '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
              'dense</dt><dd>4 or more studies</dd></div></dl>'
              '<p class="note">Each filled cell shows its number of studies and density word. Study counts '
-             'measure research effort, not effect size. Select a cell to read its finding.</p>')
+             'measure research effort, not effect size. Select a cell to read its finding.</p>' % HELP_BTN)
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
     trs = []
     for rid, rlbl in grid['rows']:
@@ -535,21 +933,16 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
             if isinstance(item, Gap):
                 if template is not None:
                     # what was searched for is said once for the row (below the heading)
-                    items.append('<li id="%s"><div class="gap" role="note" id="gap-%s"><strong>Not studied:'
-                                 '</strong> %s</div></li>' % (cell_id, esc(item.slug), esc(clbl)))
+                    items.append('<li class="gap" id="gap-%s"><strong>Not studied:</strong> %s</li>'
+                                 % (esc(item.slug), esc(clbl)))
                 else:
                     items.append('<li id="%s">%s</li>' % (cell_id, gap_marker(item)))
             else:
                 f = item
-                d, c, n = finding_cells(f)
-                items.append(
-                    '<li id="%s"><div class="cell-finding" id="f-%s"><h4>%s</h4>'
-                    '<div class="badges">%s %s %s <span class="density">%s</span></div><p>%s</p><p>%s</p>%s'
-                    '</div></li>' % (
-                        cell_id, esc(f.slug), esc(clbl), d, c, n, esc(f.raw.get('density', '')),
-                        prose.finding_sentence[f.slug].html,
-                        vote_split('q3/' + f.slug, f.study_directions, f.reference),
-                        finding_sources(sources, f, q.qid)))
+                dens = '<p class="density">Evidence: <strong>%s</strong></p>' % esc(f.raw.get('density', ''))
+                items.append('<li id="%s">%s</li>' % (
+                    cell_id, finding_card(data, f, sources, subject=False, level=4, extra=dens, quotes_shown=0,
+                                          compact=True)))
         note = ''
         if template is not None:
             note = ('<p class="searched" data-template="%s">“Not studied” below means this was searched for and '
@@ -557,21 +950,19 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         body += ('<section class="row-detail" aria-labelledby="r-%s"><h3 id="r-%s">%s</h3>%s'
                  '<ul class="cells">%s</ul></section>'
                  % (esc(slug(rid)), esc(slug(rid)), esc(rlbl), note, ''.join(items)))
-    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body)
+    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS + CHECKS_JS)
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
     """Any future qN file gets a page with no code change."""
     def rows(fs: Iterable[Finding]) -> str:
-        return ''.join(finding_row(f, prose.finding_sentence[f.slug].html, esc(f.subject_label),
-                                   [esc(f.outcome_label)],
-                                   finding_sources(sources, f, q.qid)) for f in fs)
+        return '<div class="cards">%s</div>' % ''.join(
+            finding_card(data, f, sources)
+            for f in fs)
     body = q_header(q, prose) + limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += '<h2>Findings</h2>' + table('Findings', ['Factor', 'Outcome', 'Direction', 'Certainty',
-                                                     'Studies', 'Evidence'], rows(q.findings))
+    body += '<h2>Findings</h2>' + rows(q.findings)
     if q.trends:
-        body += '<h2>Trends</h2>' + table('Trends', ['Factor', 'Outcome', 'Direction', 'Certainty',
-                                                     'Studies', 'Evidence'], rows(q.trends))
+        body += '<h2>Trends</h2>' + rows(q.trends)
     body += gaps_section(q)
     return page(data, '%s.html' % q.qid, '%s · %s' % (q.qid.upper(), question_name(q)), q.text, body)
 
@@ -702,7 +1093,14 @@ def render_method(data: SiteData) -> str:
         'files when the site is built, and a check compares each one on every page with the pack before '
         'the site is published. Nothing is typed in by hand.</p>'
         '<h2 id="certainty">How certainty is graded</h2>'
-        '<p>The pack uses rule <code>%s</code>. In plain words:</p>'
+        '<p class="lead">First we look at the best kind of study behind a finding. Experiments start at High, '
+        'observation-only studies start at Low. It moves down a level if there\'s only one study or studies '
+        'disagree, and up a level if several studies agree or they show how it works.</p>'
+        '<p>On this site the four levels are numbered and drawn as bars: <strong>4</strong> High, '
+        '<strong>3</strong> Moderate, <strong>2</strong> Low, <strong>1</strong> Very low. Each step moves exactly '
+        'one level, and the level stays between 1 and 4. For example: start 4 (proper experiments), −1 (studies '
+        'disagree), +1 (shows how it works) = 4, High.</p>'
+        '<p>The pack uses rule <code>%s</code>. In full:</p>'
         '<ol><li>Start from the best study design in the body of evidence. A randomized experiment '
         'against an untreated control starts high. Other randomized, quasi-experimental and controlled '
         'long-term designs start moderate. Observational studies start low. Modelling and case studies '
@@ -712,7 +1110,8 @@ def render_method(data: SiteData) -> str:
         '<li>Go up one step if three or more studies agree, and one if there is both evidence of '
         'mechanism and evidence that the treatment made a difference.</li>'
         '<li>A single study never rises above moderate.</li></ol>'
-        '<p>Every grade comes with its reasoning: select “Why?” next to any certainty grade.</p>'
+        '<p>Every grade comes with its reasoning: open a finding and read its “Why …?” checklist. The '
+        'pack\'s exact rule text is under “exact rule text”.</p>'
         '<p>How strongly a paper words its claim (“causes” versus “is associated with”) is shown with each '
         'source as “Authors\' wording”. It is not used in the grade: how loudly a paper claims something '
         'and how strong its evidence is are separate questions.</p>'
