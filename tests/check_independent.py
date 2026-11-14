@@ -404,7 +404,7 @@ class Checker:
             return
         outcome = (gap.get('outcome') or {}).get('label', '')
         sec = el.parent
-        while sec is not None and not (sec.tag == 'section'):
+        while sec is not None and sec.tag not in ('section', 'details'):  # a row may fold (details)
             sec = sec.parent
         notes = [n for n in (sec.iter() if sec is not None else []) if 'data-template' in n.attrs]
         ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) == want
@@ -534,6 +534,53 @@ class Checker:
                 self.ok(kb <= max_kb, f'{name}: {kb} KB is over the {max_kb} KB page budget')
         return out
 
+    GROUP_WORDS = {'increase': 'increase', 'decrease': 'decrease', 'mixed': 'mixed',
+                   'no_effect': 'no clear effect', 'unclear': 'unclear'}
+
+    def check_short_answers(self) -> None:
+        """Short answers summarise findings in words. Each clause is marked
+        data-cert="<certainty>" (text must say "with <certainty> certainty") and each
+        group inside it data-group="<direction>/<certainty>" (text must say the
+        direction); every finding linked from a group must have exactly that
+        direction and certainty in the pack."""
+        findings: Dict[str, dict] = {}
+        for qid, page in PAGES.items():
+            for f in self.load(qid)['findings']:
+                findings[f'{page}#f-{slug(f["id"])}'] = f
+        for name in ['index.html'] + list(PAGES.values()):
+            root = self.page(name)
+            if root is None:
+                continue
+            for el in root.iter():
+                cert = el.attrs.get('data-cert')
+                if cert:
+                    word = cert.replace('_', ' ')
+                    self.ok(norm(el.text()).lower().startswith(f'with {word} certainty'),
+                            f'{name}: short answer says "{norm(el.text())[:40]}..." but is marked {word} certainty')
+                    for g in el.iter():
+                        gc = g.attrs.get('data-group', '')
+                        if gc:
+                            self.ok(gc.split('/')[-1] == cert,
+                                    f'{name}: group {gc} sits in a "{word} certainty" clause')
+                grp = el.attrs.get('data-group')
+                if not grp:
+                    continue
+                d, _, c = grp.partition('/')
+                t = norm(el.text()).lower()
+                self.ok(self.GROUP_WORDS.get(d, '\0') in t,
+                        f'{name}: short-answer group "{norm(el.text())}" does not say {d}')
+                links = [a.attrs.get('href', '') for a in el.iter() if a.tag == 'a']
+                links = [(name if h.startswith('#') else '') + h for h in links]
+                if not self.ok(bool(links), f'{name}: short-answer group {grp} links to no finding'):
+                    continue
+                for h in links:
+                    f = findings.get(h)
+                    if not self.ok(f is not None, f'{name}: short answer links to {h}, not a finding'):
+                        continue
+                    self.ok(f['direction'] == d and f['certainty'] == c,
+                            f'{name}: short answer says {f["id"]} is {d}/{c}, pack says '
+                            f'{f["direction"]}/{f["certainty"]}')
+
     def run(self, max_kb: Optional[int] = None) -> List[str]:
         if not os.path.isdir(self.site):
             return [f'{self.site} does not exist: run ./build.sh {self.site} first']
@@ -541,6 +588,7 @@ class Checker:
         self.check_index()
         for qid in PAGES:
             self.check_question(qid)
+        self.check_short_answers()
         self.check_q2_honesty()
         self.check_graph()
         self.page_weights = self.weights(max_kb)
