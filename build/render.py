@@ -176,8 +176,9 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
 # A link into something closed (paper 5 behind "Show the other papers", or a finding card
 # from the glance table or gap map) opens it. Without script it is just one click away.
 OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
-                  'location.hash.slice(1));var d=e&&(e.closest("details")||e.querySelector("details"));if(d){d.open=true;e.scrollIntoView();}}'
-                  'addEventListener("hashchange",openTarget);openTarget();</script>')
+                  'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
+                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details");'
+                  'if(d)d.open=true;}e.scrollIntoView();}addEventListener("hashchange",openTarget);openTarget();</script>')
 
 
 # "?" button (top right of the Why box and the glance table) opening one popup per page.
@@ -396,8 +397,8 @@ def split_short(f: Finding, base: str) -> str:
     if f.direction in keys:
         keys.remove(f.direction)
         keys.insert(0, f.direction)
-    return head + ': ' + ' · '.join('%s%s %s' % (_dot(k), span('%s/study_directions/%s' % (base, k), sd[k]),
-                                                   esc(SHORT.get(k, words(k)))) for k in keys)
+    return head + ': ' + ' · '.join('<span class="sp">%s%s %s</span>' % (_dot(k), span('%s/study_directions/%s' % (base, k), sd[k]),
+                                                                         esc(SHORT.get(k, words(k)))) for k in keys)
 
 
 def tested_how(q: Quote) -> str:
@@ -478,8 +479,9 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     reason_html = (' · <span class="reason"><span class="mk">%s</span> %s</span>' % (esc(reason[0]), esc(reason[1]))
                    if reason else '')
     summary = ('<span class="fchip">%s</span><h%d class="fhead">%s%s</h%d>'
+               '<span class="fmore" aria-hidden="true">Details</span><span class="fmeta">'
                '<span class="fcert"><span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
-               '<span class="fsplit">%s %s</span><span class="fmore" aria-hidden="true">Details</span>'
+               '<span class="fsplit">%s %s</span></span>'
                % (chip(f.direction, base + '/direction'), level, card_name(f, subject), tag, level,
                   CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
                   split_bar(f), split_short(f, base)))
@@ -513,12 +515,12 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
     src = '<section class="panel"><h5>Sources</h5>%s<p class="go">%s</p></section>' % (quotes, all_link)
     pw = pathways(data, f) if f.question == 'q1' else ''
     more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
-    return ('<article class="fcard fdir-%s" id="f-%s"><details class="fd"><summary>%s</summary>'
+    return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"><summary>%s</summary>'
             '<div class="panels">%s%s%s</div>%s</details></article>'
-            % (esc(f.direction.replace('_', '-')), esc(f.slug), summary, why, src, pw, more))
+            % (' fref' if f.reference else '', esc(f.direction.replace('_', '-')), esc(f.slug), summary, why, src, pw, more))
 
 
-def at_a_glance(q: Question) -> str:
+def at_a_glance(q: Question, short_html: str = '') -> str:
     """Q1: factors as rows, outcomes as columns; each cell links to its card."""
     subjects, outcomes, cells = [], [], {}
     for f in q.findings:
@@ -553,10 +555,11 @@ def at_a_glance(q: Question) -> str:
                               span(b + '/certainty', CERT_WORD[c.certainty]), span(b + '/studies', c.studies),
                               plural(c.studies, 'study', 'studies')))
         rows.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(slbl), ''.join(tds)))
-    return ('<h2 id="glance">At a glance %s</h2><div class="table-wrap"><table class="glance"><caption>What each '
-            'factor does to seedlings: direction, certainty and number of studies. Select a cell for the '
-            'details.</caption><thead><tr><th scope="col">Factor</th>%s</tr></thead><tbody>%s</tbody></table></div>'
-            % (HELP_BTN, head, ''.join(rows)))
+    return ('<section class="glance-sec" aria-labelledby="glance"><h2 id="glance">At a glance %s</h2>%s'
+            '<div class="table-wrap"><table class="glance"><caption>Every factor: which way it pushes each outcome, '
+            'how sure we can be, and how many studies. Select a cell for the details.</caption><thead><tr>'
+            '<th scope="col">Factor</th>%s</tr></thead><tbody>%s</tbody></table></div></section>'
+            % (HELP_BTN, short_box(short_html, 'short') if short_html else '', head, ''.join(rows)))
 
 
 def gap_marker(g: Gap, id_: Optional[str] = None) -> str:
@@ -568,16 +571,16 @@ def gap_marker(g: Gap, id_: Optional[str] = None) -> str:
 
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
                how_built: Optional[str], heading: str = 'Read this first') -> str:
-    items = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (prefix, i), t)
-                    for i, t in enumerate(limitations))
-    built = ''
-    if rule or how_built:
-        built = ('<details class="built"><summary>How this answer was built</summary>'
-                 '<p>Certainty rule: <code>%s</code> (<a href="method.html#certainty">explained</a>)</p>'
-                 '<p>%s</p></details>' % (esc(rule or 'not given'), esc(how_built or '')))
-    hid = 'limits-' + esc(prefix)
-    return ('<section class="limits" aria-labelledby="%s"><h2 id="%s">%s: what this answer '
-            'cannot tell you</h2><ul>%s</ul>%s</section>' % (hid, hid, esc(heading), items, built))
+    """The pack's limitations, word for word. A closed one-liner, so the page stays clean,
+    but always on the question page itself (README; both checkers)."""
+    lims = list(limitations)
+    items = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (prefix, i), t) for i, t in enumerate(lims))
+    # how_built (the data team's selection rules) is on the Method page, under "Where the data comes from"
+    return ('<details class="limits" id="limits-%s"><summary><strong>%d %s this answer can\'t tell you</strong>'
+            '<span class="cnt">read before acting on it</span></summary><p class="intro">In the data team\'s own '
+            'words: how the studies were matched and grouped, and what that means for the answer above. '
+            '<a href="method.html#data">How each answer was built →</a></p><ul>%s</ul></details>'
+            % (esc(prefix), len(lims), plural(len(lims), 'thing', 'things'), items))
 
 
 def finding_cells(f: Finding) -> Tuple[str, str, str]:
@@ -607,10 +610,7 @@ SHELL = Template("""<!doctype html>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="site"><nav aria-label="Main"><ul>$nav</ul></nav></header>
-<main id="main" tabindex="-1">
-$body
-</main>
+$layout
 <footer class="site"><p>Data: Evidence Jam 2026 Lane 3 answer pack (rule <code>$rule</code>), built from the
 Lane 2 CAMO causal graph. Every direction, certainty and count on this site is read from the pack's
 answer files. Site code: MIT licence. Built $date.</p></footer>
@@ -626,13 +626,36 @@ def question_name(q: Question) -> str:
 
 
 def nav_items(data: SiteData) -> List[Tuple[str, str]]:
+    """Top nav (home page): Home, each question numbered, the graph, Method."""
     items = [('index.html', 'Home')]
-    for qid, q in data.questions.items():
-        items.append(('%s.html' % qid, '%s · %s' % (qid.upper(), question_name(q))))
+    for n, (qid, q) in enumerate(data.questions.items(), 1):
+        items.append(('%s.html' % qid, '%02d %s' % (n, question_name(q))))
         if qid == 'q1' and data.q1_graph is not None:
-            items.append(('q1-graph.html', 'Q1 graph'))
+            items.append(('q1-graph.html', 'Graph'))
     items.append(('method.html', 'Method'))
     return items
+
+
+def side_nav(data: SiteData, filename: str, jumps: Optional[List[Tuple[str, str]]]) -> str:
+    """Left sidebar: 01 / 02 / 03 (with Graph under 01), then Method and Home. The open page
+    lists its sections as jump links underneath it."""
+    def item(href: str, num: str, label: str, cls: str = '') -> str:
+        cur = href == filename
+        sub = ''
+        if cur and jumps:
+            sub = '<ul class="jumps">%s</ul>' % ''.join(
+                '<li><a href="%s">%s</a></li>' % (esc(h), esc(t)) for h, t in jumps)
+        return ('<li class="%s"><a href="%s"%s><span class="n" aria-hidden="true">%s</span> %s</a>%s</li>'
+                % (cls, esc(href), ' aria-current="page"' if cur else '', esc(num), esc(label), sub))
+    qs = []
+    for n, (qid, q) in enumerate(data.questions.items(), 1):
+        qs.append(item('%s.html' % qid, '%02d' % n, question_name(q)))
+        if qid == 'q1' and data.q1_graph is not None:
+            qs.append(item('q1-graph.html', '↳', 'Tree planting graph', 'sub'))
+    more = item('method.html', '?', 'How it works') + item('index.html', '⌂', 'Home')
+    return ('<aside class="side"><a class="brand" href="index.html">whimsy<span class="sr-only">: home</span></a>'
+            '<nav aria-label="Questions"><ol class="qnav">%s</ol><ul class="qnav more">%s</ul></nav></aside>'
+            % (''.join(qs), more))
 
 
 def build_date() -> str:
@@ -642,38 +665,64 @@ def build_date() -> str:
     return datetime.date.today().isoformat()
 
 
-def page(data: SiteData, filename: str, title: str, description: str, body: str) -> str:
-    nav = []
-    for href, label in nav_items(data):
-        cur = ' aria-current="page"' if href == filename else ''
-        nav.append('<li><a href="%s"%s>%s</a></li>' % (href, cur, esc(label)))
+def page(data: SiteData, filename: str, title: str, description: str, body: str, *,
+         side: bool = True, jumps: Optional[List[Tuple[str, str]]] = None) -> str:
+    """Home has a top nav and the big headline; every other page has the left sidebar."""
+    main = '<main id="main" tabindex="-1">\n%s\n</main>' % body
+    if side:
+        layout = '<div class="layout">%s%s</div>' % (side_nav(data, filename, jumps), main)
+    else:
+        nav = ''.join('<li><a href="%s"%s>%s</a></li>' % (href, ' aria-current="page"' if href == filename else '',
+                                                           esc(label)) for href, label in nav_items(data))
+        layout = ('<header class="site"><nav aria-label="Main"><ul>%s</ul></nav></header>%s' % (nav, main))
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
-    return SHELL.substitute(title=esc(title), description=esc(description), nav=''.join(nav),
+    return SHELL.substitute(title=esc(title), description=esc(description), layout=layout,
                             body=body, rule=esc(rule), date=build_date())
 
 
 # --------------------------------------------------------------- pages
 
 def render_index(data: SiteData, prose: Prose) -> str:
-    cards = []
-    for qid, q in data.questions.items():
+    """Home: big headline, one sentence, the questions as 01 / 02 / 03 rows with their real short
+    answers, and a small key for reading the site."""
+    rows = []
+    for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
         if qid == 'q1' and data.q1_graph is not None:
-            graph = ' · <a href="q1-graph.html">See it as a causal graph</a>'
-        cards.append(
-            '<article class="card" aria-labelledby="card-%s"><h2 id="card-%s">%s</h2>'
-            '<p class="q">%s</p><p class="who"><strong>For:</strong> %s</p>'
-            '<p class="short"><strong>Short answer:</strong> %s</p>'
-            '<p><a href="%s.html">Read the answer<span class="sr-only"> to %s</span></a>%s</p></article>'
-            % (esc(qid), esc(qid), esc('%s · %s' % (qid.upper(), question_name(q))), esc(q.text),
-               esc(AUDIENCE.get(qid, DEFAULT_AUDIENCE)), prose.short_answer[qid].html,
+            graph = ' · <a href="q1-graph.html">See it as a graph<span class="sr-only">: %s</span></a>' % esc(question_name(q))
+        rows.append(
+            '<li class="qrow"><span class="n" aria-hidden="true">%02d</span><div>'
+            '<h2 id="card-%s"><a href="%s.html">%s</a></h2><p class="q">%s</p>%s'
+            '<p class="go"><a href="%s.html">Read the answer →<span class="sr-only"> %s</span></a>%s</p></div></li>'
+            % (n, esc(qid), esc(qid), esc(question_name(q)), esc(q.text), short_box(prose.short_answer[qid].html),
                esc(qid), esc(question_name(q)), graph))
-    body = ('<h1>Restoration evidence, in plain words</h1>'
-            '<p class="lead">This site works offline and answers %s practitioner questions from a '
-            'fixed body of research, showing how sure we can be of each finding and where nothing has '
-            'been studied.</p>%s'
-            '<p><a href="method.html">How to read these answers and where the numbers come from</a></p>'
-            % (number_word(len(data.questions)), ''.join(cards)))
+    m = data.manifest.get('graph') or {}
+    papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
+              if m.get('source_documents') else '')
+    key = ('<section class="key-strip" aria-labelledby="key-h"><h2 id="key-h">How to read this site</h2><ul>'
+           '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
+           '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
+           '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
+           '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
+           '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
+           '(not “doesn’t work”)</li>'
+           '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
+           '</ul><p class="go"><a href="method.html">How it works →</a></p></section>')
+    guide = ('<section class="guide" aria-labelledby="guide-h"><h2 id="guide-h">How to use this site</h2><ol>'
+             '<li><strong>Pick a question</strong> below or in the sidebar.</li>'
+             '<li><strong>Read the short answer.</strong> The best-supported findings in a line or two, and how '
+             'sure we can be of them.</li>'
+             '<li><strong>Scan “At a glance”.</strong> Every factor, which way it pushes the outcome, how sure '
+             'we can be (<span class="bars b3" aria-hidden="true"></span> 1 to 4) and how many studies.</li>'
+             '<li><strong>Open a finding</strong> to see why it got that certainty and the sentences quoted '
+             'from the papers, with links to each paper.</li>'
+             '<li><strong>Read “things this answer can’t tell you”</strong> before acting on it. It says how '
+             'the studies were picked and grouped, in the data team’s own words.</li></ol></section>')
+    body = ('<h1 class="mega">restoration evidence</h1>'
+            '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
+            'and where nothing has been studied. Works offline.</p>%s'
+            '<h2 class="rows-h">The questions</h2><ol class="qrows">%s</ol>%s'
+            % (number_word(len(data.questions)), papers, guide, ''.join(rows), key))
     return page(data, 'index.html', 'Restoration evidence', 'Plain answers to restoration questions, '
                 'with certainty, gaps and sources.', body)
 
@@ -682,20 +731,33 @@ def number_word(n: int) -> str:
     return {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six'}.get(n, str(n))
 
 
+def short_box(inner: str, sid: str = '') -> str:
+    """The short answer, in the cream box. A bullet list stays a list; a sentence gets a <p>."""
+    body = inner if inner.lstrip().startswith('<ul') else '<p>%s</p>' % inner
+    return ('<div class="short"%s><p class="sa-h"><strong>Short answer</strong></p>%s</div>'
+            % (' id="%s"' % sid if sid else '', body))
+
+
+def fold(sid: str, heading: str, level: int, count: str, inner: str, open_: bool = False) -> str:
+    """A section that opens like a dropdown, so a page shows its outline first."""
+    return ('<details class="sec" id="%s"%s><summary><h%d>%s</h%d><span class="cnt">%s</span></summary>'
+            '<div class="sec-body">%s</div></details>'
+            % (esc(sid), ' open' if open_ else '', level, heading, level, esc(count), inner))
+
+
 def q_header(q: Question, prose: Prose, skip_short: bool = False) -> str:
     out = '<h1>%s</h1>' % esc(q.text)
     if not skip_short:
-        out += '<p class="short"><strong>Short answer:</strong> %s</p>' % prose.short_answer[q.qid].html
+        out += short_box(prose.short_answer[q.qid].html, 'short')
     return out
 
 
 def gaps_section(q: Question, heading: str = 'Not studied') -> str:
     if not q.gaps:
         return ''
-    return ('<section aria-labelledby="gaps-h"><h2 id="gaps-h">%s</h2>'
-            '<p>These pairings were looked for and not found in this body of research. That is not '
-            'evidence that the treatment fails; nobody here tested it.</p>%s</section>'
-            % (esc(heading), ''.join(gap_marker(g) for g in q.gaps)))
+    return fold('gaps-h', esc(heading), 2, '%d %s' % (len(q.gaps), plural(len(q.gaps), 'pairing', 'pairings')),
+                '<p>These pairings were looked for and not found in this body of research. That is not '
+                'evidence that the treatment fails; nobody here tested it.</p>%s' % ''.join(gap_marker(g) for g in q.gaps))
 
 
 def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -711,19 +773,24 @@ def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     groups: Dict[str, List[Finding]] = {}
     for f in q.findings:
         groups.setdefault(f.outcome_label, []).append(f)
-    body = q_header(q, prose)
-    body += at_a_glance(q)
+    body = q_header(q, prose, skip_short=True)
+    body += at_a_glance(q, prose.short_answer[q.qid].html)
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    if g is not None:
-        body += '<p class="graph-link"><a href="q1-graph.html">See this as a causal graph</a></p>'
-    body += ('<h2>Findings</h2><p class="note">Strongest evidence first. Select a finding for why it has '
-             'that certainty, its sources and, where the graph has them, possible pathways.</p>')
+    body += ('<h2 id="findings">Findings</h2><p class="note">Open a group, then a finding, for why it has that '
+             'certainty, the quoted sources and, where the graph has them, possible pathways.</p>')
     for outcome, fs in groups.items():
         fs = sorted(fs, key=lambda f: (rank.get(f.certainty, 9), -f.studies))
-        body += '<h3>%s</h3><div class="cards">%s</div>' % (esc(outcome), ''.join(card(f) for f in fs))
+        body += fold('o-%s' % slug(fs[0].outcome_id), esc(outcome), 3,
+                     '%d findings, strongest first' % len(fs), '<div class="cards">%s</div>' % ''.join(card(f) for f in fs))
     body += interactions_section(data, q)
     body += gaps_section(q)
-    return page(data, 'q1.html', 'Q1 · Tree planting', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS)
+    jumps = [('#glance', 'At a glance')]
+    jumps += [('#o-%s' % slug(fs[0].outcome_id), fs[0].outcome_label) for fs in groups.values()]
+    if q.extra.get('interactions'):
+        jumps.append(('#ix-h', 'Combined treatments'))
+    if q.gaps:
+        jumps.append(('#gaps-h', 'Not studied'))
+    return page(data, 'q1.html', 'Q1 · Tree planting', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
 
 
 def interactions_section(data: SiteData, q: Question) -> str:
@@ -756,11 +823,11 @@ def interactions_section(data: SiteData, q: Question) -> str:
         rows.append('<tr id="ix-%d"><td>%s</td><td>%s</td><td>%s</td></tr>' % (
             i + 1, evidence_box(quote, 1, 'ev-ix-%d' % (i + 1), q.qid, open_=True),
             direction_badge(it['direction'], '%s/interactions/%d/direction' % (q.qid, i)), shown))
-    return ('<section aria-labelledby="ix-h"><h2 id="ix-h">Combined treatments</h2>'
-            '<p>These claims are about two treatments together, or one treatment changing another\'s '
-            'effect. They are listed one by one, not pooled into the findings above.</p>%s</section>'
-            % table('Claims about combined treatments', ['Claim', 'Direction', 'Shown on the graph as'],
-                    ''.join(rows), 'interactions'))
+    return fold('ix-h', 'Combined treatments', 2, '%d %s' % (len(rows), plural(len(rows), 'claim', 'claims')),
+                '<p>These claims are about two treatments together, or one treatment changing another\'s '
+                'effect. They are listed one by one, not pooled into the findings above.</p>%s'
+                % table('Claims about combined treatments', ['Claim', 'Direction', 'Shown on the graph as'],
+                        ''.join(rows), 'interactions'))
 
 
 def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -774,14 +841,14 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     else:
         callout = ('<p><strong>How long? This body of research cannot say.</strong></p><p>%s</p>'
                    % span('q2/short_answer/time_to_reference_note', note))
-    body = ('<h1>%s</h1><div class="callout" role="note" aria-label="How long">%s</div>'
+    body = ('<h1>%s</h1><div class="callout" role="note" aria-label="How long" id="howlong">%s</div>'
             % (esc(q.text), callout))
     if prose.short_answer[q.qid].text != note:
-        body += '<p class="short"><strong>Short answer:</strong> %s</p>' % prose.short_answer[q.qid].html
+        body += short_box(prose.short_answer[q.qid].html)
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     lag = sa.get('lagging_attributes') or []
     if lag:
-        body += ('<h2>Attributes that lag behind natural marshes</h2><ul class="lagging">%s</ul>'
+        body += ('<h2 id="lag">Attributes that lag behind natural marshes</h2><ul class="lagging">%s</ul>'
                  % ''.join('<li>%s</li>' % span('q2/short_answer/lagging_attributes/%d' % i, a)
                            for i, a in enumerate(lag)))
 
@@ -800,15 +867,23 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
             out.append(finding_card(data, f, sources, tag=tag, extra=extra))
         return '<div class="cards">%s</div>' % ''.join(out)
 
-    body += ('<h2>Created marshes compared with natural ones</h2>'
+    body += ('<h2 id="compare">Created marshes compared with natural ones</h2>'
              '<p class="note">“When measured” lists the ages of the marshes studied, not a time to '
              'recovery.</p>')
     body += rows(q.findings)
     if q.trends:
-        body += '<h2>Change as marshes age</h2>'
+        body += '<h2 id="age">Change as marshes age</h2>'
         body += rows(q.trends)
     body += gaps_section(q)
-    return page(data, 'q2.html', 'Q2 · Created marshes', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS)
+    jumps = [('#howlong', 'How long?')]
+    if lag:
+        jumps.append(('#lag', 'What lags'))
+    jumps.append(('#compare', 'Compared with natural'))
+    if q.trends:
+        jumps.append(('#age', 'As marshes age'))
+    if q.gaps:
+        jumps.append(('#gaps-h', 'Not studied'))
+    return page(data, 'q2.html', 'Q2 · Created marshes', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
 
 
 def q3_cell_id(subject_id: str, outcome_id: str) -> str:
@@ -844,12 +919,11 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     grid = data.q3_grid
     s = q.extra['summary']
     body = q_header(q, prose, skip_short=True)
-    body += ('<p class="short"><strong>Short answer:</strong> %s of %s combinations have been studied; '
-             '%s of those by a single study. %s</p>'
+    body += short_box('%s of %s combinations have been studied; %s of those by a single study. %s'
              % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
-                span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html))
+                span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html), 'short')
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
-    body += ('<h2>Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
+    body += ('<h2 id="map">Gap map</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
              ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
              'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
              '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
@@ -888,7 +962,7 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     body += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
              'order.</p><ol class="densest">%s</ol>' % ''.join(dense))
 
-    body += '<h2>Every combination</h2>'
+    body += '<h2 id="every">Every combination</h2>'
     for rid, rlbl in grid['rows']:
         items = []
         template = row_search_template(grid, rid)
@@ -911,10 +985,11 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         if template is not None:
             note = ('<p class="searched" data-template="%s">“Not studied” below means this was searched for and '
                     'nothing was found: %s.</p>' % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
-        body += ('<section class="row-detail" aria-labelledby="r-%s"><h3 id="r-%s">%s</h3>%s'
-                 '<ul class="cells">%s</ul></section>'
-                 % (esc(slug(rid)), esc(slug(rid)), esc(rlbl), note, ''.join(items)))
-    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS)
+        n_f = sum(1 for cid, _ in grid['cols'] if not isinstance(grid['cells'][(rid, cid)], Gap))
+        body += fold('r-%s' % slug(rid), esc(rlbl), 3, '%d studied, %d not studied' % (n_f, len(grid['cols']) - n_f),
+                     '%s<ul class="cells">%s</ul>' % (note, ''.join(items)))
+    jumps = [('#short', 'Short answer'), ('#map', 'Gap map'), ('#densest', 'Most studied'), ('#every', 'Every combination')]
+    return page(data, 'q3.html', 'Q3 · Grassland gaps', q.text, body + GRADING_POPOVER + OPEN_TARGET_JS, jumps=jumps)
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -950,7 +1025,7 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
             '<p>Planting-stock traits and site treatments (left) act on seedling survival and growth '
             '(right), directly and through the conditions they change (middle). '
             'A table of every arrow follows the graph.</p>')
-    body += ('<h2>How to read the graph</h2><dl class="legend">'
+    body += ('<h2 id="read">How to read the graph</h2><dl class="legend">'
              '<div><dt>↑ ↓ ⇅ – ?</dt><dd>Direction: what happens to the target (increase, decrease, '
              'mixed, no effect, unclear). The symbol and the word carry the meaning; colour repeats it.</dd></div>'
              '<div><dt><svg width="48" height="10" aria-hidden="true"><line x1="0" y1="5" x2="48" y2="5" '
@@ -988,7 +1063,7 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
             items.append('<li>%s: %s.%s</li>' % (esc(s.get('edge_id')), esc(s.get('why')), where))
         body += ('<h2>Claim set aside</h2><p>Not drawn on the graph:</p><ul>%s</ul>' % ''.join(items))
 
-    body += '<h2>Evidence behind each arrow</h2>'
+    body += '<h2 id="arrows">Evidence behind each arrow</h2>'
     for e in g.edges:
         es = slug(e['id'])
         base = 'q1graph/%s' % es
@@ -1027,11 +1102,12 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
                     % (es, esc(edge_title(g, e)), direction_badge(e['direction'], base + '/direction'),
                        span(base + '/certainty', certainty_text(e['certainty'])),
                        counts(base, e['studies'], e['claims'])))
-    body += '<h2>All arrows as a table</h2>' + table(
+    body += '<h2 id="table">All arrows as a table</h2>' + table(
         'Every arrow on the graph, with the same data as text',
         ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
+    jumps = [('#read', 'How to read it'), ('#arrows', 'Evidence behind each arrow'), ('#table', 'All arrows as a table'), ('q1.html', 'Back to the answer')]
     return page(data, 'q1-graph.html', 'Q1 graph · Tree planting', 'The tree-planting answer drawn as a '
-                'causal graph, with the sources behind every arrow.', body)
+                'causal graph, with the sources behind every arrow.', body, jumps=jumps)
 
 
 # --------------------------------------------------------------- method
@@ -1049,14 +1125,19 @@ def render_method(data: SiteData) -> str:
                'direction, the study design, the comparator and the sentence in the paper).')
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
     body = (
-        '<h1>How to read these answers</h1>'
-        '<h2>Where the numbers come from</h2>'
+        '<h1>How it works</h1>'
+        '<nav class="tabs" aria-label="On this page"><ul><li><a href="#certainty">Certainty</a></li>'
+        '<li><a href="#data">Where the data comes from</a></li><li><a href="#limits">Limits</a></li>'
+        '<li><a href="#about">About us</a></li></ul></nav>'
+        '%%CERTAINTY%%'
+        '<section class="tab" aria-labelledby="data"><h2 id="data">Where the data comes from</h2>'
         '<p>%s The answer pack pools those claims into findings with simple, visible rules: no '
         'language model and no statistical modelling.</p>'
         '<p>Every direction, certainty grade and study count on this site is read from the pack\'s answer '
         'files when the site is built, and a check compares each one on every page with the pack before '
-        'the site is published. Nothing is typed in by hand.</p>'
-        '<h2 id="certainty">How certainty is graded</h2>'
+        'the site is published. Nothing is typed in by hand.</p>%%BUILT%%</section>'
+        '%%LIMITS%%%%ABOUT%%'
+        '<section class="tab" aria-labelledby="certainty"><h2 id="certainty">Certainty: how sure we can be</h2>'
         '<p class="lead">First we look at the best kind of study behind a finding. Experiments start at High, '
         'observation-only studies start at Low. It moves down a level if there\'s only one study or studies '
         'disagree, and up a level if several studies agree or they show how it works.</p>'
@@ -1097,12 +1178,36 @@ def render_method(data: SiteData) -> str:
         '<p>On the tree-planting graph, a route through a middle-column condition (for example site '
         'preparation → competing vegetation → growth) joins two separate bodies of evidence, mostly from '
         'different papers. It is not one tested effect, and the site never multiplies arrows into a '
-        'pathway strength.</p>'
+        'pathway strength.</p></section>'
         % (src, esc(rule),
            direction_badge('increase'), direction_badge('decrease'), direction_badge('mixed'),
            direction_badge('no_effect'), direction_badge('unclear'), direction_badge('below_reference'),
            direction_badge('comparable'), direction_badge('above_reference')))
-    return page(data, 'method.html', 'Method · How to read', 'How certainty is graded, what the direction '
+    # Certainty first (the "?" popups link here), then data, limits, about
+    cert_start = body.index('<section class="tab" aria-labelledby="certainty">')
+    cert = body[cert_start:]
+    body = body[:cert_start].replace('%CERTAINTY%', cert)
+    lim = []
+    for n, (qid, q) in enumerate(data.questions.items(), 1):
+        lim.append('<h3>%02d %s</h3><ul>%s</ul>' % (n, esc(question_name(q)), ''.join(
+            '<li>%s</li>' % esc(t) for t in q.limitations)))
+    if data.q1_graph is not None and getattr(data.q1_graph, 'limitations', None):
+        lim.append('<h3>Tree planting graph</h3><ul>%s</ul>' % ''.join('<li>%s</li>' % esc(t)
+                                                                      for t in data.q1_graph.limitations))
+    built = ''.join('<h3>%02d %s</h3><p>%s</p>' % (n, esc(question_name(q)), esc(q.how_built))
+                    for n, (qid, q) in enumerate(data.questions.items(), 1) if q.how_built)
+    body = body.replace('%BUILT%', ('<h3 class="sub-h">How each answer was built</h3>%s' % built) if built else '')
+    body = body.replace('%LIMITS%', '<section class="tab" aria-labelledby="limits"><h2 id="limits">Limits</h2>'
+                        '<p>What each answer cannot tell you, as the answer pack states it. Each question page '
+                        'shows its own list too.</p>%s</section>' % ''.join(lim))
+    body = body.replace('%ABOUT%', '<section class="tab" aria-labelledby="about"><h2 id="about">About us</h2>'
+                        '<p>Built by team Whimsy for Evidence Jam 2026, Lane 3 (decision support). The site '
+                        'is static and works offline. It uses no language model: every sentence that states a '
+                        'finding is built from the answer pack with fixed rules, and a check compares every '
+                        'number on every page with the pack before the site is published.</p>'
+                        '<p>Site code: MIT licence. Data: the Evidence Jam 2026 Lane 3 answer pack, built from '
+                        'the Lane 2 CAMO causal graph.</p></section>')
+    return page(data, 'method.html', 'Method · How it works', 'How certainty is graded, what the direction '
                 'words mean and where every number comes from.', body)
 
 

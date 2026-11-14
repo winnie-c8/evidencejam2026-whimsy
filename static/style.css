@@ -58,8 +58,10 @@ footer.site { border-top: 1px solid var(--line); color: var(--muted); font-size:
 .short { font-size: 1.05rem; }
 .card { border: 1px solid var(--line); border-radius: 6px; padding: 0 1rem; margin: 1rem 0; }
 .callout { border-left: 6px solid var(--link); background: var(--panel); padding: .5rem 1rem; margin: 1rem 0; }
-.limits { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 0 1rem .75rem; margin: 1rem 0; }
-.limits h2 { font-size: 1.1rem; }
+details.limits { border: 1px solid var(--line); border-radius: 6px; padding: .5rem 1rem; margin: 1rem 0; }
+details.limits > summary { cursor: pointer; }
+details.limits[open] { background: var(--panel); }
+details.limits .built { font-size: .95rem; }
 
 /* badges */
 .dir { font-weight: 600; white-space: nowrap; }
@@ -185,8 +187,13 @@ a.srclink { white-space: nowrap; }
 .fcard p, .fcard li { max-width: none; }
 
 /* the closed line */
-details.fd > summary { list-style: none; cursor: pointer; display: grid; align-items: center; gap: .25rem 1rem;
-  grid-template-columns: 8rem minmax(0, 1fr) minmax(12rem, 16rem) minmax(11rem, 15rem) 5rem; padding: .6rem .9rem; }
+details.fd > summary { list-style: none; cursor: pointer; display: grid; align-items: center; gap: .35rem 1rem;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto; grid-template-areas: "chip name more" ". meta meta"; padding: .6rem .9rem; }
+.fchip { grid-area: chip; white-space: nowrap; }
+/* Q2 compares with natural marshes: its chips ("▼ Below reference") are longer, so a wider column */
+.fcard.fref details.fd > summary { grid-template-columns: 11.5rem minmax(0, 1fr) auto; } .fcard .fhead { grid-area: name; } .fmore { grid-area: more; } .fmeta { grid-area: meta; }
+.fmeta { display: flex; flex-wrap: wrap; gap: .25rem 2rem; color: var(--ink); }
+.sp { white-space: nowrap; }
 details.fd > summary::-webkit-details-marker { display: none; }
 details.fd > summary:hover { background: var(--panel); }
 .chip { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: 0 .5rem; font-size: .9rem; white-space: nowrap; }
@@ -199,11 +206,8 @@ details.fd > summary:hover { background: var(--panel); }
 .fmore::after { content: " ▾"; }
 details.fd[open] .fmore::after { content: " ▴"; }
 details.fd[open] > summary { border-bottom: 1px solid var(--line); }
-@media (max-width: 52rem) {
-  details.fd > summary { grid-template-columns: auto minmax(0, 1fr); }
-  .fchip { grid-row: 1; } .fhead { grid-row: 1; }
-  .fcert, .fsplit { grid-column: 1 / -1; }
-  .fmore { grid-column: 1 / -1; text-align: left; }
+@media (max-width: 40rem) {
+  details.fd > summary, .fcard.fref details.fd > summary { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "chip more" "name name" "meta meta"; }
 }
 
 /* open: panels side by side, stacked on phones */
@@ -287,3 +291,97 @@ button.help:hover { background: var(--link); color: var(--bg); }
 .pop h2 { margin-top: 0; font-size: 1.2rem; }
 .pop .ex { background: var(--panel); padding: .4rem .6rem; border-radius: 4px; }
 .none-pw { font-size: .95rem; color: var(--muted); margin: .25rem 0; }
+
+/* ---------------------------------------------------------------------------
+   Site structure (temporary look; Track A is designing the real one: #27, #50)
+   Home: top nav + big headline. Every other page: left sidebar + content.
+   --------------------------------------------------------------------------- */
+:root { --cream: #f5efe1; --navy: #1f2a5c; }
+
+/* sidebar layout */
+.layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2rem; max-width: 84rem; margin: 0 auto; padding: 0 16px; }
+.layout main { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
+.side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding: 1.25rem 0; }
+.side .brand { display: block; font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--ink); text-decoration: none; margin-bottom: 1.25rem; }
+ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+ul.qnav.more { margin-top: 1rem; }
+.qnav > li { border-bottom: 1px solid var(--line); }
+.qnav > li > a { display: flex; gap: .6rem; padding: .45rem 0; color: var(--ink); text-decoration: none; }
+.qnav > li > a:hover { color: var(--link); }
+.qnav > li > a[aria-current="page"] { font-weight: 700; color: var(--link); }
+.qnav .n { min-width: 1.6rem; color: var(--link); font-variant-numeric: tabular-nums; }
+.qnav li.sub > a { padding-left: .75rem; font-size: .95rem; }
+ul.jumps { list-style: none; margin: 0 0 .5rem 2.2rem; padding: 0; font-size: .9rem; }
+ul.jumps a { display: block; padding: .15rem 0; color: var(--muted); text-decoration: none; }
+ul.jumps a:hover { color: var(--link); text-decoration: underline; }
+.layout main h1 { margin-top: 1.5rem; }
+
+/* short answer: the cream box */
+p.short { background: var(--cream); border-radius: 6px; padding: .75rem 1rem; max-width: none; }
+
+/* home */
+h1.mega { font-size: clamp(3rem, 13vw, 9rem); line-height: .95; font-weight: 600; letter-spacing: -.05em;
+  text-transform: lowercase; margin: 2.5rem 0 1rem; max-width: none; }
+ol.qrows { list-style: none; padding: 0; margin: 2rem 0; border-top: 1px solid var(--ink); }
+li.qrow { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--line); }
+li.qrow .n { font-size: 2rem; font-weight: 600; color: var(--link); line-height: 1; }
+li.qrow h2 { margin: 0 0 .25rem; font-size: 1.4rem; }
+li.qrow h2 a { color: var(--ink); text-decoration: none; }
+li.qrow h2 a:hover { color: var(--link); text-decoration: underline; }
+li.qrow .q { color: var(--muted); margin: 0 0 .5rem; }
+.key-strip { border-top: 1px solid var(--ink); padding-top: .5rem; margin: 2rem 0; }
+.key-strip h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+.key-strip ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .75rem 2rem; }
+.key-strip li { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.qmark { font-size: 1.4rem; font-weight: 700; color: var(--link); }
+header.site { background: var(--bg); }
+header.site ul { font-size: .9rem; text-transform: uppercase; letter-spacing: .04em; }
+
+/* method tabs (in-page links: work with keyboard, no script) */
+nav.tabs ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 1rem 0 2rem; }
+nav.tabs a { display: inline-block; border: 1px solid var(--link); border-radius: 999px; padding: .3rem .9rem; text-decoration: none; }
+nav.tabs a:hover, nav.tabs a:focus-visible { background: var(--link); color: var(--bg); }
+section.tab { border-top: 1px solid var(--ink); margin-top: 2rem; scroll-margin-top: 1rem; }
+section.tab h2 { color: var(--link); }
+
+/* phones: the sidebar becomes a compact menu across the top */
+@media (max-width: 52rem) {
+  .layout { display: block; }
+  .side { position: static; max-height: none; padding: .75rem 0 0; }
+  .side .brand { font-size: 1.3rem; margin-bottom: .5rem; }
+  ol.qnav, ul.qnav { display: flex; flex-wrap: wrap; gap: 0 1rem; border: 0; }
+  ul.qnav.more { margin-top: 0; }
+  .qnav > li { border: 0; }
+  .qnav > li > a { padding: .3rem 0; }
+  ul.jumps { display: none; }
+  li.qrow { grid-template-columns: 2.5rem minmax(0, 1fr); }
+  li.qrow .n { font-size: 1.4rem; }
+}
+
+/* short answer box (div: may hold a bullet list) */
+div.short { background: var(--cream); border-radius: 6px; padding: .6rem 1rem; margin: .75rem 0 1rem; }
+div.short p { margin: .25rem 0; max-width: none; }
+div.short .sa-h { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; }
+ul.sa { margin: .25rem 0; padding-left: 1.2rem; }
+ul.sa li { margin: .3rem 0; max-width: none; }
+.glance-sec { margin-bottom: 1.5rem; }
+
+/* sections that open like dropdowns */
+details.sec { border-top: 1px solid var(--line); }
+details.sec:last-of-type { border-bottom: 1px solid var(--line); }
+details.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: .75rem; padding: .6rem 0; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::before { content: "▸"; color: var(--link); }
+details.sec[open] > summary::before { content: "▾"; }
+details.sec > summary > h2, details.sec > summary > h3 { margin: 0; display: inline; }
+details.sec > summary:hover h2, details.sec > summary:hover h3 { color: var(--link); }
+.cnt { color: var(--muted); font-size: .9rem; }
+.sec-body { padding: 0 0 1rem; }
+details.limits .cnt { margin-left: .5rem; }
+details.limits .intro { font-size: .95rem; color: var(--muted); }
+
+/* home guide */
+.guide { border-top: 1px solid var(--ink); margin: 2rem 0; }
+.guide ol { padding-left: 1.4rem; }
+.guide li { margin: .4rem 0; }
+h2.rows-h { margin-bottom: 0; }
