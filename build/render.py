@@ -786,6 +786,13 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
     for f in ('style.css', 'favicon.svg', 'graph.js'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
+    # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
+    fonts = os.path.join(ROOT, 'static', 'fonts')
+    if os.path.isdir(fonts):
+        os.makedirs(os.path.join(out, 'static', 'fonts'), exist_ok=True)
+        for f in sorted(os.listdir(fonts)):
+            if f.endswith(('.woff2', '.txt')):
+                shutil.copyfile(os.path.join(fonts, f), os.path.join(out, 'static', 'fonts', f))
     sources: List[SourcePage] = []
     pages: Dict[str, str] = {'index.html': render_index(data, prose)}
     for qid, q in data.questions.items():
