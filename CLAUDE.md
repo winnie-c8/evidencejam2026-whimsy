@@ -38,6 +38,7 @@ Audience: restoration practitioners (non-coders, e.g. conservation authorities, 
 ## Code layout
 - `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; template-only, LLM off), `check.py` (built-in checker)
 - `static/style.css`
+- **Add a new question:** drop its JSON in `answers/` and rebuild; the layout is picked from the data's shape (`detect_kind()` in `load.py`: gap map → comparison → effects → generic), and a `qN_..._graph.json` gets its own `qN-graph.html`. Per-question wording (`AUDIENCE`, `GRAPH_INTRO` in `render.py`) falls back to a default.
 - `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + mutation tests: each breaks the site on purpose and must be caught), `tests/a11y/` (axe, phone width, keyboard Tab order and focus outlines; CI only, needs Node)
 - `.github/workflows/check.yml` runs all of this on PRs.
 - Page contract the checkers rely on: `id="f-<slug>"` findings, `id="gap-<slug>"` gaps, `id="edge-<slug>"` SVG arrows, `id="e-<slug>"` evidence sections, `data-check="<q>/<slug>/direction|certainty|studies"`, `data-claim="<edge id>"`, and one `sources-<finding slug>.html` / `sources-e-<arrow slug>.html` page per finding / graph arrow, linked from it, showing exactly its quotes. If you change markup, update the mutation patterns in tests/test_checkers.py.

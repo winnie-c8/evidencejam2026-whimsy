@@ -1,4 +1,4 @@
-"""Draw the Q1 causal graph as inline SVG and insert it into q1-graph.html.
+"""Draw a question's causal graph as inline SVG and insert it into its <qid>-graph.html.
 
 Layout is deterministic (rounded to 1 decimal) so builds are byte-identical.
 Every edge is an <a> to its evidence panel; all labels are SVG <text>.
@@ -160,7 +160,7 @@ def ports(items: List[Tuple[str, float]], box: Box) -> Dict[str, float]:
     return out
 
 
-def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
+def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> str:
     boxes = layout(g)
     effects = [e for e in g.edges if e.get('kind') == 'effect']
     mods = [e for e in g.edges if e.get('kind') == 'moderation']
@@ -344,9 +344,9 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
         else:
             out.append('<path class="vis c-%s" d="%s" marker-end="url(#ah-%s)"/>'
                        % (e['certainty'], d, ARROW[e['direction']]))
-        main = ('<tspan aria-hidden="true">%s</tspan> <tspan data-check="q1graph/%s/certainty">%s</tspan>, '
-                '<tspan data-check="q1graph/%s/studies">%d</tspan>'
-                % (SYM[e['direction']], es, CERT[e['certainty']], es, n))
+        main = ('<tspan aria-hidden="true">%s</tspan> <tspan data-check="%s/%s/certainty">%s</tspan>, '
+                '<tspan data-check="%s/%s/studies">%d</tspan>'
+                % (SYM[e['direction']], prefix, es, CERT[e['certainty']], prefix, es, n))
         parts = [(main, False)]
         if e.get('kind') == 'moderation':
             parts.append(('changes this effect', True))  # the name already says "changes the effect of"
@@ -358,12 +358,13 @@ def build_svg(g: Graph, edge_index: Dict[str, Any]) -> str:
     return '\n'.join(out)
 
 
-def write_graph(graph: Graph, edge_index: Dict[str, Any], out: str) -> None:
-    path = os.path.join(out, 'q1-graph.html')
+def write_graph(graph: Graph, edge_index: Dict[str, Any], out: str, qid: str = 'q1') -> None:
+    name = '%s-graph.html' % qid
+    path = os.path.join(out, name)
     with open(path, encoding='utf-8') as fh:
         text = fh.read()
     if '<!--GRAPH-->' not in text:
-        raise RuntimeError('q1-graph.html has no <!--GRAPH--> placeholder')
-    text = text.replace('<!--GRAPH-->', build_svg(graph, edge_index), 1)
+        raise RuntimeError('%s has no <!--GRAPH--> placeholder' % name)
+    text = text.replace('<!--GRAPH-->', build_svg(graph, edge_index, '%sgraph' % qid), 1)
     with open(path, 'w', encoding='utf-8') as fh:
         fh.write(text)

@@ -154,12 +154,41 @@ class Question:
 @dataclass(frozen=True)
 class SiteData:
     questions: Dict[str, Question]
-    q1_graph: Optional[Graph]
-    edge_index: Dict[str, Tuple[Quote, ...]]
-    graph_join: Dict[str, str]  # finding slug -> graph edge id
-    q3_grid: Optional[Dict[str, Any]]
+    kinds: Dict[str, str]                                # qid -> layout, from detect_kind()
+    graphs: Dict[str, Graph]                             # qid -> its *_graph.json, if any
+    edge_index: Dict[str, Dict[str, Tuple[Quote, ...]]]  # qid -> graph edge id -> quotes
+    graph_join: Dict[str, str]                           # finding slug -> graph edge id (slugs carry the qid)
+    grids: Dict[str, Dict[str, Any]]                     # qid -> gap-map grid, for "gapmap" questions
     manifest: Dict[str, Any]
     warnings: Tuple[str, ...]
+
+    def graph_qids(self) -> List[str]:
+        """Questions that have a graph page, in question order."""
+        return [qid for qid in self.questions if qid in self.graphs]
+
+
+# ---------------------------------------------------------------- shape
+# The page layout follows what the answer file contains, not its id, so a new question
+# dropped into answers/ gets the right layout with no code change. Checked in this order:
+GAPMAP, COMPARISON, EFFECTS, GENERIC = 'gapmap', 'comparison', 'effects', 'generic'
+SUMMARY_COUNTS = ('cells', 'filled', 'thin', 'empty')
+
+
+def detect_kind(q: 'Question') -> str:
+    """gapmap: a summary with cell counts and findings that carry a density (study counts per cell).
+    comparison: compared with a reference (time_to_reference, reference directions) or over time.
+    effects: plain findings that increase, decrease or are mixed.
+    generic: anything else."""
+    summary = q.extra.get('summary') or {}
+    if (all(_is_count(summary.get(k)) for k in SUMMARY_COUNTS) and q.findings
+            and all(f.raw.get('density') for f in q.findings)):
+        return GAPMAP
+    sa = q.extra.get('short_answer') or {}
+    if 'time_to_reference' in sa or any(f.reference for f in q.findings) or q.trends:
+        return COMPARISON
+    if any(f.direction in ('increase', 'decrease', 'mixed') for f in q.findings):
+        return EFFECTS
+    return GENERIC
 
 
 # ---------------------------------------------------------------- helpers
@@ -395,7 +424,7 @@ def _join_graph(q: Question, g: Graph, errors: List[str]) -> Dict[str, str]:
     return join
 
 
-def _q3_grid(q: Question, errors: List[str]) -> Dict[str, Any]:
+def _grid(q: Question, errors: List[str]) -> Dict[str, Any]:
     rows: List[Tuple[str, str]] = []
     cols: List[Tuple[str, str]] = []
     for item in list(q.findings) + list(q.gaps):
@@ -407,12 +436,12 @@ def _q3_grid(q: Question, errors: List[str]) -> Dict[str, Any]:
     for item in list(q.findings) + list(q.gaps):
         key = (item.subject_id, item.outcome_id)
         if key in cells:
-            errors.append("q3 grid: cell %s x %s has more than one entry" % key)
+            errors.append("%s grid: cell %s x %s has more than one entry" % ((q.qid,) + key))
         cells[key] = item
     for r, _ in rows:
         for c, _ in cols:
             if (r, c) not in cells:
-                errors.append("q3 grid: cell %s x %s is neither a finding nor a gap" % (r, c))
+                errors.append("%s grid: cell %s x %s is neither a finding nor a gap" % (q.qid, r, c))
     return {"rows": rows, "cols": cols, "cells": cells}
 
 
@@ -444,25 +473,25 @@ def load_all(answers_dir: str = "answers") -> SiteData:
         if qid not in questions:
             errors.append("graph file for %s has no matching answer file" % qid)
 
-    q1_graph = graphs.get("q1")
-    edge_index: Dict[str, Tuple[Quote, ...]] = {}
+    kinds = {qid: detect_kind(q) for qid, q in questions.items()}
+    edge_index: Dict[str, Dict[str, Tuple[Quote, ...]]] = {}
     graph_join: Dict[str, str] = {}
-    if q1_graph is not None and "q1" in questions:
-        graph_join = _join_graph(questions["q1"], q1_graph, errors)
-        for e in q1_graph.edges:
-            edge_index[e["id"]] = tuple(q1_graph.evidence[x] for x in e.get("edge_ids") or ()
-                                        if x in q1_graph.evidence)
-        total = sum(len(v) for v in edge_index.values())
-        if total != len(q1_graph.evidence):
-            errors.append("edge index: %d quotes across edges but graph evidence has %d"
-                          % (total, len(q1_graph.evidence)))
-        unmatched = [e["id"] for e in q1_graph.edges if e["id"] not in graph_join.values()]
-        if len(unmatched) + len(graph_join) != len(q1_graph.edges):
-            errors.append("graph join: edge accounting mismatch")
+    for qid, g in graphs.items():
+        if qid not in questions:
+            continue
+        join = _join_graph(questions[qid], g, errors)
+        graph_join.update(join)
+        idx = {e["id"]: tuple(g.evidence[x] for x in e.get("edge_ids") or () if x in g.evidence) for e in g.edges}
+        edge_index[qid] = idx
+        total = sum(len(v) for v in idx.values())
+        if total != len(g.evidence):
+            errors.append("%s edge index: %d quotes across edges but graph evidence has %d"
+                          % (qid, total, len(g.evidence)))
+        unmatched = [e["id"] for e in g.edges if e["id"] not in join.values()]
+        if len(unmatched) + len(join) != len(g.edges):
+            errors.append("%s graph join: edge accounting mismatch" % qid)
 
-    q3_grid = None
-    if "q3" in questions:
-        q3_grid = _q3_grid(questions["q3"], errors)
+    grids = {qid: _grid(q, errors) for qid, q in questions.items() if kinds[qid] == GAPMAP}
 
     manifest: Dict[str, Any] = {}
     mpath = os.path.join(os.path.dirname(os.path.abspath(answers_dir)), "manifest.json")
@@ -472,6 +501,5 @@ def load_all(answers_dir: str = "answers") -> SiteData:
 
     if errors:
         raise LoadError("\n".join(errors))
-    return SiteData(questions=questions, q1_graph=q1_graph, edge_index=edge_index,
-                    graph_join=graph_join, q3_grid=q3_grid, manifest=manifest,
-                    warnings=tuple(warnings))
+    return SiteData(questions=questions, kinds=kinds, graphs=graphs, edge_index=edge_index,
+                    graph_join=graph_join, grids=grids, manifest=manifest, warnings=tuple(warnings))

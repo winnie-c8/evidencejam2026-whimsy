@@ -16,8 +16,8 @@ import sys
 from string import Template
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
-from load import (CERTAINTIES, EFFECT_DIRECTIONS, REFERENCE_DIRECTIONS, Finding, Gap,
-                  Question, Quote, SiteData, slug)
+from load import (CERTAINTIES, COMPARISON, EFFECT_DIRECTIONS, EFFECTS, GAPMAP, REFERENCE_DIRECTIONS,
+                  Finding, Gap, Question, Quote, SiteData, slug)
 from summarize import CERT_WORD, Prose
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -60,6 +60,27 @@ AUDIENCE = {
     'q3': 'Grassland restoration practitioners, funders and researchers choosing what to study next.',
 }
 DEFAULT_AUDIENCE = 'Restoration practitioners.'
+
+# The graph page's intro, per question; any other question's graph gets the default.
+GRAPH_INTRO = {
+    'q1': ('Planting-stock traits and site treatments (left) act on seedling survival and growth '
+           '(right), directly and through the conditions they change (middle). '),
+}
+DEFAULT_GRAPH_INTRO = ('Causes (left) act on outcomes (right), directly and through the conditions they change '
+                       '(middle). ')
+
+
+def graph_file(qid: str) -> str:
+    return '%s-graph.html' % qid
+
+
+def graph_prefix(qid: str) -> str:
+    """data-check prefix for a question's graph values, e.g. q1graph/<edge>/certainty."""
+    return '%sgraph' % qid
+
+
+def qnum(data: SiteData, qid: str) -> int:
+    return list(data.questions).index(qid) + 1
 
 
 def esc(s: Any) -> str:
@@ -448,9 +469,10 @@ def card_quote(q: Quote) -> str:
 def pathways(data: SiteData, f: Finding) -> str:
     """Q1 only: subject -> condition -> outcome routes in the graph, drawn as a vertical chain.
     Each step is its own body of evidence with its own certainty; never combined (README)."""
-    g = data.q1_graph
+    g = data.graphs.get(f.question)
     if g is None:
         return ''
+    gfile = graph_file(f.question)
     effects = [e for e in g.edges if e.get('kind') == 'effect']
     first = {e['target']: e for e in effects if e['source'] == f.subject_id}
     chains = []
@@ -461,7 +483,7 @@ def pathways(data: SiteData, f: Finding) -> str:
         parts = ['<li class="node">%s</li>' % esc(g.node(e1['source'])['label'])]
         for e in (e1, e2):
             s = slug(e['id'])
-            base = 'q1graph/' + s
+            base = '%s/%s' % (graph_prefix(f.question), s)
             parts.append('<li class="step"><span class="down" aria-hidden="true">↓</span> %s · %s · %s %s</li>'
                          % (chip(e['direction'], base + '/direction'),
                             span(base + '/certainty', certainty_text(e['certainty'])),
@@ -470,8 +492,8 @@ def pathways(data: SiteData, f: Finding) -> str:
         chains.append('<ol class="chain">%s</ol>' % ''.join(parts))
     graph = ''
     if f.slug in data.graph_join:
-        graph = ('<p class="go"><a href="q1-graph.html#e-%s">See on the graph →<span class="sr-only"> %s</span></a></p>'
-                 % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
+        graph = ('<p class="go"><a href="%s#e-%s">See on the graph →<span class="sr-only"> %s</span></a></p>'
+                 % (gfile, esc(slug(data.graph_join[f.slug])), esc(f.label)))
     if not chains:
         # a gap, shown as a gap: no study here links this factor to a condition on the way
         conds = [n['label'] for n in g.nodes if n.get('kind') == 'condition']
@@ -548,7 +570,7 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
                 % (esc(f.slug), len(groups), plural(len(groups), 'paper', 'papers'),
                    span(base + '/claims', f.claims), plural(f.claims, 'quote', 'quotes')))
     src = '<section class="panel"><h5>Sources</h5>%s<p class="go">%s</p></section>' % (quotes, all_link)
-    pw = pathways(data, f) if f.question == 'q1' else ''
+    pw = pathways(data, f) if f.question in data.graphs else ''
     more = extra + (('<p class="flinks">%s</p>' % links) if links and not pw else '')
     return ('<article class="fcard%s fdir-%s" id="f-%s"><details class="fd"><summary>%s</summary>'
             '<div class="panels">%s%s%s</div>%s</details></article>'
@@ -658,8 +680,8 @@ def nav_items(data: SiteData) -> List[Tuple[str, str]]:
     items = [('index.html', 'Home')]
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         items.append(('%s.html' % qid, '%02d %s' % (n, question_name(q))))
-        if qid == 'q1' and data.q1_graph is not None:
-            items.append(('q1-graph.html', 'Graph'))
+        if qid in data.graphs:
+            items.append((graph_file(qid), 'Graph'))
     items.append(('method.html', 'Method'))
     return items
 
@@ -678,8 +700,8 @@ def side_nav(data: SiteData, filename: str, jumps: Optional[List[Tuple[str, str]
     qs = []
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         qs.append(item('%s.html' % qid, '%02d' % n, question_name(q)))
-        if qid == 'q1' and data.q1_graph is not None:
-            qs.append(item('q1-graph.html', '↳', 'Tree planting graph', 'sub'))
+        if qid in data.graphs:
+            qs.append(item(graph_file(qid), '↳', '%s graph' % question_name(q), 'sub'))
     more = item('method.html', '?', 'How it works') + item('index.html', '⌂', 'Home')
     return ('<aside class="side"><a class="brand" href="index.html">whimsy<span class="sr-only">: home</span></a>'
             '<nav aria-label="Questions"><ol class="qnav">%s</ol><ul class="qnav more">%s</ul></nav></aside>'
@@ -716,8 +738,9 @@ def render_index(data: SiteData, prose: Prose) -> str:
     rows = []
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
-        if qid == 'q1' and data.q1_graph is not None:
-            graph = ' · <a href="q1-graph.html">See it as a graph<span class="sr-only">: %s</span></a>' % esc(question_name(q))
+        if qid in data.graphs:
+            graph = (' · <a href="%s">See it as a graph<span class="sr-only">: %s</span></a>'
+                     % (graph_file(qid), esc(question_name(q))))
         rows.append(
             '<li class="qrow"><span class="n" aria-hidden="true">%02d</span><div>'
             '<h2 id="card-%s"><a href="%s.html">%s</a></h2><p class="q">%s</p>%s'
@@ -840,13 +863,14 @@ def by_strength(fs: Iterable[Finding]) -> List[Finding]:
     return sorted(fs, key=lambda f: (CERT_ORDER.index(f.certainty), -f.studies))
 
 
-def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """Main view: at a glance, findings by outcome (strongest first), combined treatments, graph link."""
+def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """EFFECTS layout (Q1 today). Main view: at a glance, findings by outcome (strongest first),
+    combined treatments, graph link."""
     def card(f: Finding) -> str:
         graph = ''
         if f.slug in data.graph_join:
-            graph = ('<a href="q1-graph.html#e-%s">On the graph<span class="sr-only">: %s</span></a>'
-                     % (esc(slug(data.graph_join[f.slug])), esc(f.label)))
+            graph = ('<a href="%s#e-%s">On the graph<span class="sr-only">: %s</span></a>'
+                     % (graph_file(q.qid), esc(slug(data.graph_join[f.slug])), esc(f.label)))
         return finding_card(data, f, sources, level=4, links=graph)
 
     groups: Dict[str, List[Finding]] = {}
@@ -859,8 +883,8 @@ def render_q1(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         main += fold('o-%s' % slug(fs[0].outcome_id), esc(outcome), 3, '%d findings, strongest first' % len(fs),
                      '<div class="cards">%s</div>' % ''.join(card(f) for f in by_strength(fs)))
     main += interactions_section(data, q)
-    if data.q1_graph is not None:
-        main += '<p class="graph-link"><a href="q1-graph.html">See this answer as a graph →</a></p>'
+    if q.qid in data.graphs:
+        main += '<p class="graph-link"><a href="%s">See this answer as a graph →</a></p>' % graph_file(q.qid)
     jumps = [('#glance', 'At a glance')]
     jumps += [('#o-%s' % slug(fs[0].outcome_id), fs[0].outcome_label) for fs in groups.values()]
     if q.extra.get('interactions'):
@@ -872,7 +896,7 @@ def interactions_section(data: SiteData, q: Question) -> str:
     inter = q.extra.get('interactions') or []
     if not inter:
         return ''
-    g = data.q1_graph
+    g = data.graphs.get(q.qid)
     rows = []
     for i, it in enumerate(inter):
         eid = it['edge_id']
@@ -892,8 +916,8 @@ def interactions_section(data: SiteData, q: Question) -> str:
                             kind = 'a combination node (two treatments applied together)'
                         else:
                             kind = 'an edge'
-                        shown = 'Shown as %s: <a href="q1-graph.html#e-%s">%s</a>.' % (
-                            kind, esc(slug(e['id'])), esc(edge_title(g, e)))
+                        shown = 'Shown as %s: <a href="%s#e-%s">%s</a>.' % (
+                            kind, graph_file(q.qid), esc(slug(e['id'])), esc(edge_title(g, e)))
                         break
         rows.append('<tr id="ix-%d"><td>%s</td><td>%s</td><td>%s</td></tr>' % (
             i + 1, evidence_box(quote, 1, 'ev-ix-%d' % (i + 1), q.qid, open_=True),
@@ -905,18 +929,18 @@ def interactions_section(data: SiteData, q: Question) -> str:
                         ''.join(rows), 'interactions'))
 
 
-def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """Main view: what lags behind, compared with natural marshes, change as marshes age.
+def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """COMPARISON layout (Q2 today). Main view: what lags behind, compared with natural marshes, change as marshes age.
     The "how long?" answer is the short answer itself, so it comes first and is said once."""
     sa = q.extra.get('short_answer') or {}
     note = sa.get('time_to_reference_note') or ''
     ttr = sa.get('time_to_reference')
     if ttr is not None:
         lead = ('<p><strong>Time to reach the reference:</strong> %s</p><p>%s</p>'
-                % (span('q2/short_answer/time_to_reference', ttr), span('q2/short_answer/time_to_reference_note', note)))
+                % (span('%s/short_answer/time_to_reference' % q.qid, ttr), span('%s/short_answer/time_to_reference_note' % q.qid, note)))
     else:
         lead = ('<p><strong>How long? This body of research cannot say.</strong></p><p>%s</p>'
-                % span('q2/short_answer/time_to_reference_note', note))
+                % span('%s/short_answer/time_to_reference_note' % q.qid, note))
     if prose.short_answer[q.qid].text != note:
         lead += '<p>%s</p>' % prose.short_answer[q.qid].html
     short = ('<div class="short callout" role="note" aria-label="How long" id="short"><p class="sa-h">'
@@ -927,7 +951,7 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         if not tps:
             return '<span class="muted">No marsh age given</span>'
         return '<ul class="when">%s</ul>' % ''.join(
-            '<li>%s</li>' % span('q2/%s/time_points/%d' % (f.slug, i), t) for i, t in enumerate(tps))
+            '<li>%s</li>' % span('%s/%s/time_points/%d' % (q.qid, f.slug, i), t) for i, t in enumerate(tps))
 
     def cards(fs: Iterable[Finding]) -> str:
         out = []
@@ -941,7 +965,7 @@ def render_q2(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
     lag = sa.get('lagging_attributes') or []
     if lag:
         main += ('<h2 id="lag">What lags behind natural marshes</h2><ul class="lagging">%s</ul>'
-                 % ''.join('<li>%s</li>' % span('q2/short_answer/lagging_attributes/%d' % i, a) for i, a in enumerate(lag)))
+                 % ''.join('<li>%s</li>' % span('%s/short_answer/lagging_attributes/%d' % (q.qid, i), a) for i, a in enumerate(lag)))
         jumps.append(('#lag', 'What lags behind'))
     main += ('<h2 id="compare">Compared with natural marshes</h2><p class="note">Behind, matches or ahead of a '
              'natural reference wetland. “When measured” lists the ages of the marshes studied, not a time to '
@@ -960,14 +984,15 @@ def q3_cell_id(subject_id: str, outcome_id: str) -> str:
 OUTCOME_SLOT = '{outcome}'
 
 
-def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """Main view: the gap map (sticky names), the ten most studied, then every studied combination
+def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """GAPMAP layout (Q3 today). Main view: the gap map (sticky names), the ten most studied, then every studied combination
     grouped by intervention, closed; a map cell opens its card. Gaps are in the shared Not studied."""
-    grid = data.q3_grid
+    grid = data.grids[q.qid]
+    qid = q.qid
     s = q.extra['summary']
     short = short_box('%s of %s combinations have been studied; %s of those by a single study. %s'
-                      % (span('q3/summary/filled', s['filled']), span('q3/summary/cells', s['cells']),
-                         span('q3/summary/thin', s['thin']), prose.short_answer['q3'].html), 'short')
+                      % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
+                         span('%s/summary/thin' % qid, s['thin']), prose.short_answer[qid].html), 'short')
     main = ('<h2 id="map">Gap map %s</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
             ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
             'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
@@ -988,7 +1013,7 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
             else:
                 dens = item.raw.get('density', '')
                 tds.append('<td class="d-%s"><a href="#%s">%s <span class="sr-only">%s, </span>%s</a></td>'
-                           % (esc(dens), q3_cell_id(rid, cid), span('q3/%s/studies' % item.slug, item.studies),
+                           % (esc(dens), q3_cell_id(rid, cid), span('%s/%s/studies' % (qid, item.slug), item.studies),
                               esc(plural(item.studies, 'study', 'studies')), esc(dens)))
         trs.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(rlbl), ''.join(tds)))
     main += ('<div class="grid-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
@@ -1002,7 +1027,7 @@ def render_q3(data: SiteData, prose: Prose, q: Question, sources: List[SourcePag
         d, c, n = finding_cells(f)
         dense.append('<li><a href="#%s">%s</a>: %s · %s · %s</li>' % (
             q3_cell_id(f.subject_id, f.outcome_id), esc(f.subject_label + ' × ' + f.outcome_label), d,
-            span('q3/%s/certainty' % f.slug, certainty_text(f.certainty)), n))
+            span('%s/%s/certainty' % (qid, f.slug), certainty_text(f.certainty)), n))
     main += ('<h2 id="densest">Where the evidence is densest</h2><p>The pack\'s ten most-studied combinations, in its '
              'order.</p><ol class="densest">%s</ol>' % ''.join(dense))
     main += '<h2 id="every">Every studied combination</h2>'
@@ -1045,14 +1070,18 @@ def edge_title(g: Any, e: Dict[str, Any]) -> str:
     return '%s → %s' % (src, g.node(e['target'])['label'])
 
 
-def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
-    g = data.q1_graph
-    q1 = data.questions.get('q1')
-    body = ('<h1>Tree planting as a causal graph</h1>'
+def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> str:
+    """The graph page for any question that has a *_graph.json."""
+    g = data.graphs[qid]
+    q = data.questions.get(qid)
+    n = qnum(data, qid)
+    gp_ = graph_prefix(qid)
+    gfile = graph_file(qid)
+    name = question_name(q) if q is not None else qid.upper()
+    body = ('<h1>%s as a causal graph</h1>'
             '<p class="lead">Each arrow is a body of evidence. Select one to read its sources.</p>'
-            '<p>Planting-stock traits and site treatments (left) act on seedling survival and growth '
-            '(right), directly and through the conditions they change (middle). '
-            'A table of every arrow follows the graph.</p>')
+            '<p>%sA table of every arrow follows the graph.</p>'
+            % (esc(name), esc(GRAPH_INTRO.get(qid, DEFAULT_GRAPH_INTRO))))
     body += ('<h2 id="read">How to read the graph</h2><dl class="legend">'
              '<div><dt>↑ ↓ ⇅ – ?</dt><dd>Direction: what happens to the target (increase, decrease, '
              'mixed, no effect, unclear). The symbol and the word carry the meaning; colour repeats it.</dd></div>'
@@ -1074,37 +1103,38 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
     body += ('<figure class="graph"><!--GRAPH--><figcaption>%s boxes linked by %s arrows, each a body of '
              'evidence, and %s %s looked for and not found. Every arrow is a link to its sources '
              'below.</figcaption></figure>'
-             % (span('q1graph/count/nodes', len(g.nodes)), span('q1graph/count/edges', len(g.edges)),
-                span('q1graph/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings')))
+             % (span(gp_ + '/count/nodes', len(g.nodes)), span(gp_ + '/count/edges', len(g.edges)),
+                span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings')))
     body += ('<p class="callout paths" role="note">A route through the middle column joins separate bodies of '
              'evidence. It is not one tested effect.</p>')
-    body += limits_box('q1graph', g.limitations, g.raw.get('rule'), g.raw.get('how_built'),
+    body += limits_box(gp_, g.limitations, g.raw.get('rule'), g.raw.get('how_built'),
                        heading='Before you trace a path')
     if g.set_aside:
         items = []
         for s in g.set_aside:
             where = ''
-            if q1 is not None:
-                for i, it in enumerate(q1.extra.get('interactions') or []):
+            if q is not None:
+                for i, it in enumerate(q.extra.get('interactions') or []):
                     if it.get('edge_id') == s.get('edge_id'):
-                        where = ' <a href="q1.html#ix-%d">Read the claim</a>.' % (i + 1)
+                        where = ' <a href="%s.html#ix-%d">Read the claim</a>.' % (qid, i + 1)
             items.append('<li>%s: %s.%s</li>' % (esc(s.get('edge_id')), esc(s.get('why')), where))
         body += ('<h2>Claim set aside</h2><p>Not drawn on the graph:</p><ul>%s</ul>' % ''.join(items))
 
     body += '<h2 id="arrows">Evidence behind each arrow</h2>'
     for e in g.edges:
         es = slug(e['id'])
-        base = 'q1graph/%s' % es
+        base = '%s/%s' % (gp_, es)
         title = edge_title(g, e)
-        quotes = data.edge_index.get(e['id'], ())
+        quotes = data.edge_index.get(qid, {}).get(e['id'], ())
         boxes = source_page_link(sources, quotes, fname='sources-e-%s.html' % es, id_prefix='ev-e-' + es,
-                                 check_prefix='q1graph', label=title, back='q1-graph.html#e-' + es,
+                                 check_prefix=gp_, label=title, back=gfile + '#e-' + es,
                                  back_text='Back to the graph',
-                                 description='The quoted sentences behind one arrow on the Q1 graph.')
+                                 description='The quoted sentences behind one arrow on the Q%d graph.' % n)
         finding = ''
         for fs, eid in data.graph_join.items():
             if eid == e['id']:
-                finding = ' This arrow is the finding <a href="q1.html#f-%s">on the Q1 answer page</a>.' % esc(fs)
+                finding = (' This arrow is the finding <a href="%s.html#f-%s">on the Q%d answer page</a>.'
+                           % (qid, esc(fs), n))
         body += ('<section class="edge-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
                  '<div class="badges">%s %s %s</div><p>%s</p><p>%s <a href="#edge-%s">Back to the graph</a>.%s</p>'
                  '%s</section>'
@@ -1125,7 +1155,7 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
     rows = []
     for e in g.edges:
         es = slug(e['id'])
-        base = 'q1graph/%s' % es
+        base = '%s/%s' % (gp_, es)
         rows.append('<tr><th scope="row"><a href="#e-%s">%s</a></th><td>%s</td><td>%s</td><td>%s</td></tr>'
                     % (es, esc(edge_title(g, e)), direction_badge(e['direction'], base + '/direction'),
                        span(base + '/certainty', certainty_text(e['certainty'])),
@@ -1133,9 +1163,10 @@ def render_graph_page(data: SiteData, sources: List[SourcePage]) -> str:
     body += '<h2 id="table">All arrows as a table</h2>' + table(
         'Every arrow on the graph, with the same data as text',
         ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
-    jumps = [('#read', 'How to read it'), ('#arrows', 'Evidence behind each arrow'), ('#table', 'All arrows as a table'), ('q1.html', 'Back to the answer')]
-    return page(data, 'q1-graph.html', 'Q1 graph · Tree planting', 'The tree-planting answer drawn as a '
-                'causal graph, with the sources behind every arrow.', body, jumps=jumps)
+    jumps = [('#read', 'How to read it'), ('#arrows', 'Evidence behind each arrow'), ('#table', 'All arrows as a table'),
+             ('%s.html' % qid, 'Back to the answer')]
+    return page(data, gfile, 'Q%d graph · %s' % (n, name), 'The %s answer drawn as a causal graph, with the '
+                'sources behind every arrow.' % name.lower().replace(' ', '-'), body, jumps=jumps)
 
 
 # --------------------------------------------------------------- method
@@ -1219,9 +1250,10 @@ def render_method(data: SiteData) -> str:
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         lim.append('<h3>%02d %s</h3><ul>%s</ul>' % (n, esc(question_name(q)), ''.join(
             '<li>%s</li>' % esc(t) for t in q.limitations)))
-    if data.q1_graph is not None and getattr(data.q1_graph, 'limitations', None):
-        lim.append('<h3>Tree planting graph</h3><ul>%s</ul>' % ''.join('<li>%s</li>' % esc(t)
-                                                                      for t in data.q1_graph.limitations))
+    for gq in data.graph_qids():
+        if data.graphs[gq].limitations:
+            lim.append('<h3>%s graph</h3><ul>%s</ul>' % (esc(question_name(data.questions[gq])), ''.join(
+                '<li>%s</li>' % esc(t) for t in data.graphs[gq].limitations)))
     built = ''.join('<h3>%02d %s</h3><p>%s</p>' % (n, esc(question_name(q)), esc(q.how_built))
                     for n, (qid, q) in enumerate(data.questions.items(), 1) if q.how_built)
     body = body.replace('%BUILT%', ('<h3 class="sub-h">How each answer was built</h3>%s' % built) if built else '')
@@ -1248,10 +1280,11 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     sources: List[SourcePage] = []
     pages: Dict[str, str] = {'index.html': render_index(data, prose)}
     for qid, q in data.questions.items():
-        fn = {'q1': render_q1, 'q2': render_q2, 'q3': render_q3}.get(qid, render_generic)
+        fn = {EFFECTS: render_effects, COMPARISON: render_comparison, GAPMAP: render_gapmap}.get(
+            data.kinds[qid], render_generic)
         pages['%s.html' % qid] = fn(data, prose, q, sources)
-    if data.q1_graph is not None:
-        pages['q1-graph.html'] = render_graph_page(data, sources)
+    for gq in data.graph_qids():
+        pages[graph_file(gq)] = render_graph_page(data, gq, sources)
     pages['method.html'] = render_method(data)
     for sp in sources:
         if sp.fname in pages:

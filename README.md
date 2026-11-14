@@ -208,6 +208,14 @@ its quote, paper title, year and DOI. The full edge, with character offsets
 into the article where they exist, is in `graph/causal_graph.yaml`. A claim in
 your UI should be traceable to a sentence in a paper in about two clicks.
 
+## Add a new question
+
+Drop its JSON in `answers/` and rebuild; the layout is picked from the data's
+shape, not its id: a gap map if it has cell counts and densities, a comparison
+if it is measured against a reference or over time, an effects page if its
+findings increase, decrease or are mixed, and a plain page otherwise. A
+`qN_..._graph.json` next to it gets its own graph page.
+
 ## Submitting
 
 The last commit before **6 p.m. EST on Sunday, November 15** will be used for judging.
