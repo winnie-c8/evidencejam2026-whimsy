@@ -1166,10 +1166,10 @@ def hero(data: SiteData, q: Question, n: int, name: str, lead: str = '') -> str:
     if full:   # the photo goes behind everything, not in the text's grid
         blobs, pic = pic.replace('hero-pic', 'hero-bg') + blobs, ''
     stats = ''.join('<div><dt>%s</dt><dd>%s</dd></div>' % (esc(k), v) for k, v in hero_stats(data, q))
-    return ('<div class="hero %s%s">%s<div class="hero-in"><div class="hero-txt">'
+    return ('<div class="hero hero-%s %s%s">%s<div class="hero-in"><div class="hero-txt">'
             '<p class="kicker">Q%d · %s</p><h1>%s</h1>%s</div>%s</div></div>'
             '<dl class="hero-stats" aria-label="This question in numbers">%s</dl>'
-            % ('hero-full' if style == 'full' else 'hero-sky' if style == 'sky' else 'hero-side' if side else 'hero-band', '' if img else ' no-pic', blobs, n, esc(name), text,
+            % (esc(q.qid), 'hero-full' if style == 'full' else 'hero-sky' if style == 'sky' else 'hero-side' if side else 'hero-band', '' if img else ' no-pic', blobs, n, esc(name), text,
                '<p class="hero-lead">%s</p>' % lead if lead else '', pic, stats))
 
 
@@ -1243,11 +1243,12 @@ def overview_short(data: SiteData, q: Question, short: str) -> str:
     return short
 
 
-def overview_section(short_html: str, limits_html: str) -> str:
-    """The short answer and the limitations, laid out over the wave (see OV_WAVE)."""
+def overview_section(short_html: str, limits_html: str, qid: str = '') -> str:
+    """The short answer and the limitations, laid out over the wave (see OV_WAVE). ov-<qid> lets a
+    question move its text where its wording is longer (CSS)."""
     early = ('<script>(function(s){if(!matchMedia("(prefers-reduced-motion: reduce)").matches&&'
              'matchMedia("(min-width: 900px)").matches)s.classList.add("anim");})(document.currentScript.parentNode);</script>')
-    return ('<div class="ov-track"><section class="ov" id="overview" aria-label="Overview and constraints">' + early + OV_WAVE +
+    return ('<div class="ov-track"><section class="ov%s" id="overview" aria-label="Overview and constraints">' % (' ov-' + esc(qid) if qid else '') + early + OV_WAVE +
             '<img class="ov-pin pin-top" src="static/pin.webp" alt="" width="84" height="126">'
             '<img class="ov-pin pin-bottom" src="static/pin.webp" alt="" width="84" height="126">'
             '<div class="ov-left"><h2 class="ov-label">Overview</h2>' + short_html + '</div>'
@@ -1267,7 +1268,8 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
     top = hero(data, q, n, name, lead)
     body = short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
     if q.qid in OVERVIEW_STYLE:
-        body = overview_section(overview_short(data, q, body), limits_box(q.qid, q.limitations, q.rule, q.how_built, open_=True))
+        body = overview_section(overview_short(data, q, body), limits_box(q.qid, q.limitations, q.rule, q.how_built, open_=True),
+                                q.qid)
     else:
         body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
@@ -1507,7 +1509,7 @@ def split_text(f: Finding, base: str) -> str:
 
 def matched_cell(f: Finding, base: str) -> str:
     ans, word = MC_MATCHED.get(f.direction, (words(f.direction), ''))
-    has_age = bool(f.raw.get('time_points'))
+    tps = f.raw.get('time_points') or []
     if f.direction == 'mixed':
         cd = f.raw.get('claim_directions') or {}
         bits = ['%s %s' % (span(base + '/claim_directions/' + d, n), MC_CLAIM_WORD.get(d, words(d)))
@@ -1517,7 +1519,11 @@ def matched_cell(f: Finding, base: str) -> str:
         sub = ', '.join(bits)
     else:
         sub = word
-    tail = 'pooled across ages' if has_age else 'age unknown'
+    # The marsh ages the studies looked at, youngest first, as the pack writes them (data-checked).
+    # One result covers all of them: the pack does not give a result per age.
+    order = sorted(range(len(tps)), key=lambda i: parse_age(tps[i]) or (999, 999))
+    tail = ('at %s' % ', '.join(span('%s/time_points/%d' % (base, i), tps[i]) for i in order)
+            if tps else 'age unknown')
     sub = '%s · %s' % (sub, tail) if sub else tail
     return ('<div class="mc-match"><span class="mc-mlab">Matched natural marshes yet? </span>'
             '<strong>%s</strong><span class="mc-msub">%s</span></div>' % (esc(ans), sub))
@@ -1661,7 +1667,8 @@ def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps
         sub = ''
     head_html = ('<div class="mc-top"><p class="mc-eyebrow">Restoration evidence · %s</p><h2 id="timeline">%s</h2>%s</div>'
                  % (esc(qid.upper()), esc(title), '<p class="mc-sub">%s</p>' % esc(sub) if sub else ''))
-    return ('%s%s<div class="mc-tools">%s%s</div>%s%s%s'
+    # .mc-section: on wide screens the chart runs almost the full page width, as in the Figma frame
+    return ('<div class="mc-section">%s%s<div class="mc-tools">%s%s</div>%s%s</div>%s'
             % (head_html, key, how, switch, views, takeaway, pops))
 
 

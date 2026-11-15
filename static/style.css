@@ -809,8 +809,8 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
   --mc-nochg: #8a6a00; --mc-grid: #d9dce3; --mc-match: #ecf4ee; --mc-ink: 46, 61, 102; --mc-empty: #edeef1; }
 .mc-behind { --c: var(--mc-behind); } .mc-ahead { --c: var(--mc-ahead); } .mc-mixed { --c: var(--mc-mixed); }
 .mc-unclear { --c: var(--mc-unclear); } .mc-nochg { --c: var(--mc-nochg); }
-.mc-key { font-size: .8125rem; color: var(--muted); margin: .75rem 0; }
-.mc-key p { margin: .35rem 0; max-width: none; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.1rem; }
+.mc-key { font-size: .8125rem; color: var(--muted); margin: 3rem 0 0; }
+.mc-key p { margin: 0 0 1.1rem; max-width: none; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.1rem; }
 .mc-kh { font-weight: 600; }
 .mc-sw { display: inline-flex; align-items: center; gap: .5rem; }
 .mc-sw i { width: 22px; height: 14px; border-radius: 3px; background: var(--c); opacity: .9; }
@@ -851,7 +851,7 @@ details.mc-how dl { display: grid; gap: 8px; margin: 0; }
 .mc-def .mc-samp-tick { width: 3px; height: 18px; margin: 0 9.5px; border-radius: 1.5px; background: #3d3d3d; opacity: 1; }
 .mc-def .mc-samp-none { background: none; border: 1.5px dashed var(--c, #737373); opacity: 1; }
 /* toolbar: "How to read this" on the left, the Chart | Table switch on the right */
-.mc-tools { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem; margin: .5rem 0 1.25rem; }
+.mc-tools { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem; margin: 0 0 2.5rem; }
 .mc-tools details.mc-how { margin: 0; }
 .mc-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--light-blue); border-radius: 999px; background: #f5f7fb; }
 .mc-switch[hidden], .mc-view[hidden] { display: none; }
@@ -890,23 +890,28 @@ td.mc-tnum { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--
 .mc-tnote { display: block; font-size: .75rem; color: var(--muted); }
 /* heading (Figma "current graph"): small label, the question in plain words, the answer to "how long?" */
 .mc-top { margin-top: var(--space-4); }
-.mc-eyebrow { margin: 0 0 .35rem; font-size: .8125rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+/* wide screens: the chart section runs the page width less 56px each side (Figma frame margins),
+   centred on the page column; narrower screens keep the column */
+@media (min-width: 64rem) {
+  .mc-section { --mc-w: min(83.5rem, calc(100vw - 7rem)); width: var(--mc-w); margin-left: calc((100% - var(--mc-w)) / 2); }
+}
+.mc-eyebrow { margin: 0 0 .5rem; font-size: .8125rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
 .mc-top h2 { margin: 0; }
-.mc-sub { margin: .6rem 0 0; max-width: none; font-size: 1.0625rem; font-weight: 600; color: var(--link); }
-.mc-wrap { container-type: inline-size; margin: .5rem 0 0; }
-.mc-row { position: relative; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
-  column-gap: 1.5rem; }
-.mc-row > div { min-width: 0; }
+.mc-sub { margin: .8rem 0 0; max-width: none; font-size: 1.0625rem; font-weight: 600; color: var(--link); }
+.mc-wrap { container-type: inline-size; margin: 0; }
+.mc-row { position: relative; display: grid; grid-template-columns: minmax(0, 300fr) minmax(0, 229fr) minmax(0, 500fr) minmax(0, 170fr);
+  column-gap: 2.5rem; }
+.mc-row > div { min-width: 0; line-height: 1.3; }   /* Figma: normal line height in the chart */
 .mc-row:not(.mc-head):not(.mc-group) { border-bottom: 1px solid var(--mc-grid); }
 .mc-row:not(.mc-head):not(.mc-group):hover { background: rgba(2, 79, 236, .035); }
-.mc-out, .mc-cert { padding: .8rem 0; }
+.mc-out, .mc-cert { padding: .8rem 0 .6rem; }
 .mc-name { font: inherit; font-size: .9375rem; font-weight: 600; color: var(--text); background: none; border: 0; padding: 0;
   margin: 0; text-align: left; cursor: pointer; line-height: 1.3; }
 .mc-name::after { content: ""; position: absolute; inset: 0; }   /* the whole row opens the card */
 .mc-name:hover { text-decoration: underline; text-underline-offset: 3px; background: none; }
 .mc-name:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
-.mc-dir { display: block; margin-top: .35rem; font-size: .75rem; font-weight: 600; color: var(--c); }
-.mc-meta { display: block; margin-top: .4rem; font-size: .75rem; color: var(--muted); }
+.mc-dir { display: block; margin-top: .3rem; font-size: .75rem; font-weight: 600; color: var(--c); }
+.mc-meta { display: block; margin-top: .35rem; font-size: .75rem; color: var(--muted); }
 .mc-ages { position: relative; min-height: 2.5rem;
   background: repeating-linear-gradient(to right, var(--mc-grid) 0 1px, transparent 1px calc(100% / 6));
   border-right: 1px solid var(--mc-grid); }
@@ -919,13 +924,13 @@ td.mc-tnum { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--
   align-items: center; justify-content: center; border: 1.5px dashed var(--c); border-radius: 6px; background: var(--bg);
   font-size: .8125rem; font-style: italic; color: var(--c); }
 .mc-ax, .mc-mlab { display: none; }
-.mc-match { padding: .8rem .9rem; background: var(--mc-match); }
+.mc-match { padding: .8rem .9rem .6rem; background: var(--mc-match); }
 .mc-nom .mc-match { background: none; }
 .mc-row:not(.mc-head):not(.mc-group):not(.mc-nom):hover .mc-match { background: #dbeadf; }
 /* answer words a shade darker than the bars, so they keep 4.5:1 on the hover green too */
 .mc-behind .mc-match strong { color: #a3360a; } .mc-ahead .mc-match strong { color: #166a32; }
 .mc-match strong { display: block; font-size: .9375rem; color: var(--c); }
-.mc-msub { display: block; margin-top: .3rem; font-size: .75rem; color: var(--muted); }
+.mc-msub { display: block; margin-top: .2rem; font-size: .75rem; color: var(--muted); }
 .mc-head { font-size: .8125rem; font-weight: 600; color: var(--muted); align-items: end; }
 .mc-head > div { padding: 0 0 .5rem; }
 .mc-head .mc-ages { background: none; border: 0; min-height: 0; }
@@ -935,10 +940,10 @@ td.mc-tnum { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--
   white-space: nowrap; }
 .mc-ticks { position: relative; display: block; height: 1.1em; font-weight: 400; font-size: .75rem; }
 .mc-ticks span, .mc-ax span { position: absolute; transform: translateX(-50%); }
-.mc-group h3 { margin: 0; font-family: var(--font-body); font-size: .8125rem; font-weight: 600; color: var(--muted); }
-.mc-group .mc-out { padding: 1rem 0 .5rem; }
+.mc-group h3 { margin: 0; white-space: nowrap; font-family: var(--font-body); font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.mc-group .mc-out { padding: 1.25rem 0 .6rem; }
 .mc-last .mc-match { border-radius: 0 0 10px 10px; }
-.mc-take { margin-top: 1.75rem; padding-top: 1rem; border-top: 1px solid var(--mc-grid); font-size: .8125rem; color: var(--muted); }
+.mc-take { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--mc-grid); font-size: .8125rem; color: var(--muted); }
 .mc-take p { margin: .35rem 0; max-width: none; }
 .mc-take p.mc-take-h { font-size: 1.125rem; font-weight: 600; color: var(--text); margin-bottom: .6rem; }
 @container (max-width: 44rem) {
@@ -1152,6 +1157,9 @@ main.has-hero { max-width: none; margin: 0; padding: 0; }
 .hero-full .hero-txt { padding-top: clamp(1rem, min(6vw, 8svh), 5.5rem); }
 .hero-full .kicker { color: #fff; }
 .hero-full h1 { max-width: min(64rem, 100%); }
+/* Q2: its question is four lines long, so it starts higher to stay on the plain sky, clear of the
+   photo and most of the dotted clouds */
+.hero-q2.hero-sky .hero-txt { padding-top: clamp(1.5rem, 3vw, 3rem); }
 @media (max-width: 760px) {   /* phones: the question on plain sky, the photo below it */
   .hero-full { display: flex; flex-direction: column; min-height: 0; height: auto; }
   .hero-full .hero-bg { position: relative; inset: auto; order: 2; margin: 0 calc(-1 * var(--edge)); height: 15rem; }
@@ -1213,6 +1221,8 @@ main.has-hero { max-width: none; margin: 0; padding: 0; }
 .problem.anim .pb-spread, .problem.anim .pb-many { opacity: 0; transform: translateY(1rem); transition: opacity .6s ease, transform .6s ease; }
 .problem.anim .pb-papers img { opacity: 0; transform: translateY(-1.5rem); transition: opacity .35s ease, transform .45s cubic-bezier(.3, 1.4, .5, 1); }
 .problem.anim .on { opacity: 1 !important; transform: none !important; }
+/* problem.js holds the opening still while the flowers come in (top and the extra room are set there) */
+.problem.pinned .pb-pin { position: sticky; }
 @media (max-width: 900px) {   /* phones: one column, flowers between the sentence and the papers; no pinning */
   .problem { margin-right: calc(-1 * var(--space-2)); }
   .pb-pin { grid-template-columns: minmax(0, 1fr); padding-right: var(--space-2); }
@@ -1271,6 +1281,8 @@ main.has-hero { max-width: none; margin: 0; padding: 0; }
     min-height: calc(var(--u) * 26); z-index: 1; display: flex; flex-direction: column; }
   .ov-left .ov-label { order: 2; margin: auto 0 0; padding-top: .4em; font-size: 2.6em; }
   .ov-right { position: absolute; left: 49vw; top: calc(var(--u) * 19); width: 32.4vw; z-index: 1; }
+  /* Q2: a longer overview, so its block starts higher and its label stays above the wave's dip */
+  .ov-q2 .ov-left { top: calc(var(--u) * 4.5); }
   .ov-right .ov-label { font-size: 2.6em; margin-bottom: .6em; }
   .ov-right details.limits > summary { margin-bottom: .6em; }
   .ov-right details.limits > summary strong { max-width: 24ch; margin: 0 auto; }
