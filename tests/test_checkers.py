@@ -207,7 +207,7 @@ MUTATIONS = [
     ('Q2 chart row says "Ahead" for a "Behind" finding', 'q2.html',
      r'(<div class="mc-row[^"]*">.*?<span data-check="q2/[^"]+/direction">)Behind<', r'\1Ahead<', 1),
     ('Q2 chart table shows a made-up marsh age', 'q2.html',
-     r'(<table class="tl-table">.*?data-check="q2/[^"]+/time_points/0">)[^<]+', r'\g<1>5-9 years', 1),
+     r'(<table class="tl-table mc-table">.*?data-check="q2/[^"]+/time_points/0">)[^<]+', r'\g<1>5-9 years', 1),
     ('Q3 row drops what was searched for', 'q3.html',
      r'data-template="[^"]*"', 'data-template="something else {outcome}"', 0),
     # 2.8 short answers built from the data

@@ -673,6 +673,11 @@ details.ns li.gap .o { color: var(--text); }
 details.ns li.gap .o::before { content: "→ " / "on "; color: var(--muted); }
 details.ns li.gap .searched { grid-column: 2 / -1; font-size: .75rem; color: var(--muted); }
 details.ns li.gap[hidden] { display: none; }
+/* one topic for every gap (Q2): a plain bulleted list of outcomes, each with what it covers */
+details.ns ul.gaps.one { gap: .6rem var(--space-4); }
+details.ns ul.gaps.one li.gap { grid-template-columns: 1rem 1fr; gap: .15rem .5rem; }
+details.ns ul.gaps.one li.gap .on { font-weight: 600; }
+details.ns ul.gaps.one li.gap .info { grid-column: 2; font-size: .75rem; color: var(--muted); }
 .ns-key { display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; font-size: .75rem; color: var(--muted); }
 .ns-dot { display: inline-block; flex: none; margin-top: 0 !important; }
 p.searched { font-size: .8rem; color: var(--muted); margin: .25rem 0; }
@@ -783,7 +788,7 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 /* Q2 "Outcome by outcome" (Figma frame "current graph"): result, certainty blocks, marsh ages
    studied (not a recovery curve) and "Matched natural marshes yet?". A grid of rows; below
    44rem of width each row stacks. The outcome name is a button that opens the finding's card. */
-.mc-key, .mc-wrap, .mc-take { --mc-behind: #c2410c; --mc-ahead: #1b7a3a; --mc-mixed: #6b4fa1; --mc-unclear: #666;
+.mc-key, .mc-how, .mc-wrap, .mc-tview, .mc-take, .mc-tipbox { --mc-behind: #c2410c; --mc-ahead: #1b7a3a; --mc-mixed: #6b4fa1; --mc-unclear: #666;
   --mc-nochg: #8a6a00; --mc-grid: #d9dce3; --mc-match: #ecf4ee; --mc-ink: 46, 61, 102; --mc-empty: #edeef1; }
 .mc-behind { --c: var(--mc-behind); } .mc-ahead { --c: var(--mc-ahead); } .mc-mixed { --c: var(--mc-mixed); }
 .mc-unclear { --c: var(--mc-unclear); } .mc-nochg { --c: var(--mc-nochg); }
@@ -802,11 +807,75 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 .mc-kmeter { display: inline-grid; width: 132px; height: 14px; }
 .mc-kmeter i:nth-child(1) { background: rgba(var(--mc-ink), .51); } .mc-kmeter i:nth-child(2) { background: rgba(var(--mc-ink), .68); }
 .mc-kmeter i:nth-child(3) { background: rgba(var(--mc-ink), .84); }
-details.mc-how { margin: .5rem 0 1.25rem; }
-details.mc-how > summary { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; padding: .5rem .75rem;
-  background: #f6f7f9; border: 1px solid var(--mc-grid, #d9dce3); border-radius: 6px; font-size: .8125rem; font-weight: 600; color: var(--text); }
-details.mc-how ul { font-size: .9rem; margin: .75rem 0 0; padding-left: 1.2rem; }
-details.mc-how li { margin: .3rem 0; }
+/* "How to read this" (Figma "How to read this (dropdown)"): a grey button; open, a white card
+   listing each result colour and what it means, per chart group. Chevrons are the Figma icons. */
+details.mc-how { width: fit-content; max-width: 100%; margin: .5rem 0 1.25rem; font-size: .8125rem; }
+details.mc-how > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 8px 12px; background: #f6f7f9; border: 1px solid var(--mc-grid); border-radius: 6px; font-weight: 600; color: var(--text); }
+details.mc-how > summary::-webkit-details-marker { display: none; }
+details.mc-how > summary::after { content: ""; width: 16px; height: 16px; flex: none;
+  background: url("icons/chevron-down.svg") center / 16px 16px no-repeat; }
+details.mc-how[open] { width: 660px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--mc-grid);
+  border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, .12); }
+details.mc-how[open] > summary { padding: 0; background: none; border: 0; }
+details.mc-how[open] > summary::after { background-image: url("icons/chevron-up.svg"); }
+.mc-hg { margin-top: 12px; }
+.mc-hg + .mc-hg { border-top: 1px solid var(--mc-grid); padding-top: 12px; }
+.mc-hgt { margin: 0 0 8px; font-size: .75rem; font-weight: 600; color: var(--muted); max-width: none; }
+details.mc-how dl { display: grid; gap: 8px; margin: 0; }
+.mc-def { display: grid; grid-template-columns: 116px 1fr; column-gap: 10px; align-items: center; }
+.mc-def dt, .mc-def .mc-dt { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--c, var(--text)); }
+.mc-def dt > i:not(.mc-samp), .mc-def .mc-dt > i:not(.mc-samp) { flex: none; width: 22px; height: 14px; border-radius: 3px; background: var(--c); opacity: .9; }
+.mc-def dd, .mc-def .mc-dd { margin: 0; color: var(--text); }
+.mc-smeter { flex: none; width: 44px; height: 10px; gap: 2px; }
+.mc-def.mc-plain dt, .mc-def.mc-plain .mc-dt { color: var(--text); }
+.mc-def .mc-samp { flex: none; width: 22px; height: 14px; border-radius: 3px; background: var(--c, #737373); opacity: .9; }
+.mc-def .mc-samp-pt { width: 7px; }
+.mc-def .mc-samp-tick { width: 3px; height: 18px; margin: 0 9.5px; border-radius: 1.5px; background: #3d3d3d; opacity: 1; }
+.mc-def .mc-samp-none { background: none; border: 1.5px dashed var(--c, #737373); opacity: 1; }
+/* toolbar: "How to read this" on the left, the Chart | Table switch on the right */
+.mc-tools { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: .75rem; margin: .5rem 0 1.25rem; }
+.mc-tools details.mc-how { margin: 0; }
+.mc-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--light-blue); border-radius: 999px; background: #f5f7fb; }
+.mc-switch[hidden], .mc-view[hidden] { display: none; }
+.mc-switch button { font: inherit; font-size: .8125rem; font-weight: 600; padding: .4rem 1.1rem; border: 0; border-radius: 999px;
+  background: none; color: var(--dark-blue); cursor: pointer; }
+.mc-switch button:hover { background: #e3e8f1; }
+.mc-switch button[aria-pressed="true"] { background: var(--dark-blue); color: var(--white); }
+/* table view (brand colours): dark-blue header, a pale-blue group row, ages as pills */
+.mc-tview { overflow-x: auto; border: 1px solid var(--light-blue); border-radius: 14px; }
+table.mc-table { width: 100%; min-width: 40rem; margin: 0; border-collapse: collapse; font-size: .875rem; }
+table.mc-table th, table.mc-table td { padding: .7rem .9rem; border: 0; border-bottom: 1px solid #e3e8f1; background: none;
+  text-align: left; vertical-align: middle; }
+table.mc-table thead th { background: var(--dark-blue); color: var(--white); font-size: .72rem; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+table.mc-table tr.mc-tgroup th { padding: .55rem .9rem; background: #f5f7fb; color: var(--muted); font-size: .8125rem; font-weight: 600; }
+table.mc-table tbody:last-child tr:last-child > * { border-bottom: 0; }
+table.mc-table tr.mc-trow { cursor: pointer; }
+table.mc-table tr.mc-trow:hover > * { background: rgba(2, 79, 236, .035); }
+table.mc-table .mc-name::after { content: none; }   /* the chart's whole-row layer; mc.js handles table rows */
+.mc-tres { display: inline-flex; align-items: center; gap: .45rem; font-weight: 600; color: var(--c); white-space: nowrap; }
+.mc-tres i { width: 12px; height: 12px; border-radius: 3px; background: var(--c); }
+.mc-tcert { display: inline-flex; align-items: center; gap: .55rem; white-space: nowrap; }
+td.mc-tnum { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--dark-blue); }
+.mc-age { display: inline-block; margin: .15rem .3rem .15rem 0; padding: .1rem .55rem; border-radius: 999px; background: #e3e8f1;
+  color: var(--dark-blue); font-size: .8rem; white-space: nowrap; }
+.mc-nr { color: var(--muted); font-size: .8125rem; font-style: italic; }
+/* hover help (static/mc.js): one floating box, filled from the hidden .mc-tt of what is hovered */
+.mc-tip { cursor: help; }
+.mc-dir.mc-tip, .mc-cbox { position: relative; }   /* above the row's click layer, so hover reaches them */
+.mc-dir.mc-tip { display: block; width: fit-content; }   /* own line under the name; hover only on the word */
+.mc-cbox { display: block; }
+.mc-tipbox { position: fixed; z-index: 50; display: grid; gap: 6px; width: max-content;
+  max-width: min(26rem, calc(100vw - 16px)); padding: 10px 12px; background: var(--bg); border: 1px solid var(--mc-grid);
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, .14); font-size: .8125rem; line-height: 1.35; pointer-events: auto; }
+.mc-tipbox[hidden] { display: none; }
+.mc-tnote { display: block; font-size: .75rem; color: var(--muted); }
+/* heading (Figma "current graph"): small label, the question in plain words, the answer to "how long?" */
+.mc-top { margin-top: var(--space-4); }
+.mc-eyebrow { margin: 0 0 .35rem; font-size: .8125rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.mc-top h2 { margin: 0; }
+.mc-sub { margin: .6rem 0 0; max-width: none; font-size: 1.0625rem; font-weight: 600; color: var(--link); }
 .mc-wrap { container-type: inline-size; margin: .5rem 0 0; }
 .mc-row { position: relative; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
   column-gap: 1.5rem; }
@@ -817,7 +886,7 @@ details.mc-how li { margin: .3rem 0; }
 .mc-name { font: inherit; font-size: .9375rem; font-weight: 600; color: var(--text); background: none; border: 0; padding: 0;
   margin: 0; text-align: left; cursor: pointer; line-height: 1.3; }
 .mc-name::after { content: ""; position: absolute; inset: 0; }   /* the whole row opens the card */
-.mc-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mc-name:hover { text-decoration: underline; text-underline-offset: 3px; background: none; }
 .mc-name:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 .mc-dir { display: block; margin-top: .35rem; font-size: .75rem; font-weight: 600; color: var(--c); }
 .mc-meta { display: block; margin-top: .4rem; font-size: .75rem; color: var(--muted); }
@@ -835,6 +904,9 @@ details.mc-how li { margin: .3rem 0; }
 .mc-ax, .mc-mlab { display: none; }
 .mc-match { padding: .8rem .9rem; background: var(--mc-match); }
 .mc-nom .mc-match { background: none; }
+.mc-row:not(.mc-head):not(.mc-group):not(.mc-nom):hover .mc-match { background: #dbeadf; }
+/* answer words a shade darker than the bars, so they keep 4.5:1 on the hover green too */
+.mc-behind .mc-match strong { color: #a3360a; } .mc-ahead .mc-match strong { color: #166a32; }
 .mc-match strong { display: block; font-size: .9375rem; color: var(--c); }
 .mc-msub { display: block; margin-top: .3rem; font-size: .75rem; color: var(--muted); }
 .mc-head { font-size: .8125rem; font-weight: 600; color: var(--muted); align-items: end; }
@@ -872,13 +944,88 @@ details.mc-how li { margin: .3rem 0; }
   .mc-match strong, .mc-msub { display: inline; }
   .mc-msub::before { content: " · "; }
 }
-details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0 .75rem; }
 /* the finding card, in a popup */
 .pop.fpop { max-width: min(56rem, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 2.5rem 1rem 1rem; }
 .pop.fpop .fcard { margin: 0; }
 .pop-x { position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border-radius: 50%;
   border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .pop-x:hover { background: var(--panel); }
+/* labels used only in the one-finding popup below */
+.flab, .fnote { display: none; }
+/* the "why" panel says what it is for (every card) */
+.why-sub { margin: 0 0 .6rem; font-size: .85rem; color: var(--muted); max-width: none; }
+
+/* Q2 one-finding popup (.cardpop): brand colours (Figma "components": dark blue, cream, light
+   blue, mid blue, bright blue). Name large; certainty and the study split as two labelled
+   boxes; the "how it is worked out" and sources panels below. */
+/* panel blue: the Figma light blue (#b8c3d7) mixed with white, so text and links on it keep
+   AA contrast (bright-blue links 5:1; plain light blue would give 3.7:1) */
+.cardpop, .hgpop { --pop-blue: #e3e8f1; }
+.pop.cardpop { max-width: min(60rem, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(40, 49, 110, .3); }
+.pop.cardpop::backdrop { background: rgba(40, 49, 110, .35); }
+.cardpop .pop-x { top: 1rem; right: 1rem; z-index: 2; border-color: var(--light-blue); color: var(--dark-blue); }
+.cardpop .pop-x:hover { background: var(--dark-blue); color: var(--white); }
+.cardpop .fcard { border: 0; border-top: 6px solid var(--dir-none); border-radius: 16px; }
+.cardpop .fcard.fdir-below-reference { border-top-color: var(--s-down); }
+.cardpop .fcard.fdir-above-reference { border-top-color: var(--s-up); }
+.cardpop .fcard.fdir-mixed { border-top-color: var(--s-mixed); }
+.cardpop .fcard.fdir-no-effect, .cardpop .fcard.fdir-comparable { border-top-color: var(--s-none); }
+.cardpop details.fd > summary, .cardpop .fcard.fref details.fd > summary { display: block; cursor: default;
+  padding: 1.4rem 1.5rem 1.25rem; border-bottom: 1px solid var(--light-blue); }
+.cardpop details.fd > summary:hover { background: none; }
+.cardpop .fmore { display: none; }
+.cardpop .fchip .chip { font-size: .85rem; font-weight: 600; padding: .1rem .65rem; }
+.cardpop .fcard .fhead { margin: .6rem 0 1.1rem; padding-right: 3rem; font-size: clamp(1.5rem, 3.2vw, 2rem); font-weight: 600; line-height: 1.2;
+  color: var(--dark-blue); }
+.cardpop .fmeta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1.25rem; }
+.cardpop .fcert, .cardpop .fsplit { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem;
+  padding: .75rem .9rem; border: 1px solid var(--light-blue); border-radius: 12px; background: #f5f7fb; font-size: .9rem; }
+.cardpop .flab { display: block; flex-basis: 100%; font-size: .7rem; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--dark-blue); }
+.cardpop .fnote { display: block; flex-basis: 100%; font-size: .78rem; color: var(--muted); }
+.cardpop .agree { width: 8rem; height: .9rem; border-color: var(--dark-blue); }
+.cardpop .panels { padding: 1.25rem 1.5rem 1rem; gap: 1.25rem; }
+.cardpop .panel { background: var(--pop-blue); border-radius: 12px; padding: 1rem 1.1rem; }
+.cardpop .panel h5 { margin: 0 0 .3rem; font-size: 1.05rem; color: var(--dark-blue); }
+.cardpop .panel button.help { top: .8rem; right: .8rem; border-color: var(--dark-blue); color: var(--dark-blue); }
+.cardpop .panel button.help:hover { background: var(--dark-blue); color: var(--white); }
+.cardpop ul.checks { font-size: .95rem; }
+.cardpop ul.checks li { align-items: center; margin: .4rem 0; padding: .55rem .7rem; border-radius: 8px; background: var(--white); }
+.cardpop ul.checks .mk { color: var(--dark-blue); font-weight: 700; }
+.cardpop ul.checks .pts { padding: .1rem .55rem; border-radius: 999px; background: var(--light-blue); color: var(--dark-blue); }
+.cardpop ul.checks .pts:empty { display: none; }
+.cardpop ul.checks li.total { border-top: 0; padding: .65rem .7rem; background: var(--dark-blue); color: var(--white); }
+.cardpop ul.checks li.total .mk { color: var(--white); }
+.cardpop ul.checks li.total .pts { background: rgba(255, 255, 255, .2); color: var(--white); }
+.cardpop ul.checks li.total .cap { color: #dfe4ef; }
+.cardpop .fcard .when-wrap { margin: 0 1.5rem 1.4rem; padding: .7rem .9rem; border: 1px solid var(--light-blue); border-radius: 12px; }
+
+/* "How grading works" (the "?" in the panel): a dark-blue header, the four levels as bars,
+   numbered steps, the example on pale blue */
+.pop.hgpop { max-width: min(34rem, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 16px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(40, 49, 110, .3); }
+.pop.hgpop::backdrop { background: rgba(40, 49, 110, .35); }
+.hg-head { position: relative; padding: 1.1rem 3.5rem 1rem 1.4rem; background: var(--dark-blue); color: var(--white); }
+.hg-kick { margin: 0; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--light-blue); }
+.pop.hgpop .hg-head h2 { margin: .15rem 0 0; font-size: 1.6rem; color: var(--white); }
+.hg-x { position: absolute; top: 1rem; right: 1rem; width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid var(--mid-blue);
+  background: transparent; color: var(--white); font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.hg-x:hover { background: var(--white); color: var(--dark-blue); }
+.hg-x:focus-visible, .hg-close:focus-visible { outline: 3px solid var(--light-blue); outline-offset: 2px; }
+.hg-body { padding: 1.1rem 1.4rem 1.2rem; }
+.hg-body p { max-width: none; }
+.hg-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: .5rem; list-style: none; padding: 0; margin: .5rem 0 1rem; }
+.hg-levels li { display: flex; flex-direction: column; gap: .35rem; padding: .55rem .65rem; border: 1px solid var(--light-blue);
+  border-radius: 10px; font-size: .85rem; }
+ol.hg-steps { counter-reset: hg; list-style: none; padding: 0; margin: 0 0 1rem; }
+ol.hg-steps li { counter-increment: hg; position: relative; margin: .55rem 0; padding-left: 2.2rem; font-size: .92rem; }
+ol.hg-steps li::before { content: counter(hg); position: absolute; left: 0; top: 0; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  display: grid; place-items: center; background: var(--dark-blue); color: var(--white); font-size: .8rem; font-weight: 700; }
+.pop.hgpop .ex { padding: .6rem .8rem; border-radius: 10px; background: var(--pop-blue); }
+.hg-foot { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 1rem 0 0; }
+.hg-close { font: inherit; padding: .4rem 1.1rem; border: 0; border-radius: 999px; background: var(--dark-blue); color: var(--white); cursor: pointer; }
+.hg-close:hover { background: var(--bright-blue); }
 
 /* Q3 gap map: cells are buttons showing just the study count; the shade says how many
    (pale = 1, light = 2-3, dark = 4+). Certainty is in the popup. */
