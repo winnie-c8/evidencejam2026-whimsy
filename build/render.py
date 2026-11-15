@@ -751,30 +751,33 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
                 continue
             li = '<li data-outcome="%s">' % esc(slug(oid))
             if isinstance(c, Gap):
-                rows.append(li + '<a class="cc-row cc-gap" href="#gap-%s"><span class="sr-only">%s, </span><span class="cc-out">%s</span>'
-                            '<span class="cc-dir"><span class="chip gapchip"><span aria-hidden="true">?</span> '
-                            'Not studied</span></span><span class="cc-track"><span class="cc-none">No study tested '
-                            'this: a gap, not a result</span></span><span class="cc-q" aria-hidden="true">?</span></a></li>'
+                rows.append(li + '<a class="cc-row cc-gap" href="#gap-%s"><span class="cc-txt"><span class="sr-only">%s, '
+                            '</span><span class="cc-out">%s</span><span class="cc-meta"><span aria-hidden="true">?</span> '
+                            'Not studied: a gap, not a result</span></span><span class="cc-track"><span class="cc-none">'
+                            'not studied</span></span><span class="cc-q" aria-hidden="true">?</span></a></li>'
                             % (esc(c.slug), esc(slbl), esc(olbl)))
                 continue
             b = '%s/%s' % (c.question, c.slug)
+            sym, word, tail = CHIP.get(c.direction, ('', words(c.direction), ''))
+            d = esc(c.direction.replace('_', '-'))
             rows.append(li + '<button type="button" class="cc-row" popovertarget="pop-%s">'
-                        '<span class="sr-only">Details: %s, </span><span class="cc-out">%s</span><span class="cc-dir">%s</span>'
-                        '<span class="cc-track"><span class="cc-bar cb%d bar-%s"><span class="cc-lab">%s'
-                        '<span class="sr-only"> certainty</span> · %s %s</span></span></span>'
+                        '<span class="cc-txt"><span class="sr-only">Details: %s, </span><span class="cc-out">%s</span>'
+                        '<span class="cc-meta"><span class="dir-%s cc-sym" aria-hidden="true">%s</span> %s%s · '
+                        '%s certainty · %s %s</span></span>'
+                        '<span class="cc-track"><span class="cc-bar cb%d bar-%s"></span></span>'
                         '<span class="cc-q" aria-hidden="true">?</span></button></li>'
-                        % (esc(c.slug), esc(slbl), esc(olbl), chip(c.direction, b + '/direction'),
-                           CERT_BARS.get(c.certainty, 0), esc(c.direction.replace('_', '-')),
+                        % (esc(c.slug), esc(slbl), esc(olbl), d, sym, span(b + '/direction', word), tail,
                            span(b + '/certainty', CERT_WORD[c.certainty]),
-                           span(b + '/studies', c.studies), plural(c.studies, 'study', 'studies')))
+                           span(b + '/studies', c.studies), plural(c.studies, 'study', 'studies'),
+                           CERT_BARS.get(c.certainty, 0), d))
         groups.append('<li class="cc-grp" data-factor="%s"><h3>%s</h3><ul>%s</ul></li>'
                       % (esc(slug(sid)), esc(slbl), ''.join(rows)))
 
     present = {f.direction for f in q.findings}
-    key = ''.join('<li><span class="sw bar-%s" aria-hidden="true"></span><span aria-hidden="true">%s</span> %s</li>'
+    key = ''.join('<li><span class="cc-sw bar-%s" aria-hidden="true"></span><span aria-hidden="true">%s</span> %s</li>'
                   % (esc(d.replace('_', '-')), CHIP[d][0], esc(w)) for d, w in CHART_KEY if d in present)
     if q.gaps:
-        key += ('<li><span class="sw sw-gap" aria-hidden="true"></span>Not studied: no study tested it '
+        key += ('<li><span class="cc-sw cc-sw-gap" aria-hidden="true"></span>Not studied: no study tested it '
                 '(not a negative result)</li>')
     levels = ['very_low', 'low', 'moderate', 'high']
     unused = [CERT_WORD[c] for c in levels if c not in {f.certainty for f in q.findings}]
@@ -792,18 +795,19 @@ def certainty_chart(q: Question, popups: Dict[str, str]) -> str:
             '<p class="cc-count" role="status"></p></div>' % (obtn, fopt))
     title = CHART_TITLE.get(q.qid, 'Effect of each factor on each outcome, by certainty of evidence')
     return ('<section class="cchart-sec" aria-labelledby="glance"><h2 id="glance">%s %s</h2>%s'
-            '<p class="cc-read"><strong>How to read:</strong> each bar is one finding, a factor\'s effect on one '
-            'outcome. Bar length is the certainty of the evidence (Very low, Low, Moderate, High), not the size of '
-            'the effect. Colour, symbol and word give the direction; the number is how many studies.%s '
-            'Select a bar for how its certainty was measured and the quoted sources.</p>'
+            '<p class="cc-read"><strong>How to read:</strong> each row is one finding, a factor\'s effect on one '
+            'outcome. The bar\'s length is the certainty of the evidence (Very low, Low, Moderate, High), not the '
+            'size of the effect; its colour is the direction, also written under the name.%s '
+            'Select a row (or its ?) for how its certainty was measured and the quoted sources.</p>'
             '<p class="cc-read"><strong>How certainty is measured:</strong> every finding starts at the level of '
             'its best kind of study (experiments with untreated plots start at High), then moves down one level '
             'for each problem (only one study, studies disagree, nothing to compare against) and up one level for '
             'each strength (three or more studies agree, the studies show how it works).</p>'
             '<ul class="cc-key" aria-label="Legend">%s</ul>%s'
-            '<div class="cchart"><div class="cc-axis" aria-hidden="true"><span class="cc-out"></span>'
-            '<span class="cc-dir">Direction</span><span class="cc-ticks">%s</span><span class="cc-q"></span></div>'
-            '<ul class="cc-grps">%s</ul><p class="cc-xlab" aria-hidden="true">Certainty of evidence →</p></div>'
+            '<div class="cchart"><div class="cc-axis" aria-hidden="true"><span class="cc-txt"></span>'
+            '<span class="cc-axt"><span class="cc-axtitle">Certainty of evidence</span><span class="cc-ticks">%s</span>'
+            '</span><span class="cc-q"></span></div>'
+            '<ul class="cc-grps">%s</ul></div>'
             '</section>%s%s'
             % (esc(title), LEVELS_BTN, outs, unused_note, key, filt, ticks, ''.join(groups), CHART_FILTER_JS, ''.join(popups.values())))
 

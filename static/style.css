@@ -477,337 +477,58 @@ ol.chain .down { color: var(--muted); margin-right: .25rem; }
 .s-unclear { background: var(--dir-none); }
 ul.cells > li > .fcard { margin: .5rem 0; }
 
-/* Q1 certainty chart: bar length = certainty grade, colour + symbol + word = direction.
-   Colours come from the --dir-* tokens, so the design team's palette replaces them in one place. */
+/* Q1 certainty chart, styled like the Q2 timeline: a bold name, one small line (direction ·
+   certainty · studies), then a plain rounded bar. Bar length = certainty grade; colour = direction
+   (from the --dir-* tokens). A gap is a hatched empty box. */
 .cc-read { max-width: 46rem; }
 .cc-key { list-style: none; padding: 0; margin: .5rem 0 1rem; display: flex; flex-wrap: wrap; gap: .4rem 1.25rem; font-size: .9rem; }
 .cc-key li { display: flex; align-items: center; gap: .35rem; }
-.sw { display: inline-block; width: 1.1rem; height: .8rem; border-radius: 2px; }
-.sw-gap { border: 2px dashed var(--gap); }
+.cc-sw { display: inline-block; width: 1.1rem; height: .8rem; border-radius: 3px; flex: none; }
+.cc-sw-gap { border: 1px solid var(--line);
+  background: repeating-linear-gradient(45deg, var(--bg) 0 3px, var(--line) 3px 5px); }
 .bar-increase { background: var(--dir-up); }
 .bar-decrease { background: var(--dir-down); }
 .bar-mixed { background: var(--dir-mixed); }
 .bar-no-effect, .bar-unclear { background: var(--dir-none); }
-.cchart { --cols: minmax(0, 12rem) 7.5rem minmax(10rem, 1fr) 1.6rem; }
+.cchart { --cols: minmax(13rem, 1fr) minmax(12rem, 1.6fr) 2rem; max-width: 62rem; }
 .cc-grps, .cc-grps ul { list-style: none; margin: 0; padding: 0; }
 .cc-grp, .cc-grps li { margin: 0; max-width: none; }
-.cchart { max-width: 52rem; }
-.cc-grp h3 { font-size: 1rem; margin: .9rem 0 .2rem; padding-top: .5rem; border-top: 1px solid var(--line); }
-.cc-axis, .cc-row { display: grid; grid-template-columns: var(--cols); gap: .5rem; align-items: center; }
-.cc-axis { font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--ink); padding: 0 .2rem .2rem; position: sticky; top: 0; background: var(--bg); z-index: 1; }
-.cc-ticks { display: grid; grid-template-columns: repeat(4, 1fr); }
-.cc-ticks span { text-align: right; padding-right: .15rem; }
-.cc-row { color: var(--ink); text-decoration: none; padding: .25rem .2rem; border-radius: 4px;
-  width: 100%; font: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
-.cc-outs { margin: 0 0 .4rem; }
-.cc-row:hover { background: var(--panel); }
-.cc-row:hover .cc-out { text-decoration: underline; }
-.cc-dir .chip { font-size: .85rem; }
-.cc-track { position: relative; height: 1.6rem;
-  background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: 25% 100%; }
-.cc-bar { position: absolute; left: 0; top: .1rem; bottom: .1rem; border-radius: 0 3px 3px 0; display: flex; align-items: center; }
+.cc-grp h3 { font-size: 1rem; margin: 1.1rem 0 0; padding: .3rem 0; color: var(--text); }
+.cc-axis, .cc-row { display: grid; grid-template-columns: var(--cols); gap: 1rem; align-items: center; }
+.cc-axis { padding: 0 .4rem .3rem; position: sticky; top: 0; background: var(--bg); z-index: 1; border-bottom: 1px solid var(--line); }
+.cc-axt { display: flex; flex-direction: column; gap: .2rem; }
+.cc-axtitle { font-weight: 600; font-size: .95rem; text-align: center; }
+.cc-ticks { display: grid; grid-template-columns: repeat(4, 1fr); font-size: .85rem; color: var(--muted); }
+.cc-ticks span { text-align: right; }
+.cc-row { color: var(--text); text-decoration: none; padding: .7rem .4rem; border: 0; border-bottom: 1px solid var(--line);
+  width: 100%; font: inherit; text-align: left; background: none; cursor: pointer; border-radius: 0; }
+.cc-row:hover { background: rgba(2, 79, 236, .06); }
+.cc-row:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.cc-txt { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.cc-out { font-weight: 600; font-size: 1.05rem; }
+.cc-meta { font-size: .95rem; }
+.cc-sym { font-weight: 700; }
+.cc-track { position: relative; height: 1.75rem;
+  background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: 25% 100%;
+  box-shadow: inset -1px 0 0 var(--line); }
+.cc-bar { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
 .cc-bar.cb1 { width: 25%; } .cc-bar.cb2 { width: 50%; } .cc-bar.cb3 { width: 75%; } .cc-bar.cb4 { width: 100%; }
-.cc-lab { color: #fff; font-size: .8rem; font-weight: 600; padding: 0 .4rem; white-space: nowrap; }
-.cc-bar.cb1 .cc-lab { position: absolute; left: 100%; color: var(--ink); }
-.cc-none { position: absolute; inset: .1rem 0; border: 2px dashed var(--gap); border-radius: 3px; color: var(--muted);
-  font-size: .8rem; display: flex; align-items: center; padding: 0 .4rem; white-space: nowrap; overflow: hidden; }
-.cc-q { width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1px solid var(--link); color: var(--link);
+.cc-none { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 4px; color: var(--muted);
+  font-size: .85rem; font-style: italic; display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(45deg, var(--bg) 0 6px, var(--line) 6px 9px); }
+.cc-none { text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg); }
+.cc-q { width: 1.8rem; height: 1.8rem; border-radius: 50%; border: 1px solid var(--link); color: var(--link);
   display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
-.cc-row:hover .cc-q, .cc-row:focus .cc-q { background: var(--link); color: var(--bg); }
 .cc-axis .cc-q { border: 0; }
-.cc-xlab { text-align: right; font-size: .8rem; color: var(--muted); margin: .3rem 1.8rem 0 0; }
+.cc-row:hover .cc-q, .cc-row:focus-visible .cc-q { background: var(--link); color: var(--bg); }
 @media (max-width: 40rem) {
-  .cc-axis, .cc-row { grid-template-columns: minmax(0, 1fr) auto 1.6rem; grid-template-areas: "out dir q" "track track track"; row-gap: .2rem; }
-  .cc-axis { grid-template-areas: "track track track"; }
-  .cc-axis .cc-out, .cc-axis .cc-dir, .cc-axis .cc-q { display: none; }
-  .cc-out { grid-area: out; } .cc-dir { grid-area: dir; } .cc-q { grid-area: q; }
-  .cc-track, .cc-ticks { grid-area: track; }
-  .cc-xlab { margin-right: 0; }
+  .cc-axis, .cc-row { grid-template-columns: minmax(0, 1fr) 2rem; grid-template-areas: "txt q" "track track"; row-gap: .45rem; }
+  .cc-axis { grid-template-areas: "track track"; }
+  .cc-axis .cc-txt, .cc-axis .cc-q { display: none; }
+  .cc-txt { grid-area: txt; } .cc-q { grid-area: q; }
+  .cc-track, .cc-axt { grid-area: track; }
 }
-
-/* gap card: grey, dashed, "?", no bars */
-.gap .gq { display: inline-block; width: 1.4em; height: 1.4em; line-height: 1.3em; text-align: center; border: 1px dashed var(--gap); border-radius: 50%; color: var(--gap); font-weight: 700; }
-
-/* sources pages: grouped by paper, first 3 shown */
-section.paper h2 { font-size: 1.05rem; margin: 1.5rem 0 .25rem; }
-details.more > summary { cursor: pointer; font-weight: 600; color: var(--link); margin: 1rem 0; }
-
-/* "?" help button and the grading popup */
-.panel { position: relative; }
-.panel h5 { padding-right: 2rem; }
-button.help { width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1px solid var(--link); background: var(--bg);
-  color: var(--link); font-weight: 700; cursor: pointer; line-height: 1; padding: 0; font-size: .9rem; }
-.panel button.help { position: absolute; top: .4rem; right: .4rem; }
-h2 button.help { vertical-align: middle; margin-left: .25rem; }
-button.help:hover { background: var(--link); color: var(--bg); }
-.pop { max-width: min(36rem, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem;
-  box-shadow: 0 8px 30px rgba(0,0,0,.2); color: var(--ink); background: var(--bg); }
-.pop::backdrop { background: rgba(0,0,0,.25); }
-.pop h2 { margin-top: 0; font-size: 1.2rem; }
-.pop .ex { background: var(--panel); padding: .4rem .6rem; border-radius: 4px; }
-.none-pw { font-size: .95rem; color: var(--muted); margin: .25rem 0; }
-
-/* ---------------------------------------------------------------------------
-   Site structure (temporary look; Track A is designing the real one: #27, #50)
-   Home: top nav + big headline. Every other page: left sidebar + content.
-   --------------------------------------------------------------------------- */
-:root { --navy: #1f2a5c; }  /* --cream comes from the design tokens above */
-
-/* sidebar layout */
-.layout { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--space-4); margin: 0; padding: 0 var(--edge); }
-.layout main { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
-.side { position: sticky; top: var(--top-h); align-self: start; max-height: calc(100vh - var(--top-h)); overflow-y: auto; padding: var(--space-3) 0; }
-/* the left menu, on every page (home's section menu and the other pages' sidebar look the same) */
-ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
-ul.qnav.more { margin-top: var(--space-3); }
-.qnav > li { max-width: none; border-bottom: 1px solid var(--rule); }
-.qnav > li > a { display: grid; grid-template-columns: 4rem minmax(0, 1fr); align-items: center;
-  padding: .45rem .25rem; color: var(--dark-navy); text-decoration: none; text-transform: uppercase;
-  font-size: var(--text-sm); letter-spacing: .02em; }
-.qnav > li > a:hover { color: var(--bright-blue); }
-.qnav > li > a[aria-current="page"] { font-weight: 700; color: var(--bright-blue); }
-.qnav .n { color: var(--bright-blue); font-size: var(--text-lg); line-height: 1; font-variant-numeric: tabular-nums; }
-ul.jumps { list-style: none; margin: 0 0 .5rem 4.25rem; padding: 0; font-size: var(--text-sm); }
-ul.jumps a { display: block; padding: .15rem 0; color: var(--muted); text-decoration: none; }
-ul.jumps a:hover { color: var(--link); text-decoration: underline; }
-.layout main h1 { margin-top: 1.5rem; }
-
-/* short answer: the cream box */
-p.short { background: var(--cream); border-radius: 6px; padding: .75rem 1rem; max-width: none; }
-
-/* home */
-h1.mega { font-size: clamp(3rem, 13vw, 9rem); line-height: .95; font-weight: 600; letter-spacing: -.05em;
-  text-transform: lowercase; margin: 2.5rem 0 1rem; max-width: none; }
-ol.qrows { list-style: none; padding: 0; margin: 2rem 0; border-top: 1px solid var(--ink); }
-li.qrow { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--line); }
-li.qrow .n { font-size: 2rem; font-weight: 600; color: var(--link); line-height: 1; }
-li.qrow h2 { margin: 0 0 .25rem; font-size: 1.4rem; }
-li.qrow h2 a { color: var(--ink); text-decoration: none; }
-li.qrow h2 a:hover { color: var(--link); text-decoration: underline; }
-li.qrow .q { color: var(--muted); margin: 0 0 .5rem; }
-.key-strip { border-top: 1px solid var(--ink); padding-top: .5rem; margin: 2rem 0; }
-.key-strip h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .05em; }
-.key-strip ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .75rem 2rem; }
-.key-strip li { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-.qmark { font-size: 1.4rem; font-weight: 700; color: var(--link); }
-
-/* method tabs (in-page links: work with keyboard, no script) */
-nav.tabs ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 1rem 0 2rem; }
-nav.tabs a { display: inline-block; border: 1px solid var(--link); border-radius: 999px; padding: .3rem .9rem; text-decoration: none; }
-nav.tabs a:hover, nav.tabs a:focus-visible { background: var(--link); color: var(--bg); }
-section.tab { border-top: 1px solid var(--ink); margin-top: 2rem; scroll-margin-top: 1rem; }
-section.tab h2 { color: var(--link); }
-
-/* phones: the sidebar becomes a compact menu across the top */
-/* Graph page: the left menu runs across the top (same look, in a row) so the graph gets the full width */
-.layout.wide { display: block; }
-.layout.wide::before { display: none; }
-.layout.wide main { max-width: none; }
-.layout.wide .side { position: static; max-height: none; overflow: visible; padding: var(--space-2) 0 0; }
-.layout.wide .side nav { display: flex; flex-wrap: wrap; gap: 0 var(--space-3);
-  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
-.layout.wide ol.qnav, .layout.wide ul.qnav { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); border: 0; margin: 0; }
-.layout.wide .qnav > li { border: 0; }
-.layout.wide .qnav > li > a { display: flex; align-items: baseline; gap: .5rem; padding: .45rem 0; }
-.layout.wide .qnav .n { font-size: var(--text-base); }
-.layout.wide ul.jumps { display: none; }
-
-@media (max-width: 52rem) {
-  .layout { display: block; }
-  .side { position: static; max-height: none; padding: var(--space-2) 0 0; }
-  ol.qnav, ul.qnav { display: flex; flex-wrap: wrap; gap: 0 1rem; border: 0; }
-  ul.qnav.more { margin-top: 0; }
-  .qnav > li { border: 0; }
-  .qnav > li > a { display: flex; gap: .4rem; padding: .3rem 0; }
-  .qnav .n { font-size: var(--text-sm); }
-  ul.jumps { display: none; }
-  li.qrow { grid-template-columns: 2.5rem minmax(0, 1fr); }
-  li.qrow .n { font-size: 1.4rem; }
-}
-
-/* short answer box (div: may hold a bullet list) */
-div.short { background: var(--cream); border-radius: 6px; padding: .6rem 1rem; margin: .75rem 0 1rem; }
-div.short p { margin: .25rem 0; max-width: none; }
-div.short .sa-h { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; }
-ul.sa { margin: .25rem 0; padding-left: 1.2rem; }
-ul.sa li { margin: .3rem 0; max-width: none; }
-.cchart-sec { margin-bottom: 1.5rem; }
-
-/* sections that open like dropdowns */
-details.sec { border-top: 1px solid var(--line); }
-details.sec:last-of-type { border-bottom: 1px solid var(--line); }
-details.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: .75rem; padding: .6rem 0; }
-details.sec > summary::-webkit-details-marker { display: none; }
-details.sec > summary::before { content: "▸"; color: var(--link); }
-details.sec[open] > summary::before { content: "▾"; }
-details.sec > summary > h2, details.sec > summary > h3 { margin: 0; display: inline; }
-details.sec > summary:hover h2, details.sec > summary:hover h3 { color: var(--link); }
-.cnt { color: var(--muted); font-size: .9rem; }
-.sec-body { padding: 0 0 1rem; }
-details.limits .cnt { margin-left: .5rem; }
-details.limits .intro { font-size: .95rem; color: var(--muted); }
-
-/* home guide */
-.guide { border-top: 1px solid var(--ink); margin: 2rem 0; }
-.guide ol { padding-left: 1.4rem; }
-.guide li { margin: .4rem 0; }
-h2.rows-h { margin-bottom: 0; }
-
-/* shared question page (one template for Q1, Q2, Q3) */
-.kicker { margin: 1.5rem 0 -.75rem; font-size: .85rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--link); }
-div.short.callout { border-left: 6px solid var(--link); background: var(--cream); }
-.to-method { margin: 2rem 0 0; padding-top: 1rem; border-top: 1px solid var(--line); }
-.graph-link { margin: 1rem 0; }
-
-/* not studied: the same compact list everywhere */
-section.gapgrp { margin: .75rem 0 1rem; }
-section.gapgrp h3 { font-size: 1rem; margin: .5rem 0 .25rem; }
-ul.gaps { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem; }
-ul.gaps li.gap { border: 2px dashed var(--gap); border-radius: 999px; padding: .15rem .7rem; margin: 0; font-size: .9rem; max-width: 100%; }
-ul.gaps li.gap::before { content: "? " / ""; font-weight: 700; color: var(--gap); }
-ul.gaps li.gap .searched { display: block; font-size: .85rem; color: var(--muted); }
-p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
-
-/* Q3 gap map: row and column names stay visible while scrolling */
-.grid-wrap thead th, .grid-wrap thead td { position: sticky; top: 0; z-index: 2; background: var(--panel); }
-.grid-wrap tbody th { position: sticky; left: 0; z-index: 1; background: var(--bg); }
-.grid-wrap thead td:first-child { left: 0; z-index: 3; }
-
-/* ------------------------------------------------------------------ home page (Figma "home page" frame)
-   WHIMSY logo and a boxed menu across the top; a numbered menu of the page's sections on the
-   left that stays in view; each section a big blue heading over a thin rule, text indented. */
-/* Top bar on every page: a thin line across the whole screen with the boxed menu hanging from
-   it (no top border on the boxes: the line is their top edge), and the logo, which goes home.
-   It stays at the top while scrolling; --top-h is its height, so the sidebars sit below it. */
-:root { --top-h: 6rem; --top-line: .75rem; --edge: 1.5rem; }   /* --edge: gap to the screen's left and right edges */
-html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page links land below the bar */
-.site-top { position: sticky; top: 0; z-index: 15; height: var(--top-h); box-sizing: border-box;
-  padding-top: calc(var(--top-line) + 1px);
-  background: linear-gradient(var(--rule), var(--rule)) 0 var(--top-line) / 100% 1px no-repeat, var(--bg); }
-.site-top-in { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2);
-  padding: 0 var(--edge); }
-/* the WHIMSY logo is an image (static/logo.svg, from Figma) that links home */
-.site-top .logo { display: block; margin-top: var(--space-2); line-height: 0; }
-.site-top .logo img { display: block; width: clamp(10rem, 16vw, 13rem); height: auto; }
-.site-top .logo:hover img { opacity: .75; }
-.boxnav { list-style: none; margin: 0; padding: 0; display: flex; border: 1px solid var(--text); border-top: 0; }
-.boxnav li { max-width: none; border-left: 1px solid var(--text); }
-.boxnav li:first-child { border-left: 0; }
-.boxnav a { display: block; padding: .3rem .7rem; font-size: .8125rem; text-transform: uppercase;
-  letter-spacing: .02em; color: var(--text); text-decoration: none; }
-.boxnav a:hover { text-decoration: underline; }
-.boxnav a[aria-current="page"] { font-weight: 700; }
-
-/* Left column on every page: --col wide, then a thin vertical line (fixed to the screen, from the
-   top line down) in the middle of the --gap before the content. --col-x is where the column starts,
-   lined up with the logo; 100% here is the screen width without the scrollbar. */
-.layout, .home-grid { --col-x: var(--edge); --gap: var(--space-4); }
-.layout, .home-grid { --col: clamp(16rem, 22vw, 19rem); }   /* same width on every page */
-.layout::before, .home-grid::before { content: ''; position: fixed; z-index: 16; top: var(--top-line); bottom: 0;
-  left: calc(var(--col-x) + var(--col) + var(--gap) / 2); border-left: 1px solid var(--rule); pointer-events: none; }
-
-.home-grid { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--gap);
-  margin: 0; padding: 0 var(--edge); }
-.home-grid main { max-width: 56rem; margin: 0; padding: var(--space-5) 0 var(--space-4); }
-/* pinned to the screen (fixed, not sticky) so it stays put even at the very bottom of the page;
-   the grid's first column stays empty to keep its place */
-.home-side { position: fixed; top: var(--top-h); bottom: 0; left: var(--col-x); width: var(--col);
-  box-sizing: border-box; display: flex; flex-direction: column; padding: var(--space-2) 0 var(--space-3); }
-.home-grid main { grid-column: 2; }
-/* home: the footer sits in the right column, clear of the menu, with its line only above the text */
-.home-grid + footer.site { border-top: 0; max-width: calc(56rem + var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4));
-  margin: 0; padding: 0 var(--edge) 0 calc(var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4)); box-sizing: border-box; }
-.home-grid + footer.site p { border-top: 1px solid var(--rule); padding: .6rem 0; }
-/* the turning tree (static/tree.js) fills the space above the menu; the menu stays at the bottom
-   of the column while the tree turns */
-.home-tree { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-/* the section being read: dark, with a line under it that fills as you read through it;
-   the others go grey (only once the script is running and a section is in view) */
-.home-menu.has-on .qnav > li > a, .home-menu.has-on .qnav .n { color: var(--muted); transition: color .2s; }
-.home-menu.has-on .qnav > li.on > a { color: var(--dark-navy); }
-.home-menu.has-on .qnav > li.on .n { color: var(--bright-blue); }
-.home-menu .qnav > li { position: relative; }
-.home-menu .qnav > li.on::after { content: ''; position: absolute; left: 0; bottom: -1px; height: 1px;
-  width: calc(var(--p, 0) * 100%); background: var(--dark-navy); }
-.home-menu .qnav > li > a:hover { color: var(--bright-blue); }
-@media (prefers-reduced-motion: reduce) { .home-menu .qnav a, .home-menu .qnav .n { transition: none; } }
-.home-tree .tree-scene { position: absolute; left: 50%; top: 50%; width: 386px; height: 526px; transform-origin: center; }
-.home-tree .tree-layer { position: absolute; inset: 0; transform-origin: 193px 300px; will-change: transform; }
-.home-tree .tree-layer svg { display: block; }
-.home-menu { flex: none; margin-top: var(--space-2); }   /* styled by .qnav, like the sidebar */
-
-.hsec { margin: 0 0 var(--space-5); }
-.hsec > h1, .hsec > h2 { margin: 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--rule);
-  font-family: var(--font-heading); font-weight: var(--heading-weight); color: var(--heading); max-width: none; }
-.hsec > h1 { font-size: clamp(2.5rem, 5vw, var(--text-display)); line-height: 1.1; letter-spacing: 0; }
-.hsec > h2 { font-size: clamp(1.75rem, 3vw, var(--text-heading)); line-height: 1.2; text-transform: none; letter-spacing: 0; }
-.hsec > h2 a { color: inherit; text-decoration: none; }
-.hsec > h2 a:hover { text-decoration: underline; }
-.hsec-body { padding: var(--space-3) 0 0 var(--space-4); }
-.hsec-body > :first-child { margin-top: 0; }
-.hsec .lead { font-size: var(--text-base); }
-.hsec.guide, .hsec.key-strip { border-top: 0; padding-top: 0; }
-.hsec.qsec .q { color: var(--text); }
-
-@media (max-width: 900px) {
-  :root { --top-h: 4.25rem; --top-line: .5rem; }
-  .site-top-in, .layout { padding: 0 var(--space-2); }
-  .site-top .logo { margin-top: .6rem; }
-  .site-top .logo img { width: 7.5rem; }
-  .boxnav a { padding: .15rem .45rem; font-size: .8125rem; }
-  .home-grid { display: block; padding: 0 var(--space-2); }
-  .home-side { position: static; width: auto; height: auto; padding: 0; }
-  footer.site { padding: .6rem var(--space-2); }
-  .home-grid + footer.site { padding: 0 var(--space-2); }
-  .layout::before, .home-grid::before { display: none; }
-  .home-tree { display: none; }
-  .home-menu { margin-top: var(--space-3); }
-  .home-grid main { padding-top: var(--space-4); }
-  .hsec { margin-bottom: var(--space-4); }
-  .hsec-body { padding-left: 0; }
-}
-
-/* Q2 timeline: marsh ages studied (not a recovery curve). Scrolls inside its own frame on phones.
-   Each row is a button (over the drawing) that opens the finding's card in a popup. */
-.tl-wrap { overflow-x: auto; position: relative; margin: .75rem 0; }
-svg.tl { display: block; max-width: none; font-family: var(--font-body); }
-svg.tl .tl-axis-title { font-size: 15px; font-weight: 600; fill: var(--text); }
-svg.tl .tl-tick { font-size: 14px; fill: var(--muted); }
-svg.tl .tl-grid { stroke: var(--line); stroke-width: 1; }
-svg.tl .tl-sep { stroke: var(--line); stroke-width: 1; }
-svg.tl .tl-group { font-size: 16px; font-weight: 700; fill: var(--text); }
-svg.tl .tl-name { font-size: 17px; font-weight: 600; fill: var(--text); }
-svg.tl .tl-lag { font-weight: 400; fill: var(--muted); }
-svg.tl .tl-meta { font-size: 15px; fill: var(--text); }
-svg.tl .tl-sym { font-weight: 700; }
-svg.tl .tl-bar { fill: var(--s-none); }
-svg.tl .tl-below-reference .tl-bar, svg.tl .tl-below-reference .tl-sym,
-svg.tl .tl-decrease .tl-bar, svg.tl .tl-decrease .tl-sym { fill: var(--s-down); }
-svg.tl .tl-above-reference .tl-bar, svg.tl .tl-above-reference .tl-sym,
-svg.tl .tl-increase .tl-bar, svg.tl .tl-increase .tl-sym { fill: var(--s-up); }
-svg.tl .tl-mixed .tl-bar, svg.tl .tl-mixed .tl-sym { fill: var(--s-mixed); }
-svg.tl .tl-unclear .tl-bar, svg.tl .tl-unclear .tl-sym { fill: var(--dir-none); }
-svg.tl .tl-hatch-bg { fill: var(--bg); }
-svg.tl .tl-hatch-line { stroke: var(--line); stroke-width: 3; }
-svg.tl .tl-none { stroke: var(--line); }
-svg.tl .tl-none-t { font-size: 14px; fill: var(--muted); font-style: italic; }
-button.tl-open { position: absolute; left: 0; display: flex; align-items: center; justify-content: flex-end;
-  padding: 0 8px 0 0; border: 0; background: transparent; cursor: pointer; border-radius: 6px; }
-button.tl-open:hover { background: rgba(2, 79, 236, .06); }
-button.tl-open:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
-.tl-q, .tl-q-inline { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem;
-  border-radius: 50%; border: 1.5px solid var(--link); color: var(--link); font-weight: 700; background: var(--bg); }
-.tl-q-inline { width: 1.3rem; height: 1.3rem; font-size: .8rem; vertical-align: middle; }
-button.tl-open:hover .tl-q { background: var(--link); color: var(--bg); }
-.tl-cap { font-size: .95rem; color: var(--muted); }
-details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0 .75rem; }
-/* the finding card, in a popup */
-.pop.fpop { max-width: min(56rem, calc(100vw - 32px)); max-height: 85vh; overflow: auto; padding: 2.5rem 1rem 1rem; }
-.pop.fpop .fcard { margin: 0; }
-.pop-x { position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border-radius: 50%;
-  border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
-.pop-x:hover { background: var(--panel); }
-
+.cc-outs { margin: 0 0 .4rem; }
 /* Q1 popup: one column. Study colours match the chart's direction colours */
 .fcard.epop { --s-up: var(--dir-up); --s-down: var(--dir-down); --s-mixed: var(--dir-mixed);
   border: 0; border-left: 0; padding: 0; background: none; }
