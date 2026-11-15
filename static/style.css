@@ -321,6 +321,20 @@ svg .node { cursor: grab; }
 svg .node.dragging { cursor: grabbing; }
 svg .node.dragging .shape { stroke-width: 3; }
 svg .node.pinned .shape { stroke-width: 3.5; stroke: var(--focus); }
+/* selecting treatments (#77): chosen boxes get a thick outline and a tick; what doesn't apply is
+   greyed and faded (not by colour alone: faded, dashed outline, and it says why on hover/focus) */
+svg .node[role="button"] { cursor: pointer; }
+svg .node:focus:not(:focus-visible) { outline: none; }
+svg .node:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+svg .node:focus-visible .shape { stroke: var(--focus); stroke-width: 3; }
+svg .node.chosen .shape { stroke-width: 4; stroke: var(--focus); }
+svg .node.sel-off { cursor: not-allowed; opacity: .4; }
+svg .node.sel-off .shape { stroke-dasharray: 4 3; fill: var(--rule); stroke: var(--gap); }
+svg.selecting a.sel-off, svg.selecting .member.sel-off { opacity: .1; cursor: not-allowed; }
+.combo-part { border-top: 1px solid var(--line); padding-top: .5rem; margin-top: .75rem; }
+.combo-part h4 { margin: 0 0 .35rem; }
+.ix { margin-top: .5rem; }
+.ix-dir { margin: .25rem 0; font-size: .9rem; }
 svg a.edge, svg a.gap-link { cursor: pointer; }
 svg a.dragging { cursor: grabbing; }
 .fig-state { display: block; margin-top: .25rem; font-weight: 600; color: var(--text); }
@@ -605,6 +619,11 @@ details.sec > summary:hover h2, details.sec > summary:hover h3 { color: var(--li
 .sec-body { padding: 0 0 1rem; }
 details.limits .cnt { margin-left: .5rem; }
 details.limits .intro { font-size: .95rem; color: var(--muted); }
+details.limits .lim-h { font-size: 1rem; margin: 1rem 0 .25rem; }
+details.limits ul.lims { list-style: none; padding: 0; margin: 0; }
+details.limits ul.lims li { padding: .5rem 0; border-top: 1px solid var(--rule); }
+details.limits .lim-t { display: block; }
+details.limits .lim-x { display: block; font-size: .9rem; color: var(--muted); margin-top: .15rem; }
 
 /* home guide */
 .guide { border-top: 1px solid var(--ink); margin: 2rem 0; }
