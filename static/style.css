@@ -66,6 +66,7 @@
   --d-thin: #e8f0ff;      /* 1 study: pale */
   --d-some: #8fbcff;      /* 2-3 studies: dark-blue number on it, 7:1 */
   --d-dense: #2347e6;     /* 4 or more: white number on it, 6.7:1 */
+  --d-top: #0e1650;       /* 8 or more (our step inside dense): white number on it, 15:1 */
   --d-num: #1b2475;
   --box-condition: #f3f0e8;   /* graph: condition boxes */
   --box-outcome: #eaf2ea;     /* graph: outcome boxes */
@@ -335,8 +336,6 @@ svg a.dragging { cursor: grabbing; }
 .vote-no_effect, .vote-unclear { background: var(--dir-none); }
 
 /* legend keys */
-.key-list { display: flex; flex-wrap: wrap; gap: .25rem var(--space-3); }
-.key-list > span svg { vertical-align: middle; }
 .lg.sw { stroke-width: 5; }
 .lg.sw.up { stroke: var(--dir-up); }
 .lg.sw.down { stroke: var(--dir-down); }
@@ -550,12 +549,6 @@ li.qrow .q { color: var(--muted); margin: 0 0 .5rem; }
 .key-strip li { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
 .qmark { font-size: 1.4rem; font-weight: 700; color: var(--link); }
 
-/* method tabs (in-page links: work with keyboard, no script) */
-nav.tabs ul { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 1rem 0 2rem; }
-nav.tabs a { display: inline-block; border: 1px solid var(--link); border-radius: 999px; padding: .3rem .9rem; text-decoration: none; }
-nav.tabs a:hover, nav.tabs a:focus-visible { background: var(--link); color: var(--bg); }
-section.tab { border-top: 1px solid var(--ink); margin-top: 2rem; scroll-margin-top: 1rem; }
-section.tab h2 { color: var(--link); }
 
 /* phones: the sidebar becomes a compact menu across the top */
 /* Graph page: the left menu runs across the top (same look, in a row) so the graph gets the full width */
@@ -876,9 +869,7 @@ table.gapmap td.d-dense button:hover, table.gapmap td.d-dense button:focus-visib
 .rowpop ul.cells > li:target .fcard { box-shadow: 0 0 0 3px var(--focus); }
 ol.densest { margin-bottom: .2rem; }
 details.more-densest > summary { cursor: pointer; color: var(--link); margin: 0 0 .5rem; }
-ul.key-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
-ul.key-list li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-
+ul
 /* Question page hero (Figma): kicker, the question with one phrase in the accent colour, dotted
    blue shapes, a picture (beside the text for Q1, a landscape band for Q2 and Q3) and a blue bar
    of counts. Pictures and shapes are decorative (alt="", aria-hidden). */
@@ -1101,9 +1092,6 @@ main.has-hero { max-width: none; margin: 0; padding: 0; }
 .gm .grid-wrap { border: 0; max-height: none; }
 table.gapmap { border-collapse: separate; border-spacing: 4px; font-size: .85rem; }
 table.gapmap caption { caption-side: bottom; }
-.gm table.gapmap thead th[scope="col"]:not(.sum) { min-width: 0; width: 2.75rem; padding: 0 0 .5rem; vertical-align: bottom; font-weight: 400; font-size: .72rem; }
-.gm table.gapmap thead th[scope="col"]:not(.sum) span { display: block; writing-mode: vertical-rl; transform: rotate(180deg);
-  max-height: 11rem; white-space: normal; text-align: left; line-height: 1.15; margin: 0 auto; }
 .gm table.gapmap thead .gm-corner { vertical-align: bottom; text-align: left; font-size: .75rem; color: var(--muted); padding: 0 0 .5rem; }
 .gm .grid-wrap thead th, .gm .grid-wrap thead td { background: var(--bg); }
 .gm table.gapmap th[scope="row"] { min-width: 15rem; max-width: 17rem; padding: .25rem 1.5rem .25rem 0; text-align: left; font-weight: 600; font-size: .85rem; white-space: normal; }
@@ -1112,13 +1100,6 @@ table.gapmap caption { caption-side: bottom; }
 .gm table.gapmap th[scope="row"] { vertical-align: middle; }
 .gm table.gapmap td.empty { background: #f1f2f6; color: #9aa0ac; padding: 0; font-size: .8rem; }
 .gm table.gapmap td button { min-height: 2.75rem; padding: 0; font-size: 1rem; border-radius: 6px; }
-/* the "Outcomes studied" column, one cream panel */
-.gm table.gapmap .sum { background: var(--cream); min-width: 8rem; padding: .3rem .9rem; text-align: left; border-radius: 0; white-space: nowrap; }
-.gm table.gapmap thead th.sum { vertical-align: bottom; padding-bottom: .8rem; color: var(--dark-blue); font-size: .85rem; font-weight: 600; border-radius: 10px 10px 0 0; }
-.gm table.gapmap tbody tr:last-child td.sum { border-radius: 0 0 10px 10px; }
-.gm table.gapmap td.sum strong { display: block; font-size: .9rem; }
-.gm table.gapmap td.sum small { display: block; font-size: .7rem; color: var(--muted); }
-.gm table.gapmap td.sum.none strong { color: var(--muted); }
 .gm .gm-key { align-items: center; margin: var(--space-2) 0 .25rem; font-size: .85rem; }
 .gm .gm-key dt { font-weight: 400; display: flex; align-items: center; gap: .4rem; }
 .gm .gm-key dt.gm-k { font-weight: 600; }
@@ -1133,3 +1114,397 @@ table.gapmap caption { caption-side: bottom; }
 /* home: each question's plain summary (written by the build-time LLM when it is on) */
 .hsec .qsum { font-size: 1.05rem; line-height: 1.45; }
 .hsec .qsum .llm-note { display: block; margin-top: .3rem; font-size: .75rem; color: var(--muted); }
+
+/* Home, after the Problem opening (Figma "home page" frame): Our Mission, then one block per
+   question with its photo cluster. Parts marked .rv fade and rise in as they scroll into view
+   (static/reveal.js; only when html has .rv-js, i.e. script on and no reduced motion). */
+.home-grid main > .hsec.mission { max-width: none; margin-bottom: clamp(3rem, 12vw, 9rem); }
+.hsec.mission > h2 { border-bottom: 0; font-size: clamp(2.6rem, 4.4vw, 4rem); margin-left: clamp(0rem, 2.6vw, 2.4rem); }
+.hsec.mission .hsec-body { padding: var(--space-3) 0 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  font-family: var(--font-heading); font-weight: 300; font-size: clamp(1.15rem, 1.6vw, 1.45rem); line-height: 1.2; }
+.hsec.mission .m1 { grid-column: 1; margin: 0 0 0 clamp(0rem, 2.6vw, 2.4rem); max-width: 26ch; }
+.hsec.mission .m2 { grid-column: 2; margin: clamp(6rem, 22vw, 20rem) 0 0; text-align: right; justify-self: end; max-width: 27ch; }
+.home-grid main > .hsec.qsec { max-width: none; margin-bottom: clamp(3rem, 8vw, 7rem); }
+.hsec.qsec > h2 { font-size: clamp(1.6rem, 2.6vw, 2.35rem); font-weight: 300; line-height: 1.15; }
+.hsec.qsec > h2 a { color: var(--link); }
+.hsec.qsec > h2 .qn { color: inherit; }
+.hsec.qsec .hsec-body { max-width: 56rem; }
+.hphotos { position: relative; width: 100%; max-width: 56rem; margin-top: clamp(1.5rem, 5vw, 4rem); }
+.hphotos img { position: absolute; height: auto; display: block; }
+.rv-js .rv { opacity: 0; transform: translateY(2rem); transition: opacity .9s ease, transform 1s cubic-bezier(.2, .8, .2, 1); }
+.rv-js .hphotos img.rv { transform: translateY(2.5rem) scale(.96); }
+.rv-js .rv.on { opacity: 1; transform: none; }
+@media (max-width: 900px) {
+  .hsec.mission .hsec-body { grid-template-columns: 1fr; }
+  .hsec.mission .m2 { grid-column: 1; margin-top: var(--space-3); text-align: left; justify-self: start; }
+}
+
+/* Q3 gap map. The section uses the page's full width (small margins), and the map shows big boxes
+   (at least 4rem) that you scroll sideways; "Full screen" is the zoomed-out view of the whole map.
+   Outcome names are slanted so you can read them without turning your head; darkest shade for 8+. */
+main.has-hero { overflow-x: clip; }
+.gm { width: 100vw; margin-left: calc(50% - 50vw); padding: 0 clamp(1rem, 3vw, 3rem); box-sizing: border-box; }
+.gm > p, .gm > h2 { max-width: 62rem; }
+.swatch.d-top, table.gapmap td.d-top { background: var(--d-top); }
+table.gapmap td.d-top button { color: var(--white); font-weight: 700; }
+.gm .grid-wrap { container-type: inline-size; overflow-x: auto; padding: 0 7rem 0 0; }
+.gm table.gapmap { --row: 15rem; --cw: clamp(4rem, calc((100cqi - var(--row) - 19 * 5px) / 17), 5.5rem); --ch: var(--cw);
+  margin: 0; table-layout: fixed; border-spacing: 5px; }
+.gm table.gapmap td, .gm table.gapmap thead th[scope="col"] { width: var(--cw); min-width: var(--cw); max-width: var(--cw); }
+.gm table.gapmap td { height: var(--ch); }
+.gm table.gapmap td button { height: var(--ch); min-height: 0; padding: 0; font-size: max(.75rem, calc(var(--ch) * .3)); }
+.gm table.gapmap th[scope="row"] { width: var(--row); min-width: var(--row); max-width: var(--row); padding-right: 1rem; font-size: .88rem; line-height: 1.3; }
+/* the outcome names: one slanted line each where they fit, two at most, with room between them */
+.gm table.gapmap thead th[scope="col"] { height: 10.5rem; padding: 0; position: relative; top: auto; z-index: 2; background: transparent; overflow: visible; }
+.gm table.gapmap thead th[scope="col"] span { writing-mode: horizontal-tb; position: absolute; left: 50%; bottom: .5rem;
+  width: 13rem; max-height: none; margin: 0; transform-origin: 0 100%; transform: rotate(-45deg);
+  font-size: .82rem; line-height: 1.3; letter-spacing: .01em; text-align: left; white-space: normal; }
+@media (max-width: 600px) {
+  .gm .grid-wrap { padding-right: 6rem; }
+  .gm table.gapmap { --row: 8.5rem; --cw: 3.25rem; }
+  .gm table.gapmap th[scope="row"] { font-size: .75rem; }
+  .gm table.gapmap thead th[scope="col"] span { width: 11rem; font-size: .74rem; }
+}
+/* full screen: the whole map at once. Boxes stretch to fill the width (they can be wider than they
+   are tall) and shrink to fit the height, so nothing goes off an edge. */
+.gm .grid-wrap:fullscreen { background: var(--bg); padding: 1rem 6.5rem 1.5rem 2rem; overflow: auto; display: flex; flex-direction: column; }
+.gm .grid-wrap:fullscreen table.gapmap { --row: 19rem; margin: 0 auto; border-spacing: 4px;
+  --cw: max(1.4rem, min(calc((100cqi - var(--row) - 19 * 4px) / 17), 7rem));
+  --ch: max(.8rem, min(calc((100vh - 2.5rem - 8.5rem - var(--leg, 0px) - 28 * 4px) / 25), 4rem)); }
+.gm .grid-wrap:fullscreen table.gapmap thead th[scope="col"] { height: 8rem; }
+.gm .grid-wrap:fullscreen table.gapmap thead th[scope="col"] span { width: 10rem; white-space: normal; font-size: .72rem; line-height: 1.15; bottom: .3rem; }
+.gm .grid-wrap:fullscreen table.gapmap th[scope="row"] { font-size: .75rem; padding-top: 0; padding-bottom: 0; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm .grid-wrap:fullscreen caption { display: none; }
+.gm .grid-wrap:fullscreen table.gapmap td { line-height: 1; font-size: .65rem; }
+.gm .grid-wrap:fullscreen table.gapmap td button { min-height: 0; height: var(--ch); padding: 0; line-height: 1;
+  font-size: max(.65rem, min(calc(var(--ch) * .55), 1rem)); }
+
+/* Gap map extras: our own totals, every box a button */
+.gm table.gapmap td button { position: relative; }
+.gm table.gapmap td.empty button { color: #8a909c; font-size: .8rem; }
+.gm table.gapmap td.tot { background: transparent; color: var(--muted); font-size: .8rem; font-weight: 600; text-align: center; }
+.gm table.gapmap tfoot td { height: 1.75rem; }
+.gm table.gapmap tfoot th { text-align: left; font-weight: 400; font-style: italic; font-size: .75rem; color: var(--muted); padding: 0 .75rem 0 0; }
+.gm table.gapmap thead th.tot span { color: var(--muted); font-style: italic; }
+.gm-skip { position: absolute; left: -10000px; }
+.gm-skip:focus { position: static; display: inline-block; margin: 0 0 .5rem; padding: .3rem .7rem; background: var(--link); color: #fff; }
+
+/* A box's details: a panel that slides in from the right (one per treatment row, plus one shared
+   "Not studied" panel), laid out like the Figma Q1 "Bottom card · one cause" */
+.pop.rowpop { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(40rem, 100vw); max-width: none; height: 100dvh; max-height: none;
+  border: 0; border-left: 1px solid var(--line); border-radius: 0; box-shadow: -12px 0 32px rgba(15, 20, 60, .18);
+  padding: 3rem clamp(1rem, 3vw, 2rem) 2rem; overflow: auto; translate: 0 0;
+  transition: translate .28s ease, display .28s allow-discrete, overlay .28s allow-discrete; }
+@starting-style { .pop.rowpop:popover-open { translate: 100% 0; } }
+.pop.rowpop:not(:popover-open) { translate: 100% 0; }
+.pop.rowpop::backdrop { background: rgba(0, 0, 0, .15); }
+@media (prefers-reduced-motion: reduce) { .pop.rowpop { transition: none; } }
+.rowpop.only .pop-h { display: none; }
+.rowpop:not(.only) ul.cells > li + li { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+
+.gmc-k { margin: 0 0 .3rem; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--link); }
+.gmc-h { margin: 0 2rem 1.25rem 0; font-family: var(--font-heading); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  line-height: 1.15; color: var(--link); }
+.gmc-st { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.25fr) minmax(0, 1fr); margin: 0 0 1.25rem; }
+.gmc-st > div { padding: 0 1rem; border-left: 1px solid var(--rule); }
+.gmc-st > div:first-child { padding-left: 0; border-left: 0; }
+.gmc-st dt { margin: 0 0 .25rem; font-size: .68rem; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.gmc-st dd { margin: 0; font-size: .8rem; color: var(--muted); }
+.gmc-big, .gmc-st dd.gmc-big { display: block; font-family: var(--font-heading); font-size: 1.7rem; line-height: 1.15; color: var(--text); }
+.gmc-big .bars { zoom: .75; margin-right: .15rem; }
+.gmc-st dd.gmc-big.dir-increase { color: var(--dir-up); }
+.gmc-st dd.gmc-big.dir-decrease { color: var(--dir-down); }
+.gmc-st dd.gmc-big.dir-mixed { color: var(--dir-mixed); }
+.gmc-st dd.gmc-big.dir-no-effect, .gmc-st dd.gmc-big.dir-unclear { color: var(--dir-none); }
+.gmc-st > div:last-child .gmc-big { display: inline; margin-right: .3rem; }
+.gmc-why { display: block; margin-top: .35rem; font-size: .78rem; }
+.gmc .agree { display: flex; width: 100%; height: 1.1rem; border: 0; border-radius: 2px; }
+.gmc-sp { margin: .45rem 0 0; font-size: .88rem; max-width: none; }
+.gmc-sp .sp { white-space: nowrap; }
+.gmc-sp .sp::before { content: ""; display: inline-block; width: .7em; height: .7em; margin-right: .3em; border-radius: 50%; background: var(--dc); }
+.k-increase { --dc: var(--s-up); } .k-decrease { --dc: var(--s-down); } .k-mixed { --dc: var(--s-mixed); }
+.k-no-effect { --dc: var(--s-none); } .k-unclear { --dc: var(--dir-none); }
+.gmc-warn { margin: .9rem 0 0; padding: .5rem .75rem; border-left: 3px solid var(--c-low); background: #fff6e8; font-size: .85rem; max-width: none; }
+
+/* the three fold-outs: outlined buttons in a row; an open one drops below the row, full width */
+.gmc-more { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .6rem; margin-top: 1.25rem; }
+details.gmx[open] { order: 1; flex: 1 0 100%; }
+details.gmx > summary, .gmx-qmore > summary, .gmx-btn { display: inline-flex; align-items: center; gap: .55rem; padding: .5rem .9rem;
+  border: 1px solid var(--text); border-radius: 0; background: var(--bg); color: var(--text); font: inherit; font-size: .72rem;
+  letter-spacing: .12em; text-transform: uppercase; text-decoration: none; cursor: pointer; list-style: none; }
+details.gmx > summary::-webkit-details-marker, .gmx-qmore > summary::-webkit-details-marker,
+.gmx-paper > summary::-webkit-details-marker { display: none; }
+details.gmx > summary::after, .gmx-qmore > summary::after { content: "+"; content: "+" / ""; }
+details.gmx[open] > summary::after, .gmx-qmore[open] > summary::after { content: "\2212"; content: "\2212" / ""; }
+details.gmx > summary:hover, .gmx-qmore > summary:hover, .gmx-btn:hover { border-color: var(--link); color: var(--link); }
+details.gmx[open] > summary { background: var(--link); border-color: var(--link); color: #fff; }
+.gmx-b { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--rule); }
+.gmx-b p { max-width: none; }
+.gmx-n, .gmc-ck { margin: 0 0 .7rem; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--link); }
+
+/* Certainty calculation: start → adjust → result */
+.gmc-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6rem; }
+.gmc-flow li { position: relative; display: flex; flex-direction: column; gap: .35rem; padding: .75rem .9rem; border: 1px solid var(--line); }
+.gmc-flow li + li::before { content: "\2192"; content: "\2192" / ""; position: absolute; left: -1.3rem; top: 1.1rem; color: var(--link); }
+.gmc-flow li.res { border-color: var(--text); background: #f8f4ec; }
+.gmc-flow .lab { font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.gmc-flow .num { font-family: var(--font-heading); font-size: 1.6rem; line-height: 1.1; }
+.gmc-flow .num .bars { margin-left: .2rem; }
+.gmc-flow .up { color: var(--dir-up); }
+.gmc-flow .down { color: var(--dir-down); }
+.gmc-flow .t { font-size: .8rem; }
+.gmc-flow .mv { display: block; }
+.gmc-rule { margin: .8rem 0 0; font-size: .78rem; color: var(--muted); }
+.gmc-calc-more { margin: .8rem 0 0; }
+.gmc-caveat { margin: .8rem 0 0; padding: .6rem .8rem; border-left: 3px solid var(--accent); background: #fbf0ee; font-size: .82rem; }
+.gmc-caveat strong { display: block; font-family: var(--font-heading); font-weight: 400; font-size: 1.05rem; color: var(--accent); }
+
+/* Citations: one box per paper; the first one open */
+.gmx-papers { list-style: none; margin: 0 0 .8rem; padding: 0; display: grid; gap: .7rem; }
+.gmx-paper { border: 1px solid var(--text); box-shadow: 0 4px 0 var(--light-blue); background: var(--bg); }
+.gmx-paper[open] { border-color: var(--link); box-shadow: 0 4px 0 var(--link); }
+.gmx-paper > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .9rem; align-items: center;
+  padding: .6rem .9rem; cursor: pointer; list-style: none; }
+.gmx-paper .y { font-family: var(--font-heading); font-size: 1.35rem; color: var(--link); }
+.gmx-paper .t { font-size: .85rem; }
+.gmx-paper .n { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+.gmx-paper .n::after { content: "  +"; content: "  +" / ""; }
+.gmx-paper[open] > summary .n::after { content: "  \2212"; content: "  \2212" / ""; }
+.gmx-paper blockquote.quote { margin: 0 .9rem .7rem; padding: 0; border: 0; background: none; font-family: var(--font-heading);
+  font-size: 1.05rem; line-height: 1.4; max-width: none; }
+.gmx-paper blockquote.quote::before { content: "\201C"; }
+.gmx-paper blockquote.quote::after { content: "\201D"; }
+.gmx-qmore { margin: 0 .9rem .7rem; }
+.gmx-qmore[open] > summary { margin-bottom: .7rem; }
+.gmx-qmore blockquote.quote { margin: 0 0 .7rem; }
+.gmx-acts { margin: 0 .9rem .8rem; }
+
+/* Constraints: the pack's limitations, word for word, with our short tag in front */
+.gmx-lims { list-style: none; margin: 0 0 .6rem; padding: 0; }
+.gmx-lims li { margin: 0 0 .5rem; font-size: .88rem; }
+.gmx-lims .lim-tag { color: var(--accent); }
+
+/* the shared Not studied panel */
+.gmc-gap .gmc-k { color: var(--muted); }
+.gmc-gap .gmc-h { color: var(--text); }
+.gmc-lead { font-size: 1.05rem; }
+.gmc-searched { font-size: .85rem; color: var(--muted); }
+.gmc-not { padding: .6rem .8rem; border-left: 3px solid var(--link); background: #eef3ff; }
+.gmc-lims { margin: 1rem 0; }
+
+@media (max-width: 560px) {
+  .gmc-st { grid-template-columns: 1fr; gap: .9rem; }
+  .gmc-st > div { padding: 0; border-left: 0; }
+  .gmc-flow { grid-template-columns: 1fr; }
+  .gmc-flow li + li::before { content: "\2193"; content: "\2193" / ""; left: 1rem; top: -1.45rem; }
+}
+
+/* the legend above the gap map: a one-line key, then a dropdown (styled like "See not-studied
+   pairings") with the full explanation. In full screen it sits at the top of the map. */
+.gm-legend { margin: 0 0 var(--space-3); max-width: 62rem; }
+.gm-basic { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.4rem; margin: 0 0 .9rem; font-size: 1.05rem; max-width: none; }
+.gm-basic > span { display: inline-flex; align-items: center; gap: .45rem; }
+.gm-basic .gm-k { font-weight: 600; }
+.gm-legend .swatch { width: 1.5rem; height: 1.5rem; border-radius: 5px; display: inline-grid; place-items: center; }
+.gm-legend .swatch.empty { background: #f1f2f6; color: #9aa0ac; font-size: .85rem; }
+details.gm-mk > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .8rem;
+  background: var(--bg); border-radius: 12px; padding: .85rem 1.25rem; box-shadow: 0 2px 12px rgba(0, 0, 0, .16);
+  border: 1.5px solid var(--link); }
+details.gm-mk > summary::-webkit-details-marker { display: none; }
+details.gm-mk > summary::after { content: "⌄" / ""; margin-left: auto; color: var(--link); font-size: 1.4rem; line-height: 1; }
+details.gm-mk[open] > summary::after { content: "⌃" / ""; }
+details.gm-mk > summary .ns-q { border-style: solid; border-color: var(--link); color: var(--link); font-family: var(--font-heading); }
+.gm-mk-h { font-size: 1.1rem; font-weight: 600; color: var(--link); }
+details.gm-mk > summary:hover .gm-mk-h { text-decoration: underline; }
+details.gm-mk .v-hide, details.gm-mk[open] .v-see { display: none; }
+details.gm-mk[open] .v-hide { display: inline; }
+.gm-mk-b { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr)); gap: 1rem 2rem;
+  margin: .9rem 0 0; padding: 1.1rem 1.25rem; border: 1px solid var(--rule); border-radius: 12px; font-size: .95rem; line-height: 1.45; }
+.gm-mk-b dt { margin: 0 0 .2rem; font-weight: 600; color: var(--text); }
+.gm-mk-b dd { margin: 0; color: var(--text); }
+.gm .grid-wrap:fullscreen { --leg: 5.4rem; }
+.gm .grid-wrap:fullscreen .gm-legend { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem; max-width: none; margin: 0 0 .5rem; }
+.gm .grid-wrap:fullscreen .gm-basic { margin: 0; font-size: .9rem; }
+.gm .grid-wrap:fullscreen .gm-legend .swatch { width: 1.2rem; height: 1.2rem; }
+.gm .grid-wrap:fullscreen details.gm-mk > summary { padding: .45rem .9rem; }
+.gm .grid-wrap:fullscreen details.gm-mk[open] { flex-basis: 100%; }
+.gm .grid-wrap:fullscreen .gm-mk-h { font-size: .9rem; }
+
+/* Gap map: the box under the mouse (or selected) and its row and column names grow a little,
+   animated, and settle back when you move on (gm.js adds .hv for the mouse, .fx for focus) */
+.gm table.gapmap tbody td, .gm table.gapmap tbody th[scope="row"], .gm table.gapmap thead th[scope="col"] span {
+  transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease, color .2s ease; }
+.gm table.gapmap tbody td { position: relative; }
+.gm table.gapmap tbody td.hv, .gm table.gapmap tbody td.fx { transform: scale(1.18); z-index: 3;
+  box-shadow: 0 6px 16px rgba(15, 20, 60, .28); }
+.gm table.gapmap tbody th[scope="row"] { transform-origin: right center; }
+.gm table.gapmap tbody th.hv, .gm table.gapmap tbody th.fx { transform: scale(1.1); color: var(--link); }
+.gm table.gapmap thead th.hv span, .gm table.gapmap thead th.fx span { transform: rotate(-45deg) scale(1.12); color: var(--link); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .gm table.gapmap tbody td, .gm table.gapmap tbody th[scope="row"], .gm table.gapmap thead th[scope="col"] span { transition: none; }
+}
+/* room on the left so a growing row name is not clipped by the map's scroll box (same position) */
+.gm .grid-wrap { margin-left: -1.75rem; padding-left: 1.75rem; }
+.gm .grid-wrap:fullscreen { margin-left: 0; }
+
+/* Overview & Constraints: the information itself a little larger, for reading (the labels stay) */
+.ov .short ul.sa > li, .ov details.limits li, .ov details.limits .intro { font-size: 1.07rem; line-height: 1.45; }
+@media (min-width: 900px) {
+  .ov .short ul.sa > li, .ov-right details.limits li, .ov-right details.limits .intro { font-size: 1.1em; }
+  .ov .short ul.sa > li > strong:first-child { font-size: 1.05em; }
+}
+
+/* Not studied, on every question page: a section that stands out (tinted panel, dashed "gap"
+   edge, big heading) and a large dropdown button */
+.ns-sec { max-width: 62rem; margin: var(--space-5, 4rem) 0; padding: clamp(1.25rem, 3vw, 2.5rem);
+  background: #f3f6fd; border: 2px dashed var(--link); border-radius: 18px; }
+.ns-h { font-size: clamp(2.2rem, 4vw, 3.2rem); margin: 0 0 1rem; }
+.ns-intro { font-size: clamp(1.25rem, 1.8vw, 1.55rem); line-height: 1.4; margin-bottom: var(--space-3); }
+details.ns { margin-top: 0; }
+details.ns > summary { padding: 1.35rem 1.6rem; gap: 1rem; border-width: 2px; border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(2, 79, 236, .22); transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
+details.ns > summary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(2, 79, 236, .3); }
+details.ns > summary h3 { font-size: clamp(1.25rem, 2vw, 1.55rem); }
+details.ns > summary::after { font-size: 1.9rem; }
+details.ns > summary .ns-q { width: 2.3rem; height: 2.3rem; font-size: 1.15rem; border-width: 2px; }
+details.ns > summary .ns-c { font-size: 1.1rem; font-weight: 700; padding: .25rem .9rem; background: var(--link); color: #fff; }
+details.ns[open] > summary { background: var(--link); }
+details.ns[open] > summary h3, details.ns[open] > summary::after { color: #fff; }
+details.ns[open] > summary .ns-q { border-color: #fff; color: #fff; }
+details.ns[open] > summary .ns-c { background: #fff; color: var(--link); }
+@media (prefers-reduced-motion: reduce) { details.ns > summary { transition: none; } details.ns > summary:hover { transform: none; } }
+/* the list inside, a step larger too */
+details.ns .ns-t { font-size: 1.2rem; }
+details.ns .ns-key { font-size: .9rem; }
+details.ns li.gap { font-size: 1.02rem; }
+details.ns li.gap .searched { font-size: .85rem; }
+@media (max-width: 600px) {
+  .ns-sec { padding: 1.1rem; border-radius: 14px; }
+  details.ns > summary { padding: 1rem 1.1rem; gap: .7rem; }
+  details.ns > summary .ns-q { display: none; }
+  details.ns > summary h3 { font-size: 1.15rem; }
+  details.ns > summary .ns-c { font-size: 1rem; padding: .2rem .7rem; }
+}
+
+/* Gap map: the names stay in view. The map scrolls inside its own box (at most one screen tall),
+   with the outcome names pinned to its top and the treatment names pinned to its left, so a box
+   far down or across still shows what it is. Full screen shows everything anyway. */
+.gm .grid-wrap { overflow: auto; max-height: calc(100svh - var(--top-h, 6rem) - 1.5rem); overscroll-behavior: auto; }
+.gm .grid-wrap:fullscreen { max-height: none; }
+.gm table.gapmap thead { position: sticky; top: 0; z-index: 4; background: var(--bg); }
+.gm table.gapmap thead td.gm-corner { position: sticky; left: 0; top: auto; z-index: 5; background: var(--bg); }
+.gm table.gapmap tbody th[scope="row"], .gm table.gapmap tfoot th { position: sticky; left: 0; z-index: 2;
+  background: var(--bg); box-shadow: -1.75rem 0 0 var(--bg); }
+.gm table.gapmap tbody td.hv, .gm table.gapmap tbody td.fx { z-index: 3; }
+.gm table.gapmap thead td.gm-corner { box-shadow: -1.75rem 0 0 var(--bg); }
+
+/* ------------------------------------------------------------------ Guide (method.html)
+   Figma "Q1 · graph section + cards": small blue capital labels, cream panels, white cards with a
+   blue offset shadow, outlined capital buttons. The left menu is home's, without the tree, so it
+   sits right under the logo; static/tree.js marks the section being read. */
+:root { --gd-beige: #f8f4ee; --gd-warn-bg: #fbefef; }
+.guide-grid .home-menu { margin-top: 0; }
+.guide-grid main { position: relative; padding-top: var(--space-4); max-width: 60rem; }
+.gd-top { position: sticky; top: calc(var(--top-h) + var(--space-1)); z-index: 5; display: flex; justify-content: flex-end;
+  align-items: flex-start; height: 0; overflow: visible; }
+.gd-back { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .9rem; border: 1px solid var(--text);
+  background: var(--bg); color: var(--text); text-decoration: none; text-transform: uppercase; letter-spacing: .06em;
+  font-size: .8125rem; box-shadow: 4px 4px 0 var(--bright-blue); }
+.gd-back:hover, .gd-back:focus-visible { background: var(--link); border-color: var(--link); color: #fff; }
+.gd-head h1 { margin-top: 0; padding-right: 9rem; }
+.gd-intro { font-family: var(--font-heading); font-weight: 300; font-size: var(--text-lg); line-height: 1.35; }
+.gd-sec { margin: var(--space-5) 0 0; }
+.gd-sec > h2 { margin: 0; padding-bottom: var(--space-1); border-bottom: 1px solid var(--rule); max-width: none;
+  font-size: clamp(1.75rem, 3vw, var(--text-heading)); }
+.gd-sn { font-family: var(--font-body); font-size: var(--text-lg); vertical-align: .35em; margin-right: .25rem; }
+.gd-body { padding-top: var(--space-3); }
+.gd-body > :first-child { margin-top: 0; }
+.gd-lead { font-size: var(--text-base); }
+.gd-label, .gd-kicker { margin: 0 0 .6rem; font-size: .8125rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--bright-blue); max-width: none; }
+.gd-h3 { margin: var(--space-4) 0 var(--space-2); font-family: var(--font-heading); font-weight: 300; color: var(--heading);
+  font-size: var(--text-lg); }
+.gd-panel { background: var(--gd-beige); padding: var(--space-3); margin: var(--space-3) 0; }
+.gd-card { position: relative; background: var(--bg); border: 1px solid var(--text); box-shadow: 8px 8px 0 var(--bright-blue);
+  padding: var(--space-3); margin: 0 8px var(--space-3) 0; }
+.gd-card h3 { margin: 0 0 var(--space-2); font-family: var(--font-heading); font-weight: 300; color: var(--heading);
+  font-size: clamp(1.5rem, 2.5vw, 2rem); line-height: 1.15; }
+.gd-card.slim { padding: var(--space-2) var(--space-3); box-shadow: 5px 5px 0 var(--bright-blue); }
+.gd-card.slim p, .gd-card.slim li { font-size: var(--text-sm); }
+.gd-card.slim ul { margin: 0; padding-left: 1.1rem; }
+.gd-cards { display: grid; gap: var(--space-2); }
+.gd-cards.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.gd-signs { margin: 0; display: grid; gap: var(--space-2); }
+.gd-signs > div { display: grid; grid-template-columns: 14rem minmax(0, 1fr); gap: .25rem var(--space-3);
+  padding-top: var(--space-2); border-top: 1px solid var(--rule); }
+.gd-signs > div:first-child { border-top: 0; padding-top: 0; }
+.gd-signs dt { font-weight: 600; }
+.gd-signs dd { margin: 0; }
+.gd-signs dd p { margin: 0 0 .35rem; font-size: var(--text-sm); }
+p.gd-row { display: flex; flex-wrap: wrap; gap: .4rem .75rem; align-items: center; font-size: var(--text-base); }
+.gd-lvl { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.gd-steps { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-2) var(--space-3); }
+.gd-steps li { display: flex; gap: .6rem; max-width: none; font-size: var(--text-sm); }
+.gd-steps strong { display: block; font-size: var(--text-base); color: var(--text); }
+.gd-num { flex: none; font-family: var(--font-heading); font-weight: 300; font-size: 2rem; line-height: 1; color: var(--bright-blue); }
+.gd-legend { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .4rem var(--space-3); font-size: var(--text-sm); }
+.gd-legend li { display: flex; align-items: center; gap: .45rem; max-width: none; }
+.gd-tl { flex: none; display: inline-block; width: 2.25rem; height: .9rem; border-radius: 3px; }
+.gd-tl.hatch { border: 1px solid var(--line);
+  background: repeating-linear-gradient(45deg, var(--bg) 0 3px, var(--line) 3px 5px); }
+.gd-key { display: block; border: 0; padding: 0; margin: 0 0 var(--space-2); }
+.gd-key .gkey-g { margin-bottom: var(--space-1); }
+.gd-key h4 { margin: .5rem 0 .2rem; font-size: .8125rem; font-weight: 400; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--bright-blue); font-family: var(--font-body); }
+.gd-key ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 0 var(--space-3);
+  font-size: var(--text-sm); }
+.gd-note, .gd-small { font-size: var(--text-sm); color: var(--muted); }
+.gd-go { margin: var(--space-2) 0 0; }
+.gd-btn { display: inline-flex; align-items: center; gap: .5rem; padding: .45rem 1rem; border: 1px solid var(--text);
+  color: var(--text); text-decoration: none; text-transform: uppercase; letter-spacing: .08em; font-size: .8125rem; }
+.gd-btn:hover, .gd-btn:focus-visible { background: var(--link); border-color: var(--link); color: #fff; }
+.gd-defs { margin: 0; }
+.gd-defs > div { display: grid; grid-template-columns: 16rem minmax(0, 1fr); gap: .25rem var(--space-3);
+  padding: .6rem 0; border-bottom: 1px solid var(--rule); }
+.gd-defs dt { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; }
+.gd-defs dd { margin: 0; font-size: var(--text-sm); }
+/* certainty: four levels, then the two columns of the grade (Figma "How certainty is graded") */
+.gd-levels { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); text-align: center; font-size: var(--text-sm); }
+.gd-levels li { display: flex; flex-direction: column; align-items: center; gap: .35rem; }
+.gd-calc { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--space-2) var(--space-4); }
+.gd-calc h3 { margin: 0 0 .5rem; font-size: var(--text-base); font-family: var(--font-body); font-weight: 700; }
+.gd-score { list-style: none; margin: 0; padding: 0; font-size: var(--text-sm); }
+.gd-score li { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .2rem 0; max-width: none; }
+.gd-n { font-family: var(--font-heading); font-weight: 300; font-size: 1.6rem; line-height: 1; }
+.gd-n.down, .gd-big.down { color: var(--dir-down); }
+.gd-n.up, .gd-big.up { color: var(--dir-up); }
+.gd-example { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-1); }
+.gd-example li { display: flex; flex-direction: column; gap: .2rem; border: 1px solid var(--line); padding: .6rem .8rem;
+  font-size: var(--text-sm); max-width: none; }
+.gd-example li.res { background: var(--gd-beige); border-color: var(--text); }
+.gd-k { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.gd-big { display: flex; align-items: center; gap: .4rem; font-family: var(--font-heading); font-weight: 300; font-size: 2rem; line-height: 1.1; }
+.gd-warn { border-left: 4px solid var(--dir-down); background: var(--gd-warn-bg); padding: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0; }
+.gd-warn .gd-label { color: var(--dir-down); }
+.gd-warn h3 { margin: 0 0 .3rem; font-family: var(--font-heading); font-weight: 300; color: var(--dir-down); font-size: var(--text-lg); }
+.gd-warn p { margin: 0; }
+.gd-more { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: .6rem 0; }
+.gd-more summary { cursor: pointer; text-transform: uppercase; letter-spacing: .08em; font-size: .8125rem; }
+.gd-more li, .gd-more p { font-size: var(--text-sm); }
+@media (max-width: 52rem) {
+  .guide-grid { display: block; padding: 0 var(--space-2); }
+  .guide-grid::before { display: none; }
+  .guide-grid .home-side { position: static; width: auto; height: auto; padding: var(--space-2) 0 0; }
+  .guide-grid main { padding-top: var(--space-3); }
+  .gd-top { top: calc(var(--top-h) + .4rem); }
+  .gd-head h1 { padding-right: 0; margin-top: var(--space-4); }
+  .gd-signs > div, .gd-defs > div { grid-template-columns: minmax(0, 1fr); }
+  .gd-panel, .gd-card { padding: var(--space-2); }
+}
+@media (max-width: 30rem) { .gd-levels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
