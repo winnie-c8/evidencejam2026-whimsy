@@ -75,6 +75,13 @@ def graph_file(qid: str) -> str:
     return '%s-graph.html' % qid
 
 
+def graph_on_page(data: Any, qid: str) -> bool:
+    """True when the question's own page is its graph (Q1): links go there, not to qN-graph.html."""
+    q = data.questions.get(qid)
+    return (q is not None and qid in data.graphs and data.kinds.get(qid) == 'effects'
+            and all(f.slug in data.graph_join for f in q.findings))
+
+
 def graph_prefix(qid: str) -> str:
     """data-check prefix for a question's graph values, e.g. q1graph/<edge>/certainty."""
     return '%sgraph' % qid
@@ -782,7 +789,7 @@ def nav_items(data: SiteData) -> List[Tuple[str, str]]:
     items = [('index.html', 'Home')]
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         items.append(('%s.html' % qid, '%02d %s' % (n, question_name(q))))
-        if qid in data.graphs:
+        if qid in data.graphs and not graph_on_page(data, qid):
             items.append((graph_file(qid), 'Graph'))
     items.append(('method.html', 'Guide'))
     return items
@@ -802,7 +809,7 @@ def side_nav(data: SiteData, filename: str, jumps: Optional[List[Tuple[str, str]
     qs = []
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         qs.append(item('%s.html' % qid, '%02d' % n, question_name(q)))
-        if qid in data.graphs:
+        if qid in data.graphs and not graph_on_page(data, qid):
             qs.append(item(graph_file(qid), '↳', '%s graph' % question_name(q), 'sub'))
     more = item('method.html', '?', 'Guide') + item('index.html', '⌂', 'Home')
     return ('<aside class="side">'
@@ -952,7 +959,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
         graph = ''
         if qid in data.graphs:
             graph = (' · <a href="%s">See it as a graph<span class="sr-only">: %s</span></a>'
-                     % (graph_file(qid), esc(question_name(q))))
+                     % ('%s.html#graph' % qid if graph_on_page(data, qid) else graph_file(qid), esc(question_name(q))))
         menu.append(('%s.html' % qid, '%02d' % n, question_name(q)))   # the question's own page
         sections.append(section(
             'card-%s' % qid,
@@ -2289,7 +2296,8 @@ def graph_parts(data: SiteData, qid: str, sources: List[SourcePage], here: str) 
         else:
             quotes = data.edge_index.get(qid, {}).get(e['id'], ())
             boxes = source_page_link(sources, quotes, fname='sources-e-%s.html' % es, id_prefix='ev-e-' + es,
-                                     check_prefix=gp_, label=title, back=here + '#e-' + es,
+                                     check_prefix=gp_, label=title,
+                                     back=('%s.html#e-%s' % (qid, es)) if graph_on_page(data, qid) else here + '#e-' + es,
                                      back_text='Back to the graph',
                                      description='The quoted sentences behind one arrow on the Q%d graph.' % n)
         finding = ''
