@@ -40,7 +40,18 @@ Start on **Home** (`index.html`) to choose a question. Open the **Guide** (`meth
 1. Open **Q1 → Findings → Seedling survival → Site preparation**. The direction is **Mixed**, the certainty is **High**, and the finding draws on **4 studies**.
 2. Read the certainty checklist and excerpts. Select **All 4 papers, 12 quotes** to see the original sentences grouped by paper, with DOI links where available.
 
-In **Q3**, select a numbered cell to see the finding behind it. Open **See not-studied pairings** and filter by topic or outcome to explore gaps.
+### Q3 gap map and sources
+
+The gap map shows how much research exists for each treatment and outcome. The popup shows what that research found.
+
+- **Grid.** Each studied box shows the study count as a number. Darker blue means more studies, with shade bands for **1**, **2–3**, **4–7**, and **8+**. A grey dash means **Not studied**, as the legend and accessible label explain. Open **See not-studied pairings** to filter gaps by topic or outcome.
+- **Popup.** Select a studied box to see the study count again beside the overall direction and certainty grade at the top. The direction can be **Increase**, **Decrease**, **Mixed**, **No effect**, or **Unclear**. For mixed findings, the study breakdown shows how many studies reported each result. **Citations** groups the supporting quotes by paper, with a **Read all sources** link available as a fallback.
+- **Sources page.** The page names the treatment and outcome and links back to the corresponding grid finding. Each quoted claim carries its own direction and certainty grade. Citations include the paper title, publication year, and DOI where the pack supplies them.
+- **Most studied.** The three most-studied pairings appear first, with the study count beside each entry. **Show more** reveals the rest of the ranked list with their counts.
+
+**Try a mixed result.** Select **Fertilization & nutrient addition × Plant & vegetation cover**. Its popup shows **3 studies**, **Mixed** direction, and **Moderate** certainty together. One study reported an increase, one a decrease, and one no effect.
+
+**Design follow-up.** Give one-study boxes a dotted border and label it **1 study · Thin evidence** in the legend. This makes a one-study box distinguishable from a two-study box and a grey gap at a glance. Keep **Read all sources** visible after the inline citations load. Where a claim supports several grid boxes, list and link each pairing on the sources page.
 
 ## Figma wireframes
 
@@ -140,6 +151,34 @@ The [Lane 3 answer pack][upstream] draws on the Lane 2 CAMO causal graph, which 
 Code is released under the MIT Licence. See [LICENSE](LICENSE).
 
 The bundled fonts use the SIL Open Font License. [Inter licence](static/fonts/inter-LICENSE.txt) · [Newsreader licence](static/fonts/newsreader-LICENSE.txt)
+
+
+
+<img width="1168" height="487" alt="Screenshot 2026-11-15 at 4 38 42 PM" src="https://github.com/user-attachments/assets/eb1cbdd0-6b1c-4929-a6c3-c076cc02ee19" />
+
+
+<img width="447" height="369" alt="Screenshot 2026-11-15 at 4 37 12 PM" src="https://github.com/user-attachments/assets/2bfb64f6-f55b-4f6f-9a6d-85a42d5ba40d" />
+
+
+
+<img width="674" height="550" alt="Screenshot 2026-11-15 at 4 35 38 PM" src="https://github.com/user-attachments/assets/c30fec5a-e5b1-4cd2-90f8-3c3384f6b8f5" />
+
+<img width="533" height="401" alt="Screenshot 2026-11-15 at 4 41 17 PM" src="https://github.com/user-attachments/assets/71aa66b8-2d9c-4b32-8cbf-6d1143a74842" />
+
+
+<img width="525" height="314" alt="Screenshot 2026-11-15 at 4 42 38 PM" src="https://github.com/user-attachments/assets/447eead9-f9a7-46a0-be9e-6bef3c32deac" />
+
+<img width="756" height="682" alt="Screenshot 2026-11-15 at 4 43 06 PM" src="https://github.com/user-attachments/assets/4d92d42b-c6fd-44ed-924a-77fcff1f27e4" />
+
+<img width="661" height="660" alt="Screenshot 2026-11-15 at 4 43 36 PM" src="https://github.com/user-attachments/assets/2b4915c9-310b-4dbb-b54b-2d3c5293cafa" />
+
+<img width="297" height="386" alt="Screenshot 2026-11-15 at 4 44 13 PM" src="https://github.com/user-attachments/assets/99d6a15d-fd87-42a5-8a75-614aa18cd5b6" />
+
+<img width="569" height="554" alt="Screenshot 2026-11-15 at 4 44 39 PM" src="https://github.com/user-attachments/assets/b884698f-fe59-45ef-8194-728c3cf13f17" />
+
+<img width="288" height="227" alt="Screenshot 2026-11-15 at 4 45 25 PM" src="https://github.com/user-attachments/assets/233b2214-81a8-4a0a-a9c5-8331445ea722" />
+
+
 
 [figma]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=0-1
 [figma-home]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=279-3223
