@@ -1270,7 +1270,7 @@ def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: Lis
     main += ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h">How each factor '
              'affects the seedlings</h2><p>%s</p>%s%s%s%s</section>'
              % (esc(GRAPH_INTRO.get(q.qid, DEFAULT_GRAPH_INTRO) % ends), gp['figure'], gp['matrix'], table_view,
-                gp['paths']))
+                gp['paths'] + gp['limits']))
     store = gp['combos'] + gp['arrows']
     if not gp['combos']:
         store += gp['set_aside']
