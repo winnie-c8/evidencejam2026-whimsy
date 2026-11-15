@@ -43,6 +43,7 @@ class ProseItem:
 class Prose:
     short_answer: Dict[str, ProseItem] = field(default_factory=dict)
     finding_sentence: Dict[str, ProseItem] = field(default_factory=dict)
+    home_summary: Dict[str, ProseItem] = field(default_factory=dict)   # one per question, for the home page
     stats: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -199,15 +200,60 @@ def short_answer_template(qid: str, data: SiteData) -> ProseItem:
     return ProseItem(text, _esc(text))
 
 
+def home_template(qid: str, data: SiteData) -> str:
+    """Two plain sentences per question for the home page, from the pack's values (the LLM's fallback)."""
+    q = data.questions[qid]
+    kind = data.kinds[qid]
+    if kind == GAPMAP and 'summary' in q.extra:
+        s = q.extra['summary']
+        lead = ('Only %s of %s treatment and outcome combinations have been studied, and %s of those rest on a '
+                'single study.' % (s['filled'], s['cells'], s['thin']))
+        by_id = {f.id: f for f in q.findings}
+        dense = [by_id[i] for i in (s.get('densest') or []) if i in by_id]
+        n_mixed = sum(f.direction == 'mixed' for f in dense)
+        if dense and n_mixed == len(dense):   # said only when the pack's densest cells really are all mixed
+            lead += ' Even the best-studied combinations give mixed results.'
+        elif n_mixed:
+            lead += ' %s of the %s best-studied combinations give mixed results.' % (
+                _cap(NUMBER_WORD.get(n_mixed, str(n_mixed))), NUMBER_WORD.get(len(dense), str(len(dense))))
+        return lead
+    sa = q.extra.get('short_answer') or {}
+    if 'time_to_reference' in sa and sa.get('time_to_reference') is None:
+        firm = [f.outcome_label.lower() for f in q.findings
+                if f.certainty in ('high', 'moderate') and f.direction == 'below_reference']
+        lag = (' The firmest findings show created marshes behind natural ones on %s.' % _join(firm)) if firm else ''
+        return 'The studies cannot say how long a created marsh takes to match a natural one.' + lag
+    if kind == EFFECTS:
+        high = [f for f in q.findings if f.certainty == 'high']
+        ups = [_lower_first(f.subject_label) for f in high if f.direction == 'increase']
+        downs = [_lower_first(f.subject_label) for f in high if f.direction == 'decrease']
+        parts = []
+        if ups:
+            parts.append('%s %s' % (_join(sorted(set(ups))), 'helps' if len(set(ups)) == 1 else 'help'))
+        if downs:
+            parts.append('%s %s' % (_join(sorted(set(downs))), 'holds seedlings back' if len(set(downs)) == 1 else 'hold seedlings back'))
+        lead = ('With high certainty, %s.' % '; '.join(parts)) if parts else 'Few findings are rated high certainty.'
+        return _cap(lead[:1].upper() + lead[1:]) + ' Most of the less certain findings are mixed.'
+    return DEFAULT_SHORT_ANSWER
+
+
 def summarize_all(data: SiteData, args: Any = None) -> Prose:
     prose = Prose()
     for qid, q in data.questions.items():
         prose.short_answer[qid] = short_answer_template(qid, data)
         for f in q.all_findings():
             prose.finding_sentence[f.slug] = finding_template(f)
+    # home page: the build-time LLM writes these when BRINE_* are set; validated, else the template
+    from llm import home_summaries
+    use = not getattr(args, 'no_llm', False)
+    got = home_summaries(data, {qid: home_template(qid, data) for qid in data.questions}, use_llm=use)
+    for qid, (text, src) in got.items():
+        prose.home_summary[qid] = ProseItem(text, _esc(text), source=src,
+                                            reason='' if src == 'llm' else ('llm off' if not use else 'fallback'))
+    n_llm = sum(1 for p in prose.home_summary.values() if p.source == 'llm')
     prose.stats = {
-        'llm': False,
-        'template': len(prose.short_answer) + len(prose.finding_sentence),
-        'llm_filled': 0,
+        'llm': n_llm > 0,
+        'template': len(prose.short_answer) + len(prose.finding_sentence) + len(prose.home_summary) - n_llm,
+        'llm_filled': n_llm,
     }
     return prose

@@ -638,18 +638,29 @@ def at_a_glance(q: Question, short_html: str = '') -> str:
             % (HELP_BTN, short_box(short_html, 'short') if short_html else '', head, ''.join(rows)))
 
 
+# Our own short label for each limitation (Figma Q1 "Constraints"), in the pack's order. Shown in
+# front of the pack's sentence, which stays word for word. Used only when the count matches.
+LIMIT_TAGS = {'q1': ['Keyword matching', 'Fertilization', 'Vegetation', 'Growth'],
+              'q2': ['', 'Created vs. restored', 'One snapshot', 'Keyword sorting'],   # 0 already starts "Thin evidence:"
+              'q3': ['Grassland tagging', 'Unmapped claims', 'Empty isn\u2019t negative', 'Effort, not effect']}
+
+
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
-               how_built: Optional[str], heading: str = 'Read this first') -> str:
+               how_built: Optional[str], heading: str = 'Read this first', open_: bool = False) -> str:
     """The pack's limitations, word for word. A closed one-liner, so the page stays clean,
     but always on the question page itself (README; both checkers)."""
     lims = list(limitations)
-    items = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (prefix, i), t) for i, t in enumerate(lims))
+    tags = LIMIT_TAGS.get(prefix, [])
+    tags = tags if len(tags) == len(lims) else [''] * len(lims)
+    items = ''.join('<li>%s%s</li>' % ('<strong class="lim-tag">%s:</strong> ' % esc(tg) if tg else '',
+                                       span('%s/limitations/%d' % (prefix, i), t))
+                    for i, (tg, t) in enumerate(zip(tags, lims)))
     # how_built (the data team's selection rules) is on the Method page, under "Where the data comes from"
-    return ('<details class="limits" id="limits-%s"><summary><strong>%d %s this answer can\'t tell you</strong>'
+    return ('<details class="limits" id="limits-%s"' % esc(prefix) + (' open' if open_ else '') + '><summary><strong>%d %s this answer can\'t tell you</strong>'
             '<span class="cnt">read before acting on it</span></summary><p class="intro">In the data team\'s own '
             'words: how the studies were matched and grouped, and what that means for the answer above. '
             '<a href="method.html#data">How each answer was built →</a></p><ul>%s</ul></details>'
-            % (esc(prefix), len(lims), plural(len(lims), 'thing', 'things'), items))
+            % (len(lims), plural(len(lims), 'thing', 'things'), items))
 
 
 def finding_cells(f: Finding) -> Tuple[str, str, str]:
@@ -742,24 +753,41 @@ with open(os.path.join(ROOT, 'static', 'tree.svg'), encoding='utf-8') as _f:
 
 def page(data: SiteData, filename: str, title: str, description: str, body: str, *,
          side: bool = True, jumps: Optional[List[Tuple[str, str]]] = None,
-         script: Optional[str] = None, home_menu: Optional[str] = None, wide: bool = False) -> str:
+         script: Optional[str] = None, home_menu: Optional[str] = None, wide: bool = False,
+         hero: str = '') -> str:
     """Every page has the same top bar (Figma "home page" frame): a thin line across the top of
     the screen, the boxed menu hanging from it (the line is the boxes' top edge) and the WHIMSY
     logo, which always links home. The bar stays at the top while scrolling.
     Home (home_menu given) then has the tree and a numbered menu of its own sections on the left;
     every other page has the left sidebar, styled the same way."""
     main = '<main id="main" tabindex="-1">\n%s\n</main>' % body
-    top = [('index.html', 'Home')] + [(graph_file(q), 'Graph') for q in data.graphs] + \
-          [('method.html', 'Guide')]
-    boxed = ''.join('<li><a href="%s"%s>%s</a></li>' % (esc(h), ' aria-current="page"' if h == filename else '',
-                                                       esc(t)) for h, t in top)
-    header = ('<header class="site-top"><div class="site-top-in"><a class="logo" href="index.html">'
+    # HOME | Q1 | Q2 | Q3 (Figma). Graph and Guide stay in the left menu. Each Qn also carries the
+    # question's name for screen readers. The open page and its graph mark their own box.
+    top = [('index.html', 'Home', '', ())] + [
+        ('%s.html' % qid, 'Q%d' % n, question_name(q), (graph_file(qid),) if qid in data.graphs else ())
+        for n, (qid, q) in enumerate(data.questions.items(), 1)] + [('method.html', 'Guide', '', ())]
+    boxed = ''.join('<li><a href="%s"%s>%s%s</a></li>'
+                    % (esc(h), ' aria-current="page"' if h == filename else (' class="here"' if filename in also else ''),
+                       esc(t), '<span class="sr-only">: %s</span>' % esc(name) if name else '')
+                    for h, t, name, also in top)
+    over = 'hero-full' in hero or 'hero-sky' in hero   # header see-through over the hero's sky
+    header = ('<header class="site-top%s"><div class="site-top-in"><a class="logo" href="index.html">'
               '<img src="static/logo.svg" alt="Whimsy: home" width="293" height="51"></a><nav aria-label="Main"><ul class="boxnav">%s</ul></nav>'
-              '</div></header>' % boxed)
+              '</div></header>' % ((' over light' if 'hero-full' in hero else ' over') if over else '', boxed))
+    if over:   # on a full-photo hero the header is see-through until the photo scrolls past
+        header += ('<script>addEventListener("DOMContentLoaded",function(){var h=document.querySelector(".site-top"),'
+                   'b=document.querySelector(".hero");if(!h||!b)return;'
+                   'function f(){h.classList.toggle("over",b.getBoundingClientRect().bottom>h.offsetHeight);}'
+                   'addEventListener("scroll",f,{passive:true});addEventListener("resize",f);f();});</script>')
     if home_menu is not None:
         layout = ('%s<div class="home-grid"><div class="home-side">%s'
                   '<nav class="home-menu" aria-label="On this page">%s</nav></div>%s</div>'
                   % (header, TREE_HTML, home_menu, main))
+    elif side and hero:
+        # question pages: the full-width hero, then the content; no left menu (the top menu has
+        # Home and Q1-Q3, the page links to its graph and to the Guide)
+        layout = ('%s<main id="main" tabindex="-1" class="has-hero">%s<div class="content solo">\n%s\n</div></main>'
+                  % (header, hero, body))
     elif side:
         # wide (the graph page): the menu runs across the top so the content gets the full width
         layout = '%s<div class="layout%s">%s%s</div>' % (header, ' wide' if wide else '',
@@ -786,6 +814,36 @@ READ_KEY = ('<ul class="key-list">'
             '</ul>')
 
 
+# Home "Problem" opening (Figma home page frame). Each flower in static/home-flowers.webp as
+# [centre x, centre y, radius] in percent, so the page can show them one at a time with clip-path.
+HOME_FLOWERS = [[9.1, 7.7, 5.2], [29.2, 7.6, 6], [26.1, 14.5, 3.7], [38.9, 16.6, 5.2], [40.7, 30.2, 4.1], [74.4, 32.7, 4.4], [33.3, 36, 4.4], [77.9, 40, 5.7], [52.7, 46.3, 4.9], [45.2, 53.5, 6], [88.3, 63.6, 5.2], [73.3, 66.9, 4.3], [56.3, 81.6, 4.4], [45.5, 92.4, 5.2]]
+HOME_PAPER_STRIPS = 24   # the paper band is shown in this many slices, one after another
+
+
+def problem_section() -> str:
+    """The opening of the home page: the problem in one sentence, then flowers, then "hundreds of
+    papers" over a band of paper stacks. static/problem.js reveals them as you scroll; without
+    script (or with reduced motion) everything shows at once. Pictures are decorative."""
+    flowers = ''.join('<img src="static/home-flowers.webp" alt="" decoding="async" '
+                      'style="clip-path:circle({}% at {}% {}%)">'.format(r, x, y) for x, y, r in HOME_FLOWERS)
+    n = HOME_PAPER_STRIPS
+    strips = ''.join('<img src="static/home-papers.webp" alt="" decoding="async" loading="lazy" '
+                     'style="clip-path:inset(0 {:.3f}% 0 {:.3f}%)">'.format(100 - (i + 1) * 100 / n, i * 100 / n)
+                     for i in range(n))
+    # hide the parts before the first paint (no flash), unless the reader asks for reduced motion
+    early = ('<script>(function(s){if(!matchMedia("(prefers-reduced-motion: reduce)").matches){s.classList.add("anim");'
+             '}})(document.currentScript.parentNode);</script>')
+    return ('<section class="problem" id="problem" aria-labelledby="problem-h">' + early + '<div class="pb-pin">'
+            '<p class="pb-kicker">Problem</p>'
+            '<h1 id="problem-h">Restoration practitioners make decisions <span class="hl">every day</span> '
+            'about where to plant, what to treat and what to try next.</h1>'
+            '<div class="pb-flowers" aria-hidden="true">' + flowers + '</div>'
+            '<p class="pb-spread">The research that could guide those choices is spread across:</p>'
+            '<p class="pb-many">hundreds of papers</p>'
+            '<div class="pb-papers" aria-hidden="true">' + strips + '</div>'
+            '</div></section>')
+
+
 def render_index(data: SiteData, prose: Prose) -> str:
     """Home, laid out as the Figma "home page" frame: each section has a big blue heading over a
     thin rule, with its text indented below; a numbered menu on the left (pinned bottom-left)
@@ -797,7 +855,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
                 % (' ' + cls if cls else '', sid, sid, level, sid, heading, level, inner))
 
     menu = []      # (link, mark, label) for the left menu
-    sections = []
+    sections = [problem_section()]
     m = data.manifest.get('graph') or {}
     papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
               if m.get('source_documents') else '')
@@ -805,7 +863,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
         'top', 'our mission',
         '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
         'and where nothing has been studied. Works offline.</p>' % (number_word(len(data.questions)), papers),
-        level=1))
+        level=2, cls='mission'))
     menu.append(('#guide', '?', 'How to use this site'))
     sections.append(section(
         'guide', 'How to use this site',
@@ -826,16 +884,26 @@ def render_index(data: SiteData, prose: Prose) -> str:
         sections.append(section(
             'card-%s' % qid,
             '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(question_name(q))),
-            '<p class="q">%s</p><p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
-            '</span></a>%s</p>' % (esc(q.text), esc(qid), esc(question_name(q)), graph), cls='qsec'))
+            '<p class="q">%s</p>%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
+            '</span></a>%s</p>' % (esc(q.text), home_summary(prose, qid), esc(qid), esc(question_name(q)), graph), cls='qsec'))
     # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
     menu_html = '<ol class="qnav">%s</ol>' % ''.join(
         '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
         % (esc(h[1:] if h.startswith('#') else 'card-' + h[:-len('.html')]), esc(h), esc(mk), esc(t))
         for h, mk, t in menu)
     return page(data, 'index.html', 'Whimsy · Restoration evidence', 'Plain answers to restoration questions, '
-                'with certainty, gaps and sources.', ''.join(sections), home_menu=menu_html,
-                script='static/tree.js')
+                'with certainty, gaps and sources.', ''.join(sections) + '<script src="static/problem.js" defer></script>',
+                home_menu=menu_html, script='static/tree.js')
+
+
+def home_summary(prose: Prose, qid: str) -> str:
+    """The question's summary on the home page; says so when a language model wrote it."""
+    p = prose.home_summary.get(qid)
+    if not p:
+        return ''
+    note = (' <small class="llm-note">Summary written at build time by a language model from this answer\'s '
+            'findings; the question page has the exact values.</small>' if p.source == 'llm' else '')
+    return '<p class="qsum" data-source="%s">%s%s</p>' % (esc(p.source), p.html, note)
 
 
 def number_word(n: int) -> str:
@@ -959,22 +1027,167 @@ def not_studied(q: Question) -> str:
            ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings'))
 
 
+# The phrase picked out in each question's hero (Figma). Only used if the question contains it.
+HERO_MARK = {
+    'q1': 'planting-stock traits',
+    'q2': 'biodiversity and function',
+    'q3': 'intervention-outcome combinations',
+}
+HERO_EXT = ('webp', 'avif', 'jpg', 'png')
+# 'full': the photo fills the whole hero, sky included, with the header over it (Q3 in Figma).
+# 'sky': a white-to-pale-blue sky gradient with the photo along the bottom (Q2 in Figma).
+# Default: Q1-style picture beside the text ('effects' questions), else a landscape band.
+HERO_STYLE = {'q2': 'sky', 'q3': 'full'}
+
+
+def hero_image(qid: str) -> Optional[str]:
+    """static/hero-<qid>.<ext> if the team added a picture for this question."""
+    for ext in HERO_EXT:
+        if os.path.exists(os.path.join(ROOT, 'static', 'hero-%s.%s' % (qid, ext))):
+            return 'static/hero-%s.%s' % (qid, ext)
+    return None
+
+
+def hero_stats(data: SiteData, q: Question) -> List[Tuple[str, str]]:
+    """The blue bar under the hero: the same four labels on every question (Figma), each count
+    taken straight from that question's data (0 where it has none)."""
+    papers = len({(e.doi or e.title) for e in q.evidence.values()})
+    return [('Findings', esc(len(q.all_findings()))), ('Not studied', esc(len(q.gaps))),
+            ('Papers', esc(papers)), ('Combined-treatment claims', esc(len(q.extra.get('interactions') or [])))]
+
+
+def hero(data: SiteData, q: Question, n: int, name: str, lead: str = '') -> str:
+    """Top of a question page (Figma): kicker, the question with one phrase picked out, dotted
+    shapes, a picture, and a blue bar of counts. Q1 has the picture beside the text, the others
+    a landscape band under it. Shapes and picture are decorative."""
+    text = esc(q.text)
+    mark = HERO_MARK.get(q.qid)
+    if mark and esc(mark) in text:
+        text = text.replace(esc(mark), '<span class="hl">%s</span>' % esc(mark), 1)
+    img = hero_image(q.qid)
+    side = data.kinds.get(q.qid) == 'effects'
+    style = HERO_STYLE.get(q.qid) if img is not None else None
+    full = style in ('full', 'sky')
+    pic = '<div class="hero-pic"><img src="%s" alt="" decoding="async"></div>' % esc(img) if img else ''
+    clouds = os.path.join(ROOT, 'static', 'hero-%s-clouds.svg' % q.qid)
+    if full and os.path.exists(clouds):   # the Figma frame's own dotted clouds
+        blobs = '<img class="hero-clouds" src="static/hero-%s-clouds.svg" alt="">' % esc(q.qid)
+    else:
+        blobs = ''.join('<span class="blob b%d" aria-hidden="true"></span>' % i for i in (1, 2, 3))
+    if full:   # the photo goes behind everything, not in the text's grid
+        blobs, pic = pic.replace('hero-pic', 'hero-bg') + blobs, ''
+    stats = ''.join('<div><dt>%s</dt><dd>%s</dd></div>' % (esc(k), v) for k, v in hero_stats(data, q))
+    return ('<div class="hero %s%s">%s<div class="hero-in"><div class="hero-txt">'
+            '<p class="kicker">Q%d · %s</p><h1>%s</h1>%s</div>%s</div></div>'
+            '<dl class="hero-stats" aria-label="This question in numbers">%s</dl>'
+            % ('hero-full' if style == 'full' else 'hero-sky' if style == 'sky' else 'hero-side' if side else 'hero-band', '' if img else ' no-pic', blobs, n, esc(name), text,
+               '<p class="hero-lead">%s</p>' % lead if lead else '', pic, stats))
+
+
+# Q1 "Overview & Constraints" (Figma frame "Q1 - tree planting", under the blue bar): a dotted
+# wave (Vector 35) with a pin at its low point and one at its peak; the short answer on the left,
+# the limitations inside the crest. static/ov.js draws the wave left to right as you scroll and
+# shows each part as the wave reaches it. Wave and pins are decorative.
+OVERVIEW_STYLE = {'q1', 'q2', 'q3'}   # Figma frames "Q1 - tree planting", "Desktop - 4", "Desktop - 5"
+CERT_RANK = {'high': 0, 'moderate': 1, 'low': 2, 'very_low': 3}
+OV_WAVE = '<div class="ov-wave-box" aria-hidden="true"><div class="ov-wave"></div></div>'   # shape: static/ov-wave.svg
+
+
+def _outcome(f: Finding) -> str:
+    """The outcome half of a finding label ("Created ... vs natural reference: Growth, size & biomass")."""
+    o = f.label.split(': ', 1)[-1]
+    return o[:1].lower() + o[1:]
+
+
+def _cert(f: Finding) -> str:
+    return f.certainty.replace('_', ' ')
+
+
+def overview_short(data: SiteData, q: Question, short: str) -> str:
+    """The short answer, as headed parts for the Overview (Figma). Q1's is already headed. Q2 and
+    Q3 get their Figma headings; every sentence is built from the pack's own values."""
+    kind = data.kinds.get(q.qid)
+    if kind == 'comparison':
+        sa = q.extra.get('short_answer') or {}
+        note = span('%s/short_answer/time_to_reference_note' % q.qid, sa.get('time_to_reference_note') or '')
+        ttr = sa.get('time_to_reference')
+        how = (span('%s/short_answer/time_to_reference' % q.qid, ttr) + '. ' + note if ttr is not None
+               else '<strong class="sa-lead">This body of research cannot say.</strong> ' + note)
+        word = {'below_reference': 'behind natural marshes on', 'above_reference': 'ahead of natural marshes on',
+                'comparable': 'level with natural marshes on', 'mixed': 'mixed against natural marshes on',
+                'unclear': 'unclear against natural marshes on'}
+        firm = sorted([f for f in q.findings if f.certainty in ('high', 'moderate')], key=lambda f: CERT_RANK[f.certainty])
+        short_word = {k: v.replace(' natural marshes', '').replace(' of', '') for k, v in word.items()}
+        parts = ['with %s certainty, %s %s' % (_cert(f), ('created marshes are ' + word.get(f.direction, f.direction)) if i == 0
+                                                else short_word.get(f.direction, f.direction), esc(_outcome(f)))
+                 for i, f in enumerate(firm)]
+        rest = len(q.findings) - len(firm)
+        compare = ('; '.join(parts) + '.' if parts else '')
+        compare = compare[:1].upper() + compare[1:]
+        if rest:
+            compare += ' The other %d %s low or very low certainty.' % (rest, plural(rest, 'comparison has', 'comparisons have'))
+        tword = {'no_effect': 'shows no clear change', 'increase': 'goes up', 'decrease': 'goes down',
+                 'mixed': 'shows mixed results', 'unclear': 'is unclear'}
+        tfirm = sorted([f for f in q.trends if f.certainty in ('high', 'moderate')], key=lambda f: CERT_RANK[f.certainty])
+        age = ' '.join('With %s certainty, %s %s as marshes get older.' % (_cert(f), esc(_outcome(f)), tword.get(f.direction, f.direction))
+                       for f in tfirm)
+        trest = len(q.trends) - len(tfirm)
+        if trest:
+            age += ' %d more %s low or very low certainty.' % (trest, plural(trest, 'trend has', 'trends have'))
+        items = [('How long to catch up', how), ('Compared with natural marshes', compare)]
+        if q.trends:
+            items.append(('As marshes age', age.strip()))
+        return ('<div class="short callout" role="note" aria-label="How long" id="short"><p class="sa-h"><strong>'
+                'Short answer</strong></p><ul class="sa">%s</ul></div>'
+                % ''.join('<li><strong>%s:</strong> %s</li>' % (h, t) for h, t in items))
+    if kind == 'gapmap' and 'summary' in q.extra:
+        m = re.search(r'<p class="sa-h">.*?</p><p>(.*)</p></div>$', short, re.S)
+        if not m:
+            return short
+        s = q.extra['summary']
+        n = len(q.gaps)
+        hasnt = ('%d of %s combinations have no study in this body of research. An empty cell is not a negative '
+                 'result: nobody here tested it.' % (n, span('%s/summary/cells' % q.qid, s['cells'])))
+        return ('<div class="short" id="short"><p class="sa-h"><strong>Short answer</strong></p><ul class="sa">'
+                '<li><strong>What has been studied:</strong> %s</li><li><strong>What hasn\u2019t:</strong> %s</li></ul></div>'
+                % (m.group(1), hasnt))
+    return short
+
+
+def overview_section(short_html: str, limits_html: str) -> str:
+    """The short answer and the limitations, laid out over the wave (see OV_WAVE)."""
+    early = ('<script>(function(s){if(!matchMedia("(prefers-reduced-motion: reduce)").matches&&'
+             'matchMedia("(min-width: 900px)").matches)s.classList.add("anim");})(document.currentScript.parentNode);</script>')
+    return ('<div class="ov-track"><section class="ov" id="overview" aria-label="Overview and constraints">' + early + OV_WAVE +
+            '<img class="ov-pin pin-top" src="static/pin.webp" alt="" width="84" height="126">'
+            '<img class="ov-pin pin-bottom" src="static/pin.webp" alt="" width="84" height="126">'
+            '<div class="ov-left"><h2 class="ov-label">Overview</h2>' + short_html + '</div>'
+            '<div class="ov-right"><h2 class="ov-label">Constraints</h2>' + limits_html + '</div>'
+            '</section></div><script src="static/ov.js" defer></script>')
+
+
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
                   jumps: List[Tuple[str, str]], short: Optional[str] = None, scripts: str = '') -> str:
     """The one template every question page uses, in this order: kicker + h1, short answer,
     limitations, MAIN VIEW, not studied, link to the Guide."""
     n = list(data.questions).index(q.qid) + 1
     name = question_name(q)
-    body = '<p class="kicker">Question %02d · %s</p><h1>%s</h1>' % (n, esc(name), esc(q.text))
-    body += short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
-    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
+    lead = ''
+    if data.kinds.get(q.qid) == 'effects':
+        lead = '<span class="hl">Each finding</span> below shows its direction, certainty and number of studies; open one to read the studies behind it.'
+    top = hero(data, q, n, name, lead)
+    body = short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
+    if q.qid in OVERVIEW_STYLE:
+        body = overview_section(overview_short(data, q, body), limits_box(q.qid, q.limitations, q.rule, q.how_built, open_=True))
+    else:
+        body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
     body += not_studied(q)
     body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
     jumps = [('#short', 'Short answer')] + jumps + ([('#not-studied', 'Not studied')] if q.gaps else [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
-                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps)
+                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps, hero=top)
 
 
 def by_strength(fs: Iterable[Finding]) -> List[Finding]:
@@ -1240,14 +1453,20 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
     short = short_box('%s of %s combinations have been studied; %s of those by a single study. %s'
                       % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
                          span('%s/summary/thin' % qid, s['thin']), prose.short_answer[qid].html), 'short')
-    main = ('<h2 id="map">Gap map %s</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
-            ' Not studied</dt><dd>no study tested the pairing (not a negative result)</dd></div>'
-            '<div><dt><span class="swatch d-thin" aria-hidden="true"></span> 1 study</dt></div>'
-            '<div><dt><span class="swatch d-some" aria-hidden="true"></span> 2–3 studies</dt></div>'
-            '<div><dt><span class="swatch d-dense" aria-hidden="true"></span> 4 or more</dt></div></dl>'
-            '<p class="note">The number in a box is how many studies tested that pairing: research effort, not '
-            'effect size. Select a box for its finding, how sure we can be, and its sources. Scroll sideways for '
-            'more outcomes, or open the map full screen.</p>' % HELP_BTN)
+    # Figma "Q3 gap map" page, frame "C · Q2 layout, site colours": a titled grid of rounded boxes,
+    # outcome names turned upright, an "Outcomes studied" column, then the key and the takeaway.
+    ncols = len(grid['cols'])
+    row_n = {rid: sum(1 for cid, _ in grid['cols'] if not isinstance(grid['cells'][(rid, cid)], Gap))
+             for rid, _ in grid['rows']}
+    none = sum(1 for n in row_n.values() if n == 0)
+    counts = ('%s of %s treatment × outcome pairings have been studied; %s of those by a single study.'
+              % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
+                 span('%s/summary/thin' % qid, s['thin'])))
+    none_txt = (' %s %s no studies at all.' % (number_word(none).capitalize(), plural(none, 'treatment has', 'treatments have'))
+                if none else '')
+    main = ('<section class="gm" aria-labelledby="map"><p class="gm-kicker">Gap map %s</p>'
+            '<h2 id="map">Which grassland treatments have been studied, and for what?</h2>'
+            '<p class="gm-sub">%s%s</p>' % (HELP_BTN, counts, none_txt))
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
     trs, pops = [], []
     for rid, rlbl in grid['rows']:
@@ -1268,7 +1487,10 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
             items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
                 data, item, sources, subject=False, level=4, quotes_shown=0, compact=True)))
         n_f = len(items)
-        trs.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(rlbl), ''.join(tds)))
+        n_o = row_n[rid]
+        tally = ('<td class="sum"><strong>%d of %d</strong><small>outcomes studied</small></td>' % (n_o, ncols)
+                 if n_o else '<td class="sum none"><strong>Not studied</strong></td>')
+        trs.append('<tr><th scope="row">%s</th>%s%s</tr>' % (esc(rlbl), ''.join(tds), tally))
         pops.append('<div popover id="%s" class="pop fpop rowpop" role="dialog" aria-label="%s">'
                     '<button type="button" class="pop-x" popovertarget="%s" popovertargetaction="hide">'
                     '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>'
@@ -1278,10 +1500,22 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
     main += ('<p class="fs-row"><button type="button" class="fs-btn" data-fs="gapmap-wrap" hidden>'
              '<span aria-hidden="true">⤢</span> Full screen</button></p>'
              '<div class="grid-wrap" id="gapmap-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
-             '<caption>Interventions (rows) by outcomes (columns): number of studies in each '
-             'combination. Select a filled cell for its details.</caption><thead><tr><td></td>%s'
-             '</tr></thead><tbody>%s</tbody></table></div>'
-             % (head, ''.join(trs)))
+             '<caption>Treatments (rows) by outcomes (columns): number of studies in each '
+             'combination. Select a filled box for its details.</caption><thead><tr><td class="gm-corner">Treatment</td>%s'
+             '<th scope="col" class="sum">Outcomes studied</th></tr></thead><tbody>%s</tbody></table></div>'
+             '<dl class="key gm-key"><div><dt class="gm-k">Studies:</dt></div>'
+             '<div><dt><span class="swatch d-thin" aria-hidden="true"></span> 1 study</dt></div>'
+             '<div><dt><span class="swatch d-some" aria-hidden="true"></span> 2–3 studies</dt></div>'
+             '<div><dt><span class="swatch d-dense" aria-hidden="true"></span> 4 or more</dt></div>'
+             '<div><dt><span class="swatch empty" aria-hidden="true">–</span> Not studied</dt>'
+             '<dd>nobody here tested it (not a negative result)</dd></div></dl>'
+             '<p class="gm-note">The number is how many studies tested that pairing: research effort, not effect size. '
+             'Select a box for its finding, how sure we can be, and its sources.</p>'
+             '<div class="gm-take"><p><strong>Takeaway: most treatment–outcome pairings have never been studied, and many '
+             'that have rest on a single study.</strong></p><p>%s of %s combinations studied; %s of those by one study.%s '
+             'Blank is not evidence of no effect.</p></div></section>'
+             % (head, ''.join(trs), s['filled'], s['cells'], s['thin'],
+                (' %d %s no studies for any outcome.' % (none, plural(none, 'treatment has', 'treatments have'))) if none else ''))
     by_id = {f.id: f for f in q.findings}
     dense = []
     for fid in s.get('densest') or []:
@@ -1632,7 +1866,16 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'logo.svg'):
+    # only the hero pictures and cloud drawings this page template uses (hero-q<N>[-clouds].<ext>);
+    # a big one is reported so page weight doesn't grow unnoticed
+    heroes = [f for f in os.listdir(os.path.join(ROOT, 'static'))
+              if re.fullmatch(r'hero-q\d+(?:-clouds)?\.(?:webp|avif|jpg|png|svg)', f)]
+    for f in heroes:
+        kb = os.path.getsize(os.path.join(ROOT, 'static', f)) // 1024
+        if kb > 150:
+            print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
+    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'problem.js', 'ov.js', 'pin.webp', 'ov-wave.svg', 'home-flowers.webp',
+              'home-papers.webp', 'logo.svg'] + heroes:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
