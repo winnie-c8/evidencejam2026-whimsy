@@ -820,7 +820,7 @@ def page(data: SiteData, filename: str, title: str, description: str, body: str,
                     for h, t, name, also in top)
     over = 'hero-full' in hero or 'hero-sky' in hero   # header see-through over the hero's sky
     header = ('<header class="site-top%s"><div class="site-top-in"><a class="logo" href="index.html">'
-              '<img src="static/logo.svg" alt="Whimsy: home" width="293" height="51"></a><nav aria-label="Main"><ul class="boxnav">%s</ul></nav>'
+              '<img src="static/logo.svg" alt="Whimsy: home" width="294" height="71"></a><nav aria-label="Main"><ul class="boxnav">%s</ul></nav>'
               '</div></header>' % ((' over light' if 'hero-full' in hero else ' over') if over else '', boxed))
     if over:   # on a full-photo hero the header is see-through until the photo scrolls past
         header += ('<script>addEventListener("DOMContentLoaded",function(){var h=document.querySelector(".site-top"),'
