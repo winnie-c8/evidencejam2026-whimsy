@@ -55,8 +55,11 @@ def main(argv=None) -> int:
         from summarize import summarize_all
         prose = summarize_all(data, args)
         st = prose.stats
-        print('[build] prose: %d home summaries by the LLM, the rest from templates%s'
-              % (st['llm_filled'], '' if st['llm'] else ' (set BRINE_URL, BRINE_MODEL, BRINE_API_KEY to use it)'))
+        import llm
+        why_none = ('' if st['llm'] else ' (no model text passed; reasons above)' if llm.TOKENS
+                    else ' (LLM off: --no-llm given)' if args.no_llm
+                    else ' (set BRINE_URL, BRINE_MODEL, BRINE_API_KEY to use it)')
+        print('[build] prose: %d home summaries by the LLM, the rest from templates%s' % (st['llm_filled'], why_none))
 
         out = args.out
         if os.path.isdir(out):
@@ -80,6 +83,8 @@ def main(argv=None) -> int:
         print('[build] check: %d problems' % len(problems))
         if problems and not args.strict:
             print('[build] site written anyway; run with --strict (as CI does) to fail on problems')
+        if llm.TOKENS:
+            print('[build] llm tokens: %d in %d calls' % (llm.TOKENS['total'], llm.TOKENS['calls']))
         return 1 if problems and args.strict else 0
     except Exception:  # noqa: BLE001
         traceback.print_exc()
