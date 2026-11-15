@@ -1182,8 +1182,7 @@ def combo_stat(data: SiteData, q: Question) -> str:
     combo = next((x for x in (g.nodes if g is not None else []) if x.get('kind') == 'combination'), None)
     if combo is None or not n or data.kinds.get(q.qid) != 'effects':
         return n
-    return '<a href="#combo-%s" data-combo="%s">%s<span class="sr-only">: open the two-treatments card</span></a>' % (
-        slug(combo['id']), slug(combo['id']), n)
+    return '<a href="#combo-%s">%s<span class="sr-only">: open the two-treatments card</span></a>' % (slug(combo['id']), n)
 
 
 def hero(data: SiteData, q: Question, n: int, name: str, lead: str = '') -> str:
@@ -1373,7 +1372,7 @@ def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: Lis
     ends = ('top', 'bottom') if GRAPH_FLOW == 'down' else ('left', 'right')
     gp_ = graph_prefix(q.qid)
     figure = ('<figure class="graph flow"><!--GRAPH--><figcaption class="sr-only">The flow diagram: %s boxes linked by '
-              '%s arrows and %s %s not studied. Select an arrow to open its card below.</figcaption></figure>'
+              '%s arrows and %s %s not studied.</figcaption></figure>'
               % (span(gp_ + '/count/nodes', len(g.nodes)), span(gp_ + '/count/edges', len(g.edges)),
                  span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pair', 'pairs')))
     strip = ''
@@ -1386,9 +1385,10 @@ def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: Lis
         res = ', '.join('<span aria-hidden="true">%s</span> %s' % (GRAPH_SYM[e['direction']],
                         esc(_found_what(e['direction'], g.node(e['target'])['label']).replace('found ', '')))
                         for e in outs)
-        strip += ('<div class="together"><p><span class="tg-k">Used together</span> %s \u2192 %s</p>'
-                  '<a class="box-btn" href="#combo-%s" data-combo="%s">See the %d claims \u2192</a></div>'
-                  % (esc(node['label']), res, cs, cs, n_claims))
+        strip += ('<div class="together"><p><span class="tg-k">Used together</span> '
+                  '%s \u2192 <span class="tg-r">%s</span></p>'
+                  '<a class="box-btn" href="#combo-%s">See the %d claims &nbsp;\u2192</a></div>'
+                  % (esc(node['label']), res, cs, n_claims))
     table_view = ('<section id="table" class="gtable" aria-labelledby="table-h"><h2 id="table-h">All arrows as a '
                   'table</h2>%s</section>' % gp['table'])
     main = ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h" class="sr-only">The flow diagram</h2>'
@@ -2172,16 +2172,17 @@ def flow_steps() -> str:
     steps = [('Click something you do', 'a box in the top row'), ('Click a seedling result', 'survival, or growth & size'),
              ('Read what the studies found', 'it opens below the flow diagram')]
     return ('<ol class="flow-steps">%s</ol>'
-            % ''.join('<li><span class="num" aria-hidden="true">%d</span><span><strong>%s</strong> · %s</span></li>'
+            % ''.join('<li><span class="num" aria-hidden="true">%d</span><span><strong>%s</strong><span class="st-s">%s</span></span></li>'
                       % (i, esc(a), esc(b)) for i, (a, b) in enumerate(steps, 1)))
 
 
 def flow_toolbar() -> str:
     return ('<div class="flow-bar" hidden><div class="views" role="group" aria-labelledby="view-l"><span id="view-l">View</span>'
             '<button type="button" data-view="flow" aria-pressed="true">Flow</button>'
+            '<button type="button" data-view="bars" aria-pressed="false">Bars</button>'
             '<button type="button" data-view="table" aria-pressed="false">Table</button></div>'
             '<button type="button" class="howto-btn" aria-haspopup="dialog" aria-controls="howto">'
-            '<span aria-hidden="true">?</span> How to read the flow diagram</button></div>')
+            '<span aria-hidden="true">?</span> How to read the Flow diagram</button></div>')
 
 
 def _sample(cls: str, w: int = 56) -> str:

@@ -525,14 +525,15 @@
   var LIMS = [];
   try { LIMS = JSON.parse((document.getElementById('card-lims') || {}).textContent || '[]'); } catch (e) { LIMS = []; }
   var SYMS = { increase: '↑', decrease: '↓', mixed: '⇅', no_effect: '–', unclear: '?' };
-  var START_WHY = { 4: 'best study was an experiment with an untreated control', 3: 'best study was another controlled study',
-                    2: 'best study was observation only', 1: 'best study was a model or case study' };
+  var START_WHY = { 4: 'The best studies were experiments with an untreated control.', 3: 'The best studies were other controlled studies.',
+                    2: 'The best studies only observed, with no experiment.', 1: 'The best evidence was a model or a case study.' };
+  var NUMW = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
   var LV = { 'very low': 1, low: 2, moderate: 3, high: 4 };
   var LW = { 1: 'Very low', 2: 'Low', 3: 'Moderate', 4: 'High' };
-  var STEPS = [[/^-1 single study$/, 'only one study'], [/^-1 studies disagree$/, 'studies disagree'],
-               [/^-1 most claims report no comparator$/, 'most claims have no comparison'],
-               [/^\+1 (\d+) studies agree$/, '{0} studies agree'],
-               [/^\+1 mechanistic and difference-making evidence$/, 'shows how it works, not just that it works']];
+  var STEPS = [[/^-1 single study$/, 'Only one study.'], [/^-1 studies disagree$/, 'The studies disagree.'],
+               [/^-1 most claims report no comparator$/, 'Most claims have no comparison.'],
+               [/^\+1 (\d+) studies agree$/, '{0} studies agree.'],
+               [/^\+1 mechanistic and difference-making evidence$/, 'It shows how it works, not just that it works.']];
   var RULE = /^start (high|moderate|low|very low) \([^)]*\)(.*?)\s*->\s*(high|moderate|low|very low)$/;
 
   function el(tag, cls, text) {
@@ -574,17 +575,17 @@
     var m = RULE.exec(rule.replace(/\s+/g, ' ').trim());
     if (!m) return null;
     var ol = el('ol', 'ladder');
-    function row(cls, k, n, t) {
+    function row(cls, k, n, b, t) {
       var li = el('li', cls);
       li.appendChild(el('span', 'lad-k', k));
-      var nn = el('span', 'lad-n');
-      if (typeof n === 'string') nn.textContent = n; else nn.appendChild(n);
+      var nn = el('span', 'lad-n', n);
+      if (b) nn.appendChild(b);
       li.appendChild(nn);
       li.appendChild(el('span', 'lad-t', t));
       ol.appendChild(li);
     }
     var start = LV[m[1]], tot = start;
-    row('lad-s', 'Start', String(start), START_WHY[start]);
+    row('lad-s', 'Start', String(start), bars(start), START_WHY[start]);
     var parts = m[2].split(';').map(function (p) { return p.trim(); }).filter(Boolean);
     parts.forEach(function (p) {
       var d = +((/^([+-]\d+)/.exec(p) || [0, 0])[1]);
@@ -592,17 +593,23 @@
       var text = p;
       for (var i = 0; i < STEPS.length; i++) {
         var x = STEPS[i][0].exec(p);
-        if (x) { text = STEPS[i][1].replace('{0}', x[1] || ''); break; }
+        if (x) { text = STEPS[i][1].replace('{0}', NUMW[+x[1]] || x[1] || ''); break; }
       }
-      row('lad-a', 'Adjust', (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d), text);
+      row('lad-a', 'Adjust', (d > 0 ? '+' : d < 0 ? '\u2212' : '') + Math.abs(d), null, text);
     });
-    if (!parts.length) row('lad-a', 'Adjust', '0', 'no adjustments');
+    if (!parts.length) row('lad-a', 'Adjust', '0', null, 'Nothing moves it up or down.');
     var fin = LV[m[3]];
-    row('lad-r', 'Result', bars(fin), LW[fin]);
-    return ol;
+    var why = tot > 4 && fin === 4 ? 'It can\u2019t go above 4, so it stays at the top.'
+      : tot < 1 && fin === 1 ? 'It can\u2019t go below 1, so it stays at the bottom.'
+      : tot !== fin ? 'A single study never goes above 3.' : 'Start plus the adjustments.';
+    row('lad-r', 'Result', LW[fin], bars(fin), why);
+    var wrap = el('div');
+    wrap.appendChild(el('p', 'fc-lab', 'How this finding got \u201c' + LW[fin] + '\u201d'));
+    wrap.appendChild(ol);
+    return wrap;
   }
   // "How certainty is graded" and "Constraints of this grade", inside every Certainty calculation
-  var GRADING = "<details class=\"fc-d sub\"><summary><span>How certainty is graded</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><ul class=\"levels\"><li><span class=\"bars b4\" aria-hidden=\"true\"></span> High</li><li><span class=\"bars b3\" aria-hidden=\"true\"></span> Moderate</li><li><span class=\"bars b2\" aria-hidden=\"true\"></span> Low</li><li><span class=\"bars b1\" aria-hidden=\"true\"></span> Very low</li></ul><p class=\"lv-h\"><span class=\"num\">1</span> Start from the best study</p><ul class=\"pts\"><li>Experiment with an untreated control <b>4</b></li><li>Other controlled study <b>3</b></li><li>Observation only <b>2</b></li><li>Model or case study <b>1</b></li></ul><p class=\"lv-h\"><span class=\"num\">2</span> Then move up or down</p><ul class=\"pts\"><li>Only one study <b>−1</b></li><li>Studies disagree <b>−1</b></li><li>Most claims have no comparison <b>−1</b></li><li>Three or more studies agree <b>+1</b></li><li>Shows how it works <b>+1</b></li></ul><p>It always stays between 1 and 4. A single study never goes above 3.</p></div></details><details class=\"fc-d sub warn\"><summary><span>Constraints of this grade</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><p>The grade can overstate how sure we are. It starts from the strongest study, not an average. One good experiment can lift a whole group of weaker studies to “High”.</p></div></details>";
+  var GRADING = "<details class=\"fc-d sub\"><summary><span>How certainty is graded</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><ul class=\"levels\"><li><span class=\"bars b4\" aria-hidden=\"true\"></span> High</li><li><span class=\"bars b3\" aria-hidden=\"true\"></span> Moderate</li><li><span class=\"bars b2\" aria-hidden=\"true\"></span> Low</li><li><span class=\"bars b1\" aria-hidden=\"true\"></span> Very low</li></ul><p class=\"lv-h\"><span class=\"num\" aria-hidden=\"true\">1</span> Start from the best study</p><ul class=\"pts\"><li>Experiment with an untreated control <b>4</b></li><li>Other controlled study <b>3</b></li><li>Observation only <b>2</b></li><li>Model or case study <b>1</b></li></ul><p class=\"lv-h\"><span class=\"num\" aria-hidden=\"true\">2</span> Then move up or down</p><ul class=\"pts\"><li>Only one study <b>−1</b></li><li>Studies disagree <b>−1</b></li><li>Most claims have no comparison <b>−1</b></li><li>Three or more studies agree <b>+1</b></li><li>Shows how it works <b>+1</b></li></ul><p>It always stays between 1 and 4. A single study never goes above 3.</p></div></details><details class=\"fc-d sub warn\"><summary><span>Constraints of this grade</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><p>The grade can overstate how sure we are. It starts from the strongest study, not an average. One good experiment can lift a whole group of weaker studies to “High”.</p></div></details>";
   function fillGrading(slotEl) { slotEl.innerHTML = GRADING; }
 
   function buildCard(sec) {
@@ -620,7 +627,7 @@
     sub.appendChild(document.createTextNode((+studies.textContent === 1 ? 'study' : 'studies') + ' · '));
     sub.appendChild(claims);
     sub.appendChild(document.createTextNode(+claims.textContent === 1 ? ' claim' : ' claims'));
-    sf.appendChild(sub);
+    sf.querySelector('.fig-v').appendChild(sub);
     figs.appendChild(sf);
     root.replaceChild(figs, data);
 
@@ -668,8 +675,9 @@
     var calc = el('div');
     var lad = ladder(rule.textContent);
     if (lad) calc.appendChild(lad);
-    calc.appendChild(el('p', 'fc-rule-h', 'The data’s rule text, word for word:'));
-    calc.appendChild(rule);
+    var rh = el('div', 'fc-rule-h', 'The data\u2019s rule, word for word: ');
+    rh.appendChild(rule);
+    calc.appendChild(rh);
     var gs = el('div', 'grading-slot');
     calc.appendChild(gs);
     btns.appendChild(fold('calc', 'Certainty calculation', calc));
@@ -718,6 +726,8 @@
       var papers = doc.querySelectorAll('section.paper');
       if (!papers.length) throw new Error('no papers');
       box.textContent = '';
+      var nq = doc.querySelectorAll('section.paper details.ev').length;
+      box.appendChild(el('p', 'fc-lab', papers.length + (papers.length === 1 ? ' paper' : ' papers') + ' \u00b7 ' + nq + (nq === 1 ? ' quote' : ' quotes')));
       var list = el('ul', 'tile-list');
       each(papers, function (p, k) {
         var h = p.querySelector('h2').textContent.replace(/^Paper \d+ of \d+:\s*/, '');
@@ -737,27 +747,28 @@
         b.setAttribute('aria-controls', panel.id);
         var first = evs[0].querySelector('blockquote');
         if (first) panel.appendChild(document.importNode(first, true));
+        var acts = el('div', 'tile-acts');
         if (evs.length > 1) {
           var rest = el('div');
           for (var i = 1; i < evs.length; i++) {
             var bq = evs[i].querySelector('blockquote');
             if (bq) rest.appendChild(document.importNode(bq, true));
           }
-          panel.appendChild(fold('sub', (evs.length - 1) + ' more ' + (evs.length === 2 ? 'quote' : 'quotes'), rest));
+          acts.appendChild(fold('sub', (evs.length - 1) + ' more ' + (evs.length === 2 ? 'quote' : 'quotes'), rest));
         }
         var doi = p.querySelector('p.src a[href^="https://doi.org/"]');
         if (doi) {
-          var go = el('a', 'tile-go', 'Open the paper ↗');
+          var go = el('a', '', 'Open the paper \u2197');
           go.href = doi.getAttribute('href');
           go.rel = 'noopener';
-          var pp = el('p');
-          pp.appendChild(go);
-          panel.appendChild(pp);
+          acts.appendChild(go);
         }
+        panel.appendChild(acts);
         b.addEventListener('click', function () {
           var open = b.getAttribute('aria-expanded') !== 'true';
           b.setAttribute('aria-expanded', String(open));
           panel.hidden = !open;
+          li.classList.toggle('open', open);
         });
         li.appendChild(b);
         li.appendChild(panel);
@@ -773,9 +784,15 @@
 
   // ----- open and close a card
 
-  var current = null, openedFrom = null;
-  function openCard(sec, arrow, from) {
+  var current = null, openedFrom = null, slotHome = null, pickedRow = null;
+  function openCard(sec, arrow, from, anchor) {
     if (current && current !== sec) putBack(current);
+    if (!slotHome) { slotHome = document.createComment('slot'); slot.parentNode.insertBefore(slotHome, slot); }
+    if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
+    else slotHome.parentNode.insertBefore(slot, slotHome.nextSibling);
+    if (pickedRow) pickedRow.classList.remove('picked');
+    pickedRow = from && from.closest && from.closest('.brow, tr');
+    if (pickedRow) pickedRow.classList.add('picked');
     current = sec;
     slot.appendChild(sec);
     slot.hidden = false;
@@ -795,6 +812,7 @@
     putBack(current);
     current = null;
     slot.hidden = true;
+    if (pickedRow) { pickedRow.classList.remove('picked'); pickedRow = null; }
     if (selected) selected.classList.remove('sel');
     selected = null;
     highlight();
@@ -876,9 +894,9 @@
   });
 
   // links that open the two-treatments card ("See the 5 claims", the count in the blue bar)
-  each(document.querySelectorAll('a[data-combo]'), function (a) {
+  each(document.querySelectorAll('a[href^="#combo-"]'), function (a) {
     a.addEventListener('click', function (ev) {
-      var sec = document.getElementById('combo-' + a.getAttribute('data-combo'));
+      var sec = document.getElementById(a.getAttribute('href').slice(1));
       if (!sec) return;
       ev.preventDefault();
       openCard(sec, null, a);
@@ -886,31 +904,161 @@
     });
   });
 
-  // ----- toolbar: Flow / Table, and How to read the flow diagram
+  // ----- Bars and Table views (Figma "Bars view", "Table view"), drawn from the diagram itself
+
+  var DWORD = { increase: 'Increases', decrease: 'Decreases', mixed: 'Studies disagree', no_effect: 'No change found', unclear: 'Unclear' };
+  var DSYM = { increase: '↑', decrease: '↓', mixed: '⇅', no_effect: '–', unclear: '?' };
+  var CW = { high: 'High', moderate: 'Moderate', low: 'Low', very_low: 'Very low' };
+  var CN = { high: 4, moderate: 3, low: 2, very_low: 1 };
+  function rowsInto(t) {
+    var out = [];
+    arrows.forEach(function (a) {
+      if (a.te || a.t !== t) return;
+      var d = /\bd-(\w+)/.exec(a.el.getAttribute('class'));
+      var src = boxes[a.s];
+      out.push({ a: a, gap: !a.cert, dir: d ? d[1] : null, cert: a.cert, n: a.studies,
+                 name: src.name + (src.kind === 'combination' ? ', used together' : '') });
+    });
+    return out.sort(function (p, q) { return (p.gap - q.gap) || (p.a.rank - q.a.rank) || (q.n - p.n); });
+  }
+  function dirSpan(d) {
+    var sp = el('span', 'dir dir-' + d.replace('_', '-'));
+    var sy = el('span', '', DSYM[d] + ' ');
+    sy.setAttribute('aria-hidden', 'true');
+    sp.appendChild(sy);
+    sp.appendChild(document.createTextNode(DWORD[d] || d));
+    return sp;
+  }
+  function openRow(r, from, anchor) {
+    var sec = cardFor(r.a.el.getAttribute('href').slice(1));
+    if (sec) openCard(sec, r.a.el, from, anchor);
+  }
+  var outcomes = Object.keys(boxes).filter(function (id) { return boxes[id].kind === 'outcome'; });
+  var conds = Object.keys(boxes).filter(function (id) { return boxes[id].kind === 'condition'; });
+
+  function barsView() {
+    var v = el('section', 'q1v');
+    v.id = 'view-bars';
+    v.setAttribute('aria-label', 'Bars view');
+    v.appendChild(el('p', 'view-note', 'Each bar is one treatment or condition. The longer the bar, the higher the certainty. Pick a bar to open its findings.'));
+    var key = el('ul', 'ckey');
+    [['vote-increase', '↑ Increases'], ['vote-decrease', '↓ Decreases'], ['vote-mixed', '⇅ Studies disagree'], ['k-gap', 'Not studied']].forEach(function (k) {
+      var li = el('li');
+      li.appendChild(el('i', k[0]));
+      li.appendChild(document.createTextNode(k[1]));
+      key.appendChild(li);
+    });
+    v.appendChild(key);
+    outcomes.forEach(function (t) {
+      var wrap = el('div', 'bwrap');
+      wrap.appendChild(el('h3', 'ch', boxes[t].name));
+      var ul = el('ul', 'bchart');
+      rowsInto(t).forEach(function (r) {
+        var li = el('li', 'brow' + (r.gap ? ' is-gap' : ''));
+        var b = el('button');
+        b.type = 'button';
+        b.appendChild(el('span', 'bl', r.name));
+        var track = el('span', 'bt');
+        var bar = el('span', 'bb' + (r.gap ? '' : ' vote-' + r.dir), r.gap ? '? Not studied' : DSYM[r.dir] + ' ' + DWORD[r.dir]);
+        if (!r.gap) bar.style.width = (CN[r.cert] * 20.5) + '%';
+        track.appendChild(bar);
+        if (!r.gap) {
+          track.appendChild(el('span', 'bn', r.n + (r.n === 1 ? ' study' : ' studies')));
+          var cs = el('span', 'sr-only', ', ' + CW[r.cert] + ' certainty');
+          track.appendChild(cs);
+        }
+        b.appendChild(track);
+        b.addEventListener('click', function () { openRow(r, li, wrap); });
+        li.appendChild(b);
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+      var ax = el('div', 'brow bax');
+      ax.setAttribute('aria-hidden', 'true');
+      ax.appendChild(el('span', 'bl'));
+      var sc = el('span', 'bax-s');
+      ['1 Very low', '2 Low', '3 Moderate', '4 High'].forEach(function (w) { sc.appendChild(el('b', '', w)); });
+      sc.appendChild(el('small', '', 'CERTAINTY \u2192'));
+      ax.appendChild(sc);
+      wrap.appendChild(ax);
+      v.appendChild(wrap);
+    });
+    return v;
+  }
+
+  function oneTable(t, firstCol) {
+    var wrap = el('div', 'vtable');
+    var tb = el('table');
+    tb.appendChild(el('caption', '', 'Affects on ' + boxes[t].name.charAt(0).toLowerCase() + boxes[t].name.slice(1)));
+    var thead = el('thead');
+    var hr = el('tr');
+    [firstCol, 'Findings', 'Certainty', '# of studies'].forEach(function (h) { var th = el('th', '', h); th.scope = 'col'; hr.appendChild(th); });
+    thead.appendChild(hr);
+    tb.appendChild(thead);
+    var body = el('tbody');
+    rowsInto(t).forEach(function (r) {
+      var tr = el('tr', r.gap ? 'is-gap' : '');
+      var th = el('th');
+      th.scope = 'row';
+      var a = el('a', '', r.name);
+      a.href = r.a.el.getAttribute('href');
+      th.appendChild(a);
+      tr.appendChild(th);
+      var td1 = el('td');
+      if (r.gap) td1.textContent = '? Not studied'; else td1.appendChild(dirSpan(r.dir));
+      tr.appendChild(td1);
+      var td2 = el('td');
+      if (r.gap) td2.textContent = '—';
+      else { td2.appendChild(bars(CN[r.cert])); td2.appendChild(document.createTextNode(' ' + CW[r.cert])); }
+      tr.appendChild(td2);
+      tr.appendChild(el('td', '', String(r.gap ? 0 : r.n)));
+      var go = function (ev) { ev.preventDefault(); openRow(r, tr, wrap); };
+      a.addEventListener('click', go);
+      tr.addEventListener('click', function (ev) { if (ev.target !== a) go(ev); });
+      body.appendChild(tr);
+    });
+    tb.appendChild(body);
+    wrap.appendChild(tb);
+    return wrap;
+  }
+  function tableView2() {
+    var v = el('section', 'q1v');
+    v.id = 'view-table';
+    v.setAttribute('aria-label', 'Table view');
+    v.appendChild(el('p', 'view-note', 'Every arrow on the flow diagram as a row, with the same numbers. Pick a row to open what the studies found.'));
+    outcomes.forEach(function (t, i) { v.appendChild(oneTable(t, i ? 'Treatment or condition' : 'Treatment or condition')); });
+    if (conds.length) {
+      var inner = el('div');
+      conds.forEach(function (t) { inner.appendChild(oneTable(t, 'Treatment or condition')); });
+      var f = fold('vmore', 'What the treatments change: ' + conds.length + ' more tables', inner);
+      v.appendChild(f);
+    }
+    return v;
+  }
+
+  // ----- toolbar: Flow / Bars / Table, and How to read the flow diagram
 
   var bar = document.querySelector('.flow-bar');
   var tableView = document.querySelector('section.gtable');
   var together = document.querySelectorAll('.together');
   if (bar) {
     bar.hidden = false;
+    var vBars = barsView(), vTable = tableView2();
+    figure.parentNode.insertBefore(vBars, figure);
+    figure.parentNode.insertBefore(vTable, figure);
+    if (tableView) tableView.hidden = true;     // the plain table stays in the page for no-script readers
     var setView = function (v) {
       figure.hidden = v !== 'flow';
       each(together, function (t) { t.hidden = v !== 'flow'; });
-      if (tableView) tableView.hidden = v !== 'table';
+      vBars.hidden = v !== 'bars';
+      vTable.hidden = v !== 'table';
+      if (current && slotHome) slotHome.parentNode.insertBefore(slot, slotHome.nextSibling);   // the open card stays open
       each(bar.querySelectorAll('[data-view]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v)); });
     };
     each(bar.querySelectorAll('[data-view]'), function (b) {
       b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
     });
     setView(location.hash === '#table' ? 'table' : 'flow');
-    if (tableView) {
-      tableView.addEventListener('click', function (ev) {
-        var a = ev.target.closest && ev.target.closest('a[href^="#e-"]');
-        if (!a) return;
-        var sec = cardFor(a.getAttribute('href').slice(1));
-        if (sec) { ev.preventDefault(); openCard(sec, null, a); }
-      });
-    }
   }
   var howto = document.getElementById('howto');
   var howBtn = document.querySelector('.howto-btn');
