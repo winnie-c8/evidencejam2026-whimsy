@@ -618,13 +618,68 @@ div.short.callout { border-left: 6px solid var(--link); background: var(--cream)
 .graph-link { margin: 1rem 0; }
 
 /* not studied: the same compact list everywhere */
-section.gapgrp { margin: .75rem 0 1rem; }
-section.gapgrp h3 { font-size: 1rem; margin: .5rem 0 .25rem; }
-ul.gaps { list-style: none; padding: 0; margin: .25rem 0; display: flex; flex-wrap: wrap; gap: .4rem; }
-ul.gaps li.gap { border: 2px dashed var(--gap); border-radius: 999px; padding: .15rem .7rem; margin: 0; font-size: .9rem; max-width: 100%; }
-ul.gaps li.gap::before { content: "? " / ""; font-weight: 700; color: var(--gap); }
-ul.gaps li.gap .searched { display: block; font-size: .85rem; color: var(--muted); }
-p.searched { font-size: .9rem; color: var(--muted); margin: .25rem 0; }
+/* Not studied: a "See not-studied pairings" button that opens a filterable list (Figma frame) */
+/* intro above it (Figma): Newsreader, a few words picked out in dark blue. Not red or orange:
+   those mean "decrease" / "behind", and a gap is never a negative result. */
+.ns-sec { max-width: 48rem; margin: var(--space-4) 0; }
+.ns-h { font-size: 2rem; line-height: 1.15; text-transform: uppercase; letter-spacing: .02em; color: var(--link); margin: 0 0 .75rem; }
+.ns-intro { font-family: var(--font-heading); font-weight: 300; font-size: 1.2rem; line-height: 1.35; color: var(--text); max-width: none; margin: 0 0 var(--space-3); }
+.ns-intro em { font-style: normal; color: var(--dark-blue); }
+details.ns { margin: var(--space-3) 0 0; }
+details.ns > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .8rem;
+  background: var(--bg); border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 2px 12px rgba(0, 0, 0, .16);
+  border: 1.5px solid var(--link); }
+details.ns > summary::-webkit-details-marker { display: none; }
+details.ns > summary::after { content: "⌄" / ""; color: var(--link); margin-left: .25rem; font-size: 1.4rem; line-height: 1; }
+details.ns[open] > summary::after { content: "⌃" / ""; }
+details.ns > summary h3 { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--link); }
+details.ns > summary:hover h3 { text-decoration: underline; }
+details.ns .v-hide, details.ns[open] .v-see { display: none; }
+details.ns[open] .v-hide { display: inline; }
+.ns-q { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; flex: none; border-radius: 50%;
+  border: 1.5px dashed var(--dir-none); color: var(--dir-none); font-size: .9rem; font-weight: 700; }
+.ns-c { margin-left: auto; background: var(--divider); color: var(--text); border-radius: 999px; padding: .05rem .55rem; font-size: .8rem; }
+details.ns > summary .ns-c { margin-left: auto; font-size: .9rem; padding: .1rem .7rem; }
+.ns-f { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr)); gap: var(--space-2) var(--space-4); margin: var(--space-3) 0; }
+.ns-pick { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.ns-lab { font-size: .8rem; }
+.ns-box { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-height: 2.6rem; padding: .4rem .6rem;
+  border: 1.5px solid transparent; border-radius: 10px; background: var(--bg); box-shadow: 0 2px 10px rgba(0, 0, 0, .12); cursor: pointer; }
+.ns-pick.on .ns-box { border-color: var(--link); }
+.ns-chips { display: contents; }
+.ns-chip { font: inherit; font-size: .75rem; display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem;
+  border: 1px solid var(--link); border-radius: 999px; background: var(--bg); color: var(--link); cursor: pointer; }
+.ns-chip:hover { background: var(--divider); }
+.ns-open { font: inherit; font-size: .875rem; flex: 1 1 8rem; display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+  padding: .15rem 0; border: 0; background: none; color: var(--muted); text-align: left; cursor: pointer; }
+.ns-open::after { content: "⌄" / ""; color: var(--link); font-size: 1rem; line-height: 1; }
+.ns-open[aria-expanded="true"]::after { content: "⌃" / ""; }
+.ns-panel { grid-column: 1 / -1; columns: 3 11rem; column-gap: var(--space-3); padding: var(--space-2);
+  background: var(--bg); border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, .12); }
+.ns-panel[hidden] { display: none; }
+.ns-panel button { font: inherit; font-size: .8125rem; line-height: 1.3; display: block; width: 100%; break-inside: avoid;
+  margin: 0 0 .25rem; padding: .55rem .6rem; border: 0; border-radius: 6px; background: none; color: var(--link); text-align: left; cursor: pointer; }
+.ns-panel button[hidden] { display: none; }
+.ns-panel button:hover, .ns-panel button:focus-visible { background: var(--link); color: #fff; }
+.ns-p { background: var(--bg); border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, .12); padding: var(--space-3) var(--space-4); margin-top: var(--space-3); }
+.ns-t { margin: 0; font-size: 1.05rem; }
+.ns-p p { max-width: none; }
+.ns-sub { margin: .2rem 0 .75rem; font-size: .8rem; padding-bottom: .75rem; border-bottom: 1px solid var(--rule); }
+details.ns ul.gaps { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); gap: .9rem var(--space-4); }
+details.ns li.gap { display: grid; grid-template-columns: 1rem 1fr 1.2fr; gap: .25rem .5rem; align-items: start;
+  border: 0; padding: 0; margin: 0; max-width: none; font-size: .8125rem; line-height: 1.35; }
+details.ns li.gap::before, .ns-dot { content: "" / ""; width: .55rem; height: .55rem; margin-top: .3em; border: 1.5px dashed var(--dir-none); border-radius: 50%; }
+details.ns li.gap .o { color: var(--text); }
+details.ns li.gap .o::before { content: "→ " / "on "; color: var(--muted); }
+details.ns li.gap .searched { grid-column: 2 / -1; font-size: .75rem; color: var(--muted); }
+details.ns li.gap[hidden] { display: none; }
+.ns-key { display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; font-size: .75rem; color: var(--muted); }
+.ns-dot { display: inline-block; flex: none; margin-top: 0 !important; }
+p.searched { font-size: .8rem; color: var(--muted); margin: .25rem 0; }
+.ns-more { font: inherit; font-size: .8125rem; color: var(--link); background: none; border: 0; padding: .25rem 0; cursor: pointer; }
+.ns-more:hover { text-decoration: underline; }
+.ns-none { font-size: .8125rem; color: var(--muted); }
+.ns-foot { margin: .75rem 0 0; padding-top: .75rem; border-top: 1px solid var(--rule); font-size: .75rem; color: var(--muted); }
 
 /* Q3 gap map: row and column names stay visible while scrolling */
 .grid-wrap thead th, .grid-wrap thead td { position: sticky; top: 0; z-index: 2; background: var(--panel); }
