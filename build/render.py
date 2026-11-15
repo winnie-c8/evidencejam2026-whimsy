@@ -149,6 +149,16 @@ def claim_sentence(q: Quote, prefix: str) -> str:
 
 
 def evidence_box(q: Quote, n: int, id_prefix: str, check_prefix: str, open_: bool = False) -> str:
+    year, src, dl = evidence_parts(q, check_prefix)
+    return ('<details class="ev" data-claim="%s" id="%s-%d"%s><summary>Source %d · %s</summary>'
+            '<blockquote class="quote">%s</blockquote><p class="src">%s</p>'
+            '<dl class="camo">%s</dl></details>'
+            % (esc(q.edge_id), esc(id_prefix), n, ' open' if open_ else '', n, year,
+               esc(q.quote), src, dl))
+
+
+def evidence_parts(q: Quote, check_prefix: str) -> Tuple[str, str, str]:
+    """(year, where it is from with its DOI link, the claim's details as <dt>/<dd> rows)."""
     base = '%s/claim/%s' % (check_prefix, q.edge_id)
     year = span(base + '/year', q.year) if q.year is not None else 'year not given'
     if q.doi:
@@ -174,11 +184,7 @@ def evidence_box(q: Quote, n: int, id_prefix: str, check_prefix: str, open_: boo
                                                      words(q.causal_language) or 'not given'))),
     ]
     dl = ''.join('<dt>%s</dt><dd>%s</dd>' % r for r in rows)
-    return ('<details class="ev" data-claim="%s" id="%s-%d"%s><summary>Source %d · %s</summary>'
-            '<blockquote class="quote">%s</blockquote><p class="src">%s</p>'
-            '<dl class="camo">%s</dl></details>'
-            % (esc(q.edge_id), esc(id_prefix), n, ' open' if open_ else '', n, year,
-               esc(q.quote), src, dl))
+    return year, src, dl
 
 
 # Source pages: the full quotes for each finding or graph arrow live on their own small page
@@ -895,7 +901,7 @@ def problem_section() -> str:
 def render_index(data: SiteData, prose: Prose) -> str:
     """Home, laid out as the Figma "home page" frame: each section has a big blue heading over a
     thin rule, with its text indented below; a numbered menu on the left (pinned bottom-left)
-    leads to the sections and the questions. Content: the headline, one sentence, how to use the
+    jumps to the sections on this page. Content: the headline, one sentence, how to use the
     site, and the questions (each answer is one click away)."""
     def section(sid: str, heading: str, inner: str, level: int = 2, cls: str = '') -> str:
         return ('<section class="hsec%s" id="%s" aria-labelledby="%s-h"><h%d id="%s-h">%s</h%d>'
@@ -928,7 +934,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
         if qid in data.graphs:
             graph = (' · <a href="%s">See it as a graph<span class="sr-only">: %s</span></a>'
                      % (graph_file(qid), esc(question_name(q))))
-        menu.append(('%s.html' % qid, '%02d' % n, question_name(q)))   # the question's own page
+        menu.append(('#card-%s' % qid, '%02d' % n, question_name(q)))   # its section on this page
         sections.append(section(
             'card-%s' % qid,
             '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(question_name(q))),
@@ -937,7 +943,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
     # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
     menu_html = '<ol class="qnav">%s</ol>' % ''.join(
         '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
-        % (esc(h[1:] if h.startswith('#') else 'card-' + h[:-len('.html')]), esc(h), esc(mk), esc(t))
+        % (esc(h[1:]), esc(h), esc(mk), esc(t))
         for h, mk, t in menu)
     return page(data, 'index.html', 'Whimsy · Restoration evidence', 'Plain answers to restoration questions, '
                 'with certainty, gaps and sources.', ''.join(sections) + '<script src="static/problem.js" defer></script>',
@@ -1278,7 +1284,10 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
     else:
         body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
-    body += not_studied(q)
+    ns = not_studied(q)
+    if ns and data.kinds.get(q.qid) == COMPARISON:  # Q2: in the style of its chart section (.fg-ns)
+        ns = '<div class="fg-ns">%s</div>' % ns
+    body += ns
     body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
     jumps = [('#short', 'Short answer')] + jumps + ([('#not-studied', 'Not studied')] if q.gaps else [])
@@ -1534,6 +1543,160 @@ def matched_cell(f: Finding, base: str) -> str:
             '<strong>%s</strong><span class="mc-msub">%s</span></div>' % (esc(ans), sub))
 
 
+# ------------------------------------------------ Q2 card (Figma "Bottom card · one cause")
+# The one-finding popup of the Q2 chart, in the style of the Figma frame "Q1 · copy into the
+# group file: graph section + cards": blue kicker and big serif name, three figures (finding,
+# certainty, studies), the study split as a bar, then three buttons that open the certainty
+# calculation, the citations and the constraints underneath (static/bc.js). Without script all
+# three are open. Every pack value is in a data-check span; the rule text is word for word.
+
+BC_SEG_WORD = {'below_reference': 'behind', 'above_reference': 'ahead', 'comparable': 'matches',
+               'mixed': 'mixed', 'unclear': 'unclear', 'no_effect': 'no change', 'increase': 'higher',
+               'decrease': 'lower'}
+
+
+def bc_bars(n: int, cls: str = 'bc-bars') -> str:
+    """Four upright blocks, the first n dark (n = 1 very low ... 4 high)."""
+    return '<span class="%s b%d" aria-hidden="true">%s</span>' % (cls, n, '<i></i>' * 4)
+
+
+def bc_btn(label: str, target: str, expanded: bool = True, cls: str = '', extra: str = '') -> str:
+    return ('<button type="button" class="fg-btn bc-tog%s" aria-expanded="%s" aria-controls="%s"%s>%s'
+            '<span class="bc-pm" aria-hidden="true"></span></button>'
+            % (' ' + cls if cls else '', 'true' if expanded else 'false', esc(target), extra, label))
+
+
+def bc_ladder(f: Finding) -> str:
+    """Start → each step up or down → result, from the pack's rule text (README grading)."""
+    checks = rationale_checks(f.certainty_rationale)
+    score = rationale_score(f.certainty_rationale)
+    if not score or len(checks) != 1 + len(score[1]):
+        return ''
+    start, deltas, final, note = score
+    boxes = ['<li class="bc-step"><span class="bc-k">Start</span><span class="bc-v">%d %s</span>'
+             '<span class="bc-t">%s.</span></li>' % (start, bc_bars(start), esc(checks[0][1]))]
+    for (mk, t), d in zip(checks[1:], deltas):
+        boxes.append('<li class="bc-step"><span class="bc-k">Adjust</span><span class="bc-v bc-%s">%s</span>'
+                     '<span class="bc-t">%s.</span></li>'
+                     % ('up' if d > 0 else 'down' if d < 0 else 'nil', ('%+d' % d).replace('-', '−') if d else '·', esc(t)))
+    end = note[:1].upper() + note[1:] + '.' if note else 'Level %d of 4.' % final
+    boxes.append('<li class="bc-step bc-res"><span class="bc-k">Result</span><span class="bc-v">%s %s</span>'
+                 '<span class="bc-t">%s</span></li>' % (esc(LEVEL_WORD[final]), bc_bars(final), esc(end)))
+    return '<ol class="bc-ladder">%s</ol>' % ''.join(boxes)
+
+
+def bc_papers(f: Finding) -> str:
+    """One box per paper: year, title, how many quotes; clicking it opens every quote from that
+    paper, word for word, each with how that study tested it (the details a sources page used to
+    hold, DOI link included), then "Open the paper". Everything stays in the popup."""
+    out = []
+    for k, qs in enumerate(paper_groups(f.quotes)):
+        q0 = qs[0]
+        year = esc(q0.year) if q0.year is not None else '–'
+        n = '%d %s' % (len(qs), plural(len(qs), 'quote', 'quotes'))
+        head = ('<span class="bc-py">%s</span><span class="bc-pt">%s</span><span class="bc-pn">%s</span>'
+                % (year, esc(q0.title), n))
+        quotes = []
+        for q in qs:
+            _, src, dl = evidence_parts(q, f.question)
+            quotes.append('<div class="bc-q" data-claim="%s"><blockquote class="quote">%s</blockquote>'
+                          '<details class="bc-how"><summary>How this study tested it</summary><dl class="camo">%s</dl>'
+                          '<p class="src">%s</p></details></div>' % (esc(q.edge_id), esc(q.quote), dl, src))
+        btn = ('<p class="bc-pb"><a class="fg-btn" href="https://doi.org/%s" rel="noopener">Open the paper '
+               '<span aria-hidden="true">↗</span></a></p>' % esc(q0.doi) if q0.doi else '')
+        out.append('<details class="bc-paper"%s><summary>%s<span class="bc-pm" aria-hidden="true"></span></summary>%s%s</details>'
+                   % (' open' if k == 0 else '', head, ''.join(quotes), btn))
+    return '<div class="bc-papers">%s</div>' % ''.join(out)
+
+
+def q2_card(f: Finding, sources: List[SourcePage], matched: bool) -> str:
+    base = '%s/%s' % (f.question, f.slug)
+    sym, word = TL_WORD.get(f.direction, ('', words(f.direction)))
+    k = MC_KEY.get(f.direction, 'unclear')
+    meaning = (MC_HOW_REF if matched else MC_HOW_AGE).get(f.direction, '')
+    kicker = 'Compared with natural marshes' if matched else 'Older created marshes vs newer ones'
+    lags = ('<span class="sr-only"> (lags behind natural marshes)</span>' if f.raw.get('lags') and f.direction == 'below_reference'
+            else ' <span class="lags">Lags</span>' if f.raw.get('lags') else '')
+    head = ('<div class="bc-head"><p class="bc-kick">%s</p><h3 class="bc-title">%s%s</h3></div>'
+            % (esc(kicker), card_name(f, not matched), lags))
+    fig = ('<div class="bc-figs">'
+           '<div class="bc-fig mc-%s"><p class="bc-k">Finding</p><p class="bc-big bc-dir"><span aria-hidden="true">%s</span> %s</p>%s</div>'
+           '<div class="bc-fig"><p class="bc-k">Certainty</p><p class="bc-big">%s%s</p></div>'
+           '<div class="bc-fig"><p class="bc-k">Studies</p><p class="bc-big">%s <span class="bc-small">%s · %s %s</span></p></div>'
+           '</div>'
+           % (k, sym, span(base + '/direction', word), '<p class="bc-mean">%s</p>' % esc(meaning) if meaning else '',
+              bc_bars(CERT_BLOCKS.get(f.certainty, 0)), span(base + '/certainty', CERT_WORD[f.certainty]),
+              span(base + '/studies', f.studies), plural(f.studies, 'study', 'studies'),
+              span(base + '/claims', f.claims), plural(f.claims, 'claim', 'claims')))
+    tps = f.raw.get('time_points') or []
+    order = sorted(range(len(tps)), key=lambda i: (parse_age(tps[i]) or (999, 999), i))
+    ages = (''.join('<span class="mc-age">%s</span>' % span('%s/time_points/%d' % (base, i), tps[i]) for i in order)
+            if tps else '<span class="mc-nr">not reported</span>')
+    ages = '<p class="bc-ages"><span class="bc-k">Marsh ages studied</span> %s</p>' % ages
+    sd = f.study_directions
+    split = ''
+    if sd:
+        keys = _keys(f.reference, sd)
+        if f.direction in keys:
+            keys.remove(f.direction)
+            keys.insert(0, f.direction)
+        segs = ''.join('<span class="bc-seg mc-%s" style="flex-grow:%d"><span aria-hidden="true">%s</span> %s %s</span>'
+                       % (MC_KEY.get(d, 'unclear'), sd[d], TL_WORD.get(d, ('', ''))[0],
+                          span('%s/study_directions/%s' % (base, d), sd[d]), esc(BC_SEG_WORD.get(d, words(d))))
+                       for d in keys)
+        split = '<div class="bc-split"><p class="bc-bar">%s</p><p class="bc-note">%s</p></div>' % (segs, split_note(f, base))
+    # the three sections the buttons open (all open without script)
+    cid, sid, kid = 'bc-c-' + f.slug, 'bc-s-' + f.slug, 'bc-k-' + f.slug
+    raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
+    cert = ('<section class="bc-sec" id="%s" aria-label="Certainty calculation"><p class="bc-sk">How this finding got “%s”</p>%s'
+            '<p class="rule"><span class="bc-rl">The data’s rule, word for word:</span> %s</p>'
+            '<p class="bc-folds" hidden>%s%s</p><div class="bc-fold" id="bc-g-%s" hidden></div><div class="bc-fold" id="bc-l-%s" hidden></div></section>'
+            % (cid, esc(CERT_WORD[f.certainty]), bc_ladder(f), raw,
+               bc_btn('How certainty is graded', 'bc-g-' + f.slug, False, extra=' data-tpl="bc-tpl-grading"'),
+               bc_btn('Constraints of this grade', 'bc-l-' + f.slug, False, 'fg-red', ' data-tpl="bc-tpl-limit"'),
+               esc(f.slug), esc(f.slug)))
+    # every quote is in the card (no separate sources page for these findings)
+    ngroups = len(paper_groups(f.quotes))
+    cites = ('<section class="bc-sec" id="%s" aria-label="Citations"><p class="bc-sk">%d %s · %s %s</p>%s</section>'
+             % (sid, ngroups, plural(ngroups, 'paper', 'papers'), span(base + '/claims', f.claims), plural(f.claims, 'quote', 'quotes'),
+                bc_papers(f)))
+    cons = ('<section class="bc-sec bc-cons" id="%s" aria-label="Constraints" data-tpl="bc-tpl-cons">'
+            '<p><a href="#limits-%s">The constraints of this answer are in the overview above.</a></p></section>'
+            % (kid, esc(f.question)))
+    btns = ('<p class="bc-btns">%s%s%s</p>'
+            % (bc_btn('Certainty calculation', cid), bc_btn('Citations (%d)' % f.claims, sid), bc_btn('Constraints', kid)))
+    return ('<article class="fcard bc fdir-%s" id="f-%s">%s%s%s%s%s<div class="bc-secs">%s%s%s</div></article>'
+            % (esc(f.direction.replace('_', '-')), esc(f.slug), head, fig, ages, split, btns, cert, cites, cons))
+
+
+def bc_templates(q: Question) -> str:
+    """What the fold-outs in every card show, once per page (copied in by static/bc.js)."""
+    # same layout as the "How grading works" popup (GRADING_POPOVER): the four levels, then the
+    # steps in order, then a worked example
+    scale = ''.join('<li>%s<span><b>%d</b> %s</span></li>' % (bc_bars(i), i, LEVEL_WORD[i]) for i in (4, 3, 2, 1))
+    grading = ('<div class="bc-grade"><p>Each finding gets a certainty level from 1 to 4, shown as bars:</p>'
+               '<ul class="bc-scale">%s</ul><ol class="bc-gsteps">'
+               '<li><strong>Start</strong> from the best kind of study behind it: randomized experiments with an untreated '
+               'control start at 4; other controlled studies at 3; observation only at 2; models or case studies at 1.</li>'
+               '<li><strong class="bc-down">−1</strong> if there is only one study, if studies disagree, or if most claims '
+               'have nothing to compare against.</li>'
+               '<li><strong class="bc-up">+1</strong> if three or more studies agree, or if it shows how it works, not just '
+               'that it works.</li>'
+               '<li><strong>Limits:</strong> the level stays between 1 and 4, and one study never goes above 3.</li></ol>'
+               '<p class="bc-ex">Example: start 4, −1 studies disagree, +1 shows how it works = <strong>4 High</strong>.</p>'
+               '<p class="bc-gnote"><a href="method.html#certainty">Full method →</a></p></div>' % scale)
+    limit = ('<div class="bc-limit"><p class="bc-lh">The grade can overstate how sure we are</p><p>It starts from the strongest '
+             'study, not an average. One good experiment can lift a whole group of weaker studies to “High”.</p></div>')
+    lims = list(q.limitations)
+    tags = LIMIT_TAGS.get(q.qid, [])
+    tags = tags if len(tags) == len(lims) else [''] * len(lims)
+    cons = '<ul class="bc-lims">%s</ul>' % ''.join(
+        '<li>%s%s</li>' % ('<strong>%s:</strong> ' % esc(tg) if tg else '', span('%s/limitations/%d' % (q.qid, i), t))
+        for i, (tg, t) in enumerate(zip(tags, lims)))
+    return ('<template id="bc-tpl-grading">%s</template><template id="bc-tpl-limit">%s</template>'
+            '<template id="bc-tpl-cons">%s</template>' % (grading, limit, cons))
+
+
 def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps-h') -> str:
     """The Q2 main view (Figma "current graph"): a key, "How to read this", one row per finding
     (compared with natural marshes, then older vs newer created marshes) and the takeaway. A
@@ -1565,17 +1728,35 @@ def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps
         if items:
             how_groups.append('<div class="mc-hg"><p class="mc-hgt">%s</p><dl>%s</dl></div>'
                               % (esc(title), ''.join(h for _, h in sorted(items))))
-    how = ('<details class="mc-how"><summary>How to read this</summary>%s</details>' % ''.join(how_groups)
-           if how_groups else '')
     cert_tip = {c: def_row('mc-plain', cert_term(c), m, tip=True) for c, m in MC_HOW_CERT}
 
     keys = {MC_KEY.get(f.direction, 'unclear') for f in allf}
     legend = ''.join('<span class="mc-sw mc-%s"><i aria-hidden="true"></i>%s</span>' % (k, w)
                      for k, w in MC_LEGEND if k in keys)
-    key = ('<div class="mc-key"><p><span class="mc-kh">Result:</span> %s</p>'
-           '<p><span class="mc-kh">Certainty:</span> <span class="mc-meter mc-kmeter m4" aria-hidden="true">'
-           '<i></i><i></i><i></i><i></i></span> More filled blocks = more certain (very low, low, moderate, high)</p></div>'
-           % legend)
+    # "How to read the chart" (Figma "How to read the graph · open"): a popup opened from the
+    # toolbar, with how to use the chart, then the legend: result colours, certainty blocks,
+    # the marks on the age track and what each result word means.
+    certs = ''.join(def_row('mc-plain', cert_term(c), m) for c, m in MC_HOW_CERT)
+    marks = ''.join(def_row('mc-plain', mark_term(kd, w), m) for kd, w, m in MC_HOW_MARK)
+    howpop = (
+        '<div popover id="mc-howpop" class="pop fg-pop" role="dialog" aria-labelledby="mc-howpop-h">'
+        '<div class="fg-pophead"><h3 id="mc-howpop-h">How to read the chart</h3>'
+        '<button type="button" class="fg-x" popovertarget="mc-howpop" popovertargetaction="hide">'
+        '<span aria-hidden="true">✕</span><span class="sr-only">Close</span></button></div>'
+        '<p class="fg-k">How to use it</p><p>The chart has one row per outcome. Read across a row: what the studies '
+        'found, how sure we can be, and the marsh ages they looked at. The last column says whether created marshes '
+        'had matched natural ones yet.</p>'
+        '<ol class="fg-howsteps"><li><b>Find an outcome</b> a row in the chart</li><li><b>Read across</b> result, '
+        'certainty, marsh ages</li><li><b>Click its name</b> the studies open in a card</li></ol>'
+        '<hr><p class="fg-k">Legend</p>'
+        '<div class="fg-lg"><p class="fg-lt"><span>Result</span> colour</p><p class="fg-sws">%s</p></div>'
+        '<div class="fg-lg"><p class="fg-lt"><span>What each result means</span></p>%s</div>'
+        '<div class="fg-lg"><p class="fg-lt"><span>Certainty</span> filled blocks</p><dl>%s</dl></div>'
+        '<div class="fg-lg"><p class="fg-lt"><span>Marsh ages</span> marks on the track</p><dl>%s</dl></div>'
+        '<p><a class="fg-btn" href="#limits-%s" data-close>Constraints (%d) <span aria-hidden="true">↑</span></a></p>'
+        '</div>' % (legend, ''.join(how_groups), certs, marks, esc(q.qid), len(q.limitations)))
+    how = ('<button type="button" class="fg-btn fg-help" popovertarget="mc-howpop"><span aria-hidden="true">?</span>'
+           'How to read the chart</button>')
     ticks = ''.join('<span style="left:%s%%">%d</span>' % (f1(yr * 100.0 / TL_MAX), yr)
                     for yr in range(0, TL_MAX + 1, TL_STEP))
     head = ('<div class="mc-row mc-head" aria-hidden="true"><div class="mc-out">Outcome</div>'
@@ -1614,20 +1795,24 @@ def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps
 
     # takeaway: what the chart cannot say, from the pack
     sa = q.extra.get('short_answer') or {}
+    # (Figma "Used together note": cream band, kicker, serif line, a button on the right)
     take = []
-    if sa.get('time_to_reference') is None:
-        take.append('<p class="mc-take-h">Takeaway: how long full recovery takes is unknown.</p>')
     take.append('<p>Bars show the marsh ages that were studied, coloured by the overall result for that outcome. '
                 'Results are pooled across studies, not reported age by age.</p>')
     if q.limitations:
         take.append('<p>%s A result measured at one age doesn’t show the trajectory.</p>'
                     % span('%s/limitations/0' % qid, q.limitations[0]))
+    btn = ''
     if q.gaps:
         labels = [g.outcome_label for g in q.gaps]
         some = ', '.join(esc(lbl[0].lower() + lbl[1:]) for lbl in labels[:3])
-        take.append('<p>No evidence for %s %s, including %s. <a href="#%s">See Not studied</a>.</p>'
-                    % (number_word(len(q.gaps)), plural(len(q.gaps), 'outcome', 'outcomes'), some, gaps_anchor))
-    takeaway = '<div class="mc-take">%s</div>' % ''.join(take)
+        take.append('<p>No evidence for %s %s, including %s.</p>'
+                    % (number_word(len(q.gaps)), plural(len(q.gaps), 'outcome', 'outcomes'), some))
+        btn = '<a class="fg-btn" href="#%s">See Not studied <span aria-hidden="true">→</span></a>' % gaps_anchor
+    head_t = ('How long full recovery takes is unknown.' if sa.get('time_to_reference') is None
+              else 'What the chart can and can’t say.')
+    takeaway = ('<div class="mc-take"><div class="mc-take-w"><p class="fg-k">Takeaway</p><p class="mc-take-h">%s</p>%s</div>%s</div>'
+                % (head_t, ''.join(take), btn))
 
     # the table view: the same findings in the same two groups. A row opens the same popup as
     # the chart row; ages are listed youngest first, each as a pill (pack text, data-checked).
@@ -1659,11 +1844,17 @@ def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps
            % ''.join(tbodies))
     # Chart | Table switch (static/mc.js shows it and hides the other view). Without script it
     # stays hidden and both views show, one under the other.
-    switch = ('<div class="mc-switch" role="group" aria-label="View" hidden>'
+    # (Figma "Graph toolbar": VIEW, then square tabs, the open one blue)
+    switch = ('<div class="mc-switch" role="group" aria-labelledby="mc-vl" hidden><span class="fg-vl" id="mc-vl">View</span>'
               '<button type="button" data-view="mc-view-chart" aria-pressed="true">Chart</button>'
               '<button type="button" data-view="mc-view-table" aria-pressed="false">Table</button></div>')
-    views = ('<div id="mc-view-chart" class="mc-view">%s</div><div id="mc-view-table" class="mc-view">%s</div>'
+    views = ('<div id="mc-view-chart" class="mc-view fg-panel">%s</div><div id="mc-view-table" class="mc-view">%s</div>'
              % (chart, tbl))
+    # (Figma "Graph steps": three numbered boxes over the chart)
+    steps = ('<ol class="fg-steps">'
+             '<li><span class="fg-n" aria-hidden="true">1</span><span><b>Find an outcome</b>a row in the chart</span></li>'
+             '<li><span class="fg-n" aria-hidden="true">2</span><span><b>Read across the row</b>result, certainty, marsh ages</span></li>'
+             '<li><span class="fg-n" aria-hidden="true">3</span><span><b>Click its name</b>what the studies found opens</span></li></ol>')
     pops = ''.join(popups[f.slug] for f in allf)
     # heading (Figma "current graph"): a small label, the question in plain words, and the
     # answer to "how long?" when the pack has none
@@ -1673,8 +1864,8 @@ def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps
     head_html = ('<div class="mc-top"><p class="mc-eyebrow">Restoration evidence · %s</p><h2 id="timeline">%s</h2>%s</div>'
                  % (esc(qid.upper()), esc(title), '<p class="mc-sub">%s</p>' % esc(sub) if sub else ''))
     # .mc-section: on wide screens the chart runs almost the full page width, as in the Figma frame
-    return ('<div class="mc-section">%s%s<div class="mc-tools">%s%s</div>%s%s</div>%s'
-            % (head_html, key, how, switch, views, takeaway, pops))
+    return ('<div class="mc-section">%s%s<div class="mc-tools">%s%s</div>%s%s</div>%s%s%s'
+            % (head_html, steps, how, switch, views, takeaway, howpop, pops, bc_templates(q)))
 
 
 def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -1709,24 +1900,21 @@ def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[S
             out.append(finding_card(data, f, sources, tag=tag, extra=extra))
         return '<div class="cards">%s</div>' % ''.join(out)
 
-    def popup(f: Finding) -> str:
-        # "Lags" says the same as the "Behind" chip (the pack's lagging attributes are exactly the
-        # findings below the reference), so the popup shows it only if the two ever disagree
-        # (screen readers still hear "lags": the pack marks it and both say it in words)
-        tag = ('' if not f.raw.get('lags') else
-               '<span class="sr-only"> (lags behind natural marshes)</span>' if f.direction == 'below_reference' else
-               ' <span class="lags">Lags</span>')
-        extra = '<div class="when-wrap"><span class="mlabel">When measured</span> %s</div>' % when(f)
-        return ('<div popover id="pop-%s" class="pop fpop cardpop" role="dialog" aria-label="%s">'
-                '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
-                '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
-                % (esc(f.slug), esc(f.label), esc(f.slug),
-                   finding_card(data, f, sources, tag=tag, extra=extra, open_=True, labels=True)))
+    def popup(f: Finding, matched: bool) -> str:
+        # Figma "Bottom card · one cause" (q2_card). "Lags" says the same as "Behind" (the
+        # pack's lagging attributes are exactly the findings below the reference), so the card
+        # shows it only if the two ever disagree; screen readers still hear it.
+        return ('<div popover id="pop-%s" class="pop bcpop" role="dialog" aria-label="%s">'
+                '<button type="button" class="fg-x" popovertarget="pop-%s" popovertargetaction="hide">'
+                '<span aria-hidden="true">✕</span><span class="sr-only">Close</span></button>%s</div>'
+                % (esc(f.slug), esc(f.label), esc(f.slug), q2_card(f, sources, matched)))
 
-    popups = {f.slug: popup(f) for f in q.all_findings()}
+    popups = {f.slug: popup(f, True) for f in q.findings}
+    popups.update({f.slug: popup(f, False) for f in q.trends})
     chart = timeline_chart(q, popups)
     if chart:
-        main, jumps = chart + '<script src="static/mc.js" defer></script>', [('#timeline', 'Outcomes')]
+        main = chart + '<script src="static/mc.js" defer></script><script src="static/bc.js" defer></script>'
+        jumps = [('#timeline', 'Outcomes')]
     else:  # no ages in the data: cards as on any other page
         main = '<h2 id="compare">Findings</h2>' + cards(q.findings) + (cards(q.trends) if q.trends else '')
         jumps = [('#compare', 'Findings')]
@@ -2171,7 +2359,7 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
         kb = os.path.getsize(os.path.join(ROOT, 'static', f)) // 1024
         if kb > 150:
             print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
-    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'mc.js', 'problem.js', 'ov.js', 'pin.webp',
+    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'mc.js', 'bc.js', 'problem.js', 'ov.js', 'pin.webp',
               'ov-wave.svg', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
