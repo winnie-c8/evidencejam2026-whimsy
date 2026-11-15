@@ -172,18 +172,12 @@ def weight_class(studies: int) -> int:
 
 
 def label_size(kind: str, e: Dict[str, Any]) -> Tuple[float, float]:
-    """A badge shows the direction symbol and the study count ("↑ 7"); a mixed arrow shows how many
-    studies went up and down instead, leaving out a zero ("⇅ ↑4 ↓1", "⇅ ↑1", "⇅").
+    """A badge shows the direction symbol and the total number of studies ("↑ 7", "⇅ 11"); how
+    the studies split is in the arrow's card.
     Certainty is the line's dash pattern, the number of studies also its thickness."""
     if kind == 'g':
         return len(GAP_TAG) * GAP_CHAR_W + 2 * LBL_PAD, LBL_H
-    w = 2 * LBL_PAD + SYM_W
-    if kind == 'e' and e['direction'] == 'mixed':
-        for n in split_counts(e):
-            if n:
-                w += SP_W + ARR_W + NUM_W * len(str(n))
-    else:
-        w += SP_W + NUM_W * len(str(e['studies']))
+    w = 2 * LBL_PAD + SYM_W + SP_W + NUM_W * len(str(e['studies']))
     return w, LBL_H
 
 
@@ -924,10 +918,8 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
         # count ("↑ 3"), or for a mixed arrow how many studies went up and down, a zero left out
         # ("⇅ ↑5 ↓1", "⇅ ↑1", "⇅"); the name says the same in words.
         cls += ' w-%d' % weight_class(n)
-        split_all = ', '.join('%s %d' % (WORD.get(k, k), v)
-                              for k, v in sorted((e.get('study_directions') or {}).items(), key=lambda kv: -kv[1]))
-        out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s"%s data-n="%d" data-split="%s">'
-                   % (es, cls, es, esc(aria), data_attrs(e['id']), n, esc(split_all)))
+        out.append('<a href="#e-%s" class="%s" id="edge-%s" aria-label="%s"%s data-n="%d">'
+                   % (es, cls, es, esc(aria), data_attrs(e['id']), n))
         out.append('<path class="hit" d="%s"/>' % d)
         if e.get('kind') == 'moderation':
             out.append('<path class="vis c-%s" d="%s"/>' % (e['certainty'], d))
@@ -936,17 +928,8 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
         else:
             out.append('<path class="vis c-%s" d="%s" marker-end="url(#ah-%s)"/>'
                        % (e['certainty'], d, ARROW[e['direction']]))
-        if e['direction'] == 'mixed' and e.get('kind') != 'moderation':
-            up, down = split_counts(e)
-            main = '<tspan class="sym" aria-hidden="true">⇅</tspan>'
-            for sym, field, v in (('↑', 'increase', up), ('↓', 'decrease', down)):
-                if v:
-                    main += (' <tspan class="split" aria-hidden="true">%s</tspan>'
-                             '<tspan class="n" data-check="%s/%s/study_directions/%s">%d</tspan>'
-                             % (sym, prefix, es, field, v))
-        else:
-            main = ('<tspan class="sym" aria-hidden="true">%s</tspan> '
-                    '<tspan class="n" data-check="%s/%s/studies">%d</tspan>' % (SYM[e['direction']], prefix, es, n))
+        main = ('<tspan class="sym" aria-hidden="true">%s</tspan> '
+                '<tspan class="n" data-check="%s/%s/studies">%d</tspan>' % (SYM[e['direction']], prefix, es, n))
         out.append(label_svg(e['id'], [(main, False, 17.0)]))
         out.append('</a>')
 
