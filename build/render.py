@@ -877,23 +877,8 @@ OUTCOME_SLOT = '{outcome}'
 
 NS_SHOWN = 12  # not-studied pairings listed before "+ N more"
 
-# Topic / outcome filters and "+ N more" for the Not studied dropdown. Without script every
-# pairing is listed and the filters stay hidden. A link to #gap-<slug> clears the filters first.
-NS_JS = ('<script>(function(){document.querySelectorAll("details.ns").forEach(function(d){'
-         'var f=d.querySelector(".ns-f"),ss=d.querySelector(".ns-fs"),so=d.querySelector(".ns-fo"),'
-         'm=d.querySelector(".ns-more"),c=d.querySelector(".ns-n"),w=d.querySelector(".ns-w"),'
-         'lis=[].slice.call(d.querySelectorAll("li.gap")),ns=[].slice.call(d.querySelectorAll(".searched[data-s]")),all=false;'
-         'if(f)f.hidden=false;'
-         'function run(){var s=ss?ss.value:"",o=so?so.value:"",n=0;lis.forEach(function(li){'
-         'var ok=(!s||li.dataset.s===s)&&(!o||li.dataset.o===o);if(ok)n++;li.hidden=!ok||(!all&&n>%d);});'
-         'ns.forEach(function(x){x.hidden=x.dataset.s!==s;});'
-         'c.textContent=n;w.textContent=n===1?"pairing":"pairings";var r=n-%d;m.hidden=all||r<1;'
-         'm.textContent="+ "+r+" more";}'
-         '[ss,so].forEach(function(x){if(x)x.addEventListener("change",function(){all=false;run();});});'
-         'm.addEventListener("click",function(){all=true;run();});'
-         'function hash(){var t=location.hash&&document.getElementById(decodeURIComponent(location.hash.slice(1)));'
-         'if(t&&d.contains(t)&&t.matches("li.gap")){if(ss)ss.value="";if(so)so.value="";all=true;run();}}'
-         'addEventListener("hashchange",hash);run();hash();});})();</script>') % (NS_SHOWN, NS_SHOWN)
+# Topic / outcome pickers and "+ N more" for the Not studied dropdown live in static/ns.js
+# (shared and cached across pages). Without script every pairing is listed and the pickers stay hidden.
 
 
 def not_studied(q: Question) -> str:
@@ -930,30 +915,46 @@ def not_studied(q: Question) -> str:
            ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for) if g.slug in own else '')
         for g in q.gaps)
 
-    def select(cls: str, label: str, empty: str, opts: Dict[str, str], ix: Dict[str, str]) -> str:
+    def picker(key: str, label: str, name: str, empty: str, opts: Dict[str, str], ix: Dict[str, str]):
+        """A box of removable chips plus a "Choose a ..." button that opens a grid of toggle
+        buttons, one per value: several values can be chosen. A chosen value leaves the grid and
+        shows as a chip (Figma frames 7-9)."""
         if len(opts) < 2:
-            return ''
-        return ('<label>%s<select class="%s"><option value="">%s</option>%s</select></label>'
-                % (esc(label), cls, esc(empty),
-                   ''.join('<option value="%s">%s</option>' % (ix[k], esc(v)) for k, v in opts.items())))
-    filters = select('ns-fs', 'Topic (intervention)', 'All topics', subjects, s_ix) + \
-        select('ns-fo', 'Outcome', 'All outcomes', outcomes, o_ix)
+            return '', ''
+        box = ('<div class="ns-pick" data-k="%s" data-name="%s" data-panel="ns-%s-p">'
+               '<span class="ns-lab" id="ns-%s-l">%s</span><div class="ns-box"><span class="ns-chips"></span>'
+               '<button type="button" class="ns-open" id="ns-%s-b" aria-labelledby="ns-%s-l ns-%s-b" '
+               'aria-expanded="false" aria-controls="ns-%s-p">%s</button></div></div>'
+               % (key, esc(name), key, key, esc(label), key, key, key, key, esc(empty)))
+        panel = ('<div class="ns-panel" id="ns-%s-p" role="group" aria-labelledby="ns-%s-l" hidden>%s</div>'
+                 % (key, key, ''.join('<button type="button" data-v="%s">%s</button>'
+                                      % (ix[k], esc(v)) for k, v in opts.items())))
+        return box, panel
+    sb, sp = picker('s', 'Topic (intervention)', 'Topic', 'Choose a topic', subjects, s_ix)
+    ob, op = picker('o', 'Outcome', 'Outcome', 'Choose an outcome', outcomes, o_ix)
+    filters = sb + ob + sp + op
     ns_t, no_t = len(subjects), len(outcomes)
     scope = 'Across %d %s and %d %s.' % (ns_t, plural(ns_t, 'topic', 'topics'), no_t, plural(no_t, 'outcome', 'outcomes'))
     if filters:
-        scope += ' Choose a topic or an outcome to narrow the list.'
+        scope += ' Choose topics or outcomes to narrow the list.'
     scope = '<p class="ns-sub">%s</p>' % scope if n > 1 else ''
+    intro = ('<h2 class="ns-h" id="not-studied">Not studied</h2>'
+             '<p class="ns-intro">These are combinations <em>nobody</em> in this body of research has '
+             '<em>tested</em>. We searched for studies and found none. <em>“Not studied”</em> means '
+             '<em>we simply don’t know</em>: it might help, harm, or do nothing.</p>')
     return (
-        '<details class="ns" id="gaps-h"><summary><span class="ns-q" aria-hidden="true">?</span>'
-        '<h2><span class="v-see">See</span><span class="v-hide">Hide</span> not-studied pairings</h2>'
+        '<section class="ns-sec" aria-labelledby="not-studied">' + intro +
+        '<details class="ns" id="gaps-h" data-shown="%d"><summary><span class="ns-q" aria-hidden="true">?</span>'
+        '<h3><span class="v-see">See</span><span class="v-hide">Hide</span> not-studied pairings</h3>'
         '<span class="ns-c">%d</span></summary>'
-        '%s<div class="ns-p"><p class="ns-t"><strong><span class="ns-n">%d</span> not-studied '
+        '%s<div class="ns-p"><p class="ns-t" role="status"><strong><span class="ns-n">%d</span> not-studied '
         '<span class="ns-w">%s</span></strong></p>%s%s'
-        '<ul class="gaps">%s</ul><button type="button" class="ns-more" hidden></button>'
+        '<ul class="gaps">%s</ul><p class="ns-none" hidden>None of the chosen pairings is in the not-studied list. '
+        'Remove a topic or an outcome to see more.</p><button type="button" class="ns-more" hidden></button>'
         '<p class="ns-foot">No paper in this body of research tested %s. Not studied is not a '
-        'negative result: nobody here tested it.</p></div></details>%s'
-        % (n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
-           ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings', NS_JS))
+        'negative result: nobody here tested it.</p></div></details></section><script src="static/ns.js" defer></script>'
+        % (NS_SHOWN, n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
+           ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings'))
 
 
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
@@ -969,7 +970,7 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
     body += not_studied(q)
     body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
-    jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else [])
+    jumps = [('#short', 'Short answer')] + jumps + ([('#not-studied', 'Not studied')] if q.gaps else [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
                 body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps)
 
@@ -1634,7 +1635,7 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'logo.svg'):
+    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'logo.svg'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
