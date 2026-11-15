@@ -63,10 +63,10 @@
   --accent: #a3402f;       /* 6.4:1 on white: words picked out in headings (not --dir-down: red = decrease) */
   --dir-none: #5f5f5f;     /* grey: no effect / unclear */
   --gap: #767676;
-  --d-thin: #eef3fa;
-  --d-some: #cfdff3;
-  --d-dense: #9fbfe6;
-  --d-dense-link: #08306b; /* link on the dense shade, 6.7:1 */
+  --d-thin: #e8f0ff;      /* 1 study: pale */
+  --d-some: #8fbcff;      /* 2-3 studies: dark-blue number on it, 7:1 */
+  --d-dense: #2347e6;     /* 4 or more: white number on it, 6.7:1 */
+  --d-num: #1b2475;
   --box-condition: #f3f0e8;   /* graph: condition boxes */
   --box-outcome: #eaf2ea;     /* graph: outcome boxes */
   --box-combination: #f6f6f4; /* graph: combination box */
@@ -187,10 +187,9 @@ table.gapmap th[scope="col"] { min-width: 6rem; font-weight: 600; }
 table.gapmap th[scope="row"] { min-width: 12rem; }
 table.gapmap td { text-align: center; white-space: nowrap; }
 table.gapmap td.empty { color: var(--gap); }
-.d-thin { background: var(--d-thin); }
-.d-some { background: var(--d-some); }
-.d-dense { background: var(--d-dense); }
-table.gapmap td.d-dense a { color: var(--d-dense-link); } /* 6.7:1 on the dense shade (link blue was 3.4:1) */
+.swatch.d-thin { background: var(--d-thin); }
+.swatch.d-some { background: var(--d-some); }
+.swatch.d-dense { background: var(--d-dense); }
 dl.key { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 dl.key dt { font-weight: 600; }
 dl.key dd { margin: 0; color: var(--muted); }
@@ -832,25 +831,22 @@ details.tl-tbl > summary { cursor: pointer; color: var(--link); margin: .25rem 0
   border: 1px solid var(--line); background: var(--bg); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .pop-x:hover { background: var(--panel); }
 
-/* Q3 gap map: cells are buttons (no underline), more room, a "?" per row; details in popups */
+/* Q3 gap map: cells are buttons showing just the study count; the shade says how many
+   (pale = 1, light = 2-3, dark = 4+). Certainty is in the popup. */
 table.gapmap { font-size: .95rem; }
 table.gapmap th[scope="col"] { min-width: 7.5rem; padding: .6rem .5rem; }
 table.gapmap th[scope="row"] { min-width: 14rem; padding: .7rem .75rem; }
 table.gapmap td { padding: 0; }
 table.gapmap td.empty { padding: .7rem .5rem; }
-table.gapmap td button { display: block; width: 100%; min-height: 3rem; padding: .6rem .5rem; border: 0; background: transparent;
-  font: inherit; color: var(--text); cursor: pointer; text-align: center; }
-table.gapmap td.d-dense button { color: var(--d-dense-link, #08306b); font-weight: 600; }
+table.gapmap td.d-thin { background: var(--d-thin); }
+table.gapmap td.d-some { background: var(--d-some); }
+table.gapmap td.d-dense { background: var(--d-dense); }
+table.gapmap td button { display: block; width: 100%; min-height: 3rem; padding: .5rem; border: 0; background: transparent;
+  font: inherit; font-size: 1.25rem; font-weight: 700; color: var(--d-num); cursor: pointer; text-align: center; }
+table.gapmap td.d-dense button { color: var(--white); }
 table.gapmap td button:hover { outline: 2px solid var(--link); outline-offset: -2px; }
 table.gapmap td button:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
-table.gapmap th[scope="row"] .rname { display: block; }
-table.gapmap th[scope="row"] .rinfo { display: block; margin-top: .2rem; font-size: .8rem; font-weight: 400; color: var(--muted); }
-table.gapmap td button .cl { text-decoration: underline; text-underline-offset: 3px; }  /* number + word: clickable */
-table.gapmap td button .bars { display: block; margin: .35rem auto 0; width: 3.3rem; height: .55rem; }
-table.gapmap td button .bars.b1 { --fill: .72rem; } table.gapmap td button .bars.b2 { --fill: 1.55rem; }
-table.gapmap td button .bars.b3 { --fill: 2.38rem; } table.gapmap td button .bars.b4 { --fill: 3.3rem; }
-table.gapmap td button .bars { background: repeating-linear-gradient(90deg, transparent 0 .72rem, var(--bg) .72rem .83rem),
-  linear-gradient(90deg, var(--c) 0 var(--fill), transparent var(--fill)); }
+table.gapmap td.d-dense button:hover, table.gapmap td.d-dense button:focus-visible { outline-color: var(--white); }
 .rowpop.only ul.cells > li:not(.on) { display: none; }
 .rowpop.only .cnt { display: none; }
 .rowpop:not(.only) .show-all { display: none; }
@@ -866,7 +862,7 @@ table.gapmap td button .bars { background: repeating-linear-gradient(90deg, tran
 .grid-wrap:fullscreen table.gapmap { font-size: .85rem; }
 .grid-wrap:fullscreen table.gapmap th[scope="col"] { min-width: 0; padding: .4rem .3rem; }
 .grid-wrap:fullscreen table.gapmap th[scope="row"] { min-width: 11rem; }
-.grid-wrap:fullscreen table.gapmap td button { min-height: 2.4rem; padding: .4rem .2rem; }
+.grid-wrap:fullscreen table.gapmap td button { min-height: 2.4rem; padding: .4rem .2rem; font-size: 1.05rem; }
 .rowpop .pop-h { font-size: 1.2rem; font-weight: 700; margin: 0 0 .25rem; }
 .rowpop ul.cells { list-style: none; padding: 0; margin: .5rem 0 0; }
 .rowpop ul.cells > li { margin: .4rem 0; }
