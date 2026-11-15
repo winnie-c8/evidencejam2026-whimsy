@@ -124,6 +124,15 @@
       o.el.classList.toggle('has', o.sel.length > 0);
     }
 
+    // The pack's sentence with {outcome} filled in: the chosen outcomes, or "any outcome".
+    function searched(t, names) {
+      var q = t.indexOf("'{outcome}'") >= 0;
+      var fill = names.length
+        ? names.map(function (x) { return q ? "'" + x + "'" : x; }).join(' or ')
+        : 'any outcome';
+      return t.replace(q ? "'{outcome}'" : '{outcome}', fill);
+    }
+
     function chosen(k) {
       for (var i = 0; i < P.length; i++) if (P[i].key === k) return P[i].sel;
       return [];
@@ -137,7 +146,12 @@
         if (ok) n++;
         li.hidden = !ok || n > cap;
       });
-      notes.forEach(function (x) { x.hidden = s.indexOf(x.dataset.s) < 0; });
+      var picked = P.filter(function (p) { return p.key === 'o'; })[0];
+      var names = picked ? picked.sel.map(function (v) { return label(picked, v); }) : [];
+      notes.forEach(function (x) {
+        x.hidden = s.indexOf(x.dataset.s) < 0;
+        if (!x.hidden) x.textContent = 'Searched for and not found: ' + searched(x.dataset.template, names) + '.';
+      });
       if (none) none.hidden = n > 0;
       cnt.textContent = n;
       if (badge) badge.textContent = n;

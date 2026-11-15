@@ -620,12 +620,12 @@ div.short.callout { border-left: 6px solid var(--link); background: var(--cream)
 
 /* not studied: the same compact list everywhere */
 /* Not studied: a "See not-studied pairings" button that opens a filterable list (Figma frame) */
-/* intro above it (Figma): Newsreader, a few words picked out in a warm accent. The accent is
-   deliberately not --dir-down (red = "decrease"): a gap is never a negative result. */
-.ns-sec { --ns-accent: #a3402f; /* 6.4:1 on white */ max-width: 48rem; margin: var(--space-4) 0; }
+/* intro above it (Figma): Newsreader, a few words picked out in dark blue. Not red or orange:
+   those mean "decrease" / "behind", and a gap is never a negative result. */
+.ns-sec { max-width: 48rem; margin: var(--space-4) 0; }
 .ns-h { font-size: 2rem; line-height: 1.15; text-transform: uppercase; letter-spacing: .02em; color: var(--link); margin: 0 0 .75rem; }
 .ns-intro { font-family: var(--font-heading); font-weight: 300; font-size: 1.2rem; line-height: 1.35; color: var(--text); max-width: none; margin: 0 0 var(--space-3); }
-.ns-intro em { font-style: normal; color: var(--ns-accent); }
+.ns-intro em { font-style: normal; color: var(--dark-blue); }
 details.ns { margin: var(--space-3) 0 0; }
 details.ns > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .8rem;
   background: var(--bg); border-radius: 12px; padding: 1rem 1.25rem; box-shadow: 0 2px 12px rgba(0, 0, 0, .16);
@@ -669,11 +669,13 @@ details.ns > summary .ns-c { margin-left: auto; font-size: .9rem; padding: .1rem
 details.ns ul.gaps { list-style: none; padding: 0; margin: .5rem 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); gap: .9rem var(--space-4); }
 details.ns li.gap { display: grid; grid-template-columns: 1rem 1fr 1.2fr; gap: .25rem .5rem; align-items: start;
   border: 0; padding: 0; margin: 0; max-width: none; font-size: .8125rem; line-height: 1.35; }
-details.ns li.gap::before { content: "" / ""; width: .55rem; height: .55rem; margin-top: .3em; border: 1.5px dashed var(--dir-none); border-radius: 50%; }
-details.ns li.gap .o { color: var(--link); }
-details.ns li.gap .o::before { content: "→ " / "on "; }
+details.ns li.gap::before, .ns-dot { content: "" / ""; width: .55rem; height: .55rem; margin-top: .3em; border: 1.5px dashed var(--dir-none); border-radius: 50%; }
+details.ns li.gap .o { color: var(--text); }
+details.ns li.gap .o::before { content: "→ " / "on "; color: var(--muted); }
 details.ns li.gap .searched { grid-column: 2 / -1; font-size: .75rem; color: var(--muted); }
 details.ns li.gap[hidden] { display: none; }
+.ns-key { display: flex; align-items: center; gap: .5rem; margin: 0 0 .5rem; font-size: .75rem; color: var(--muted); }
+.ns-dot { display: inline-block; flex: none; margin-top: 0 !important; }
 p.searched { font-size: .8rem; color: var(--muted); margin: .25rem 0; }
 .ns-more { font: inherit; font-size: .8125rem; color: var(--link); background: none; border: 0; padding: .25rem 0; cursor: pointer; }
 .ns-more:hover { text-decoration: underline; }

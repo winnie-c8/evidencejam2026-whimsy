@@ -876,6 +876,7 @@ OUTCOME_SLOT = '{outcome}'
 
 
 NS_SHOWN = 12  # not-studied pairings listed before "+ N more"
+NS_OPEN = 3    # a list this short starts open: no click needed to see it
 
 # Topic / outcome pickers and "+ N more" for the Not studied dropdown live in static/ns.js
 # (shared and cached across pages). Without script every pairing is listed and the pickers stay hidden.
@@ -944,16 +945,17 @@ def not_studied(q: Question) -> str:
              '<em>we simply don’t know</em>: it might help, harm, or do nothing.</p>')
     return (
         '<section class="ns-sec" aria-labelledby="not-studied">' + intro +
-        '<details class="ns" id="gaps-h" data-shown="%d"><summary><span class="ns-q" aria-hidden="true">?</span>'
+        '<details class="ns" id="gaps-h" data-shown="%d"%s><summary><span class="ns-q" aria-hidden="true">?</span>'
         '<h3><span class="v-see">See</span><span class="v-hide">Hide</span> not-studied pairings</h3>'
         '<span class="ns-c">%d</span></summary>'
         '%s<div class="ns-p"><p class="ns-t" role="status"><strong><span class="ns-n">%d</span> not-studied '
-        '<span class="ns-w">%s</span></strong></p>%s%s'
+        '<span class="ns-w">%s</span></strong></p>%s'
+        '<p class="ns-key"><span class="ns-dot" aria-hidden="true"></span> Not studied: no paper here tested the pairing.</p>%s'
         '<ul class="gaps">%s</ul><p class="ns-none" hidden>None of the chosen pairings is in the not-studied list. '
         'Remove a topic or an outcome to see more.</p><button type="button" class="ns-more" hidden></button>'
         '<p class="ns-foot">No paper in this body of research tested %s. Not studied is not a '
         'negative result: nobody here tested it.</p></div></details></section><script src="static/ns.js" defer></script>'
-        % (NS_SHOWN, n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
+        % (NS_SHOWN, ' open' if n <= NS_OPEN else '', n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
            ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings'))
 
 
