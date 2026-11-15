@@ -112,6 +112,34 @@ class ClaimTests(unittest.TestCase):
         self.assertIn('machine-sounding', self.check('q3', 'The graph is densest for seeding.'))
         self.assertIn('machine-sounding', self.check('q2', 'The studies cannot say how long. Growth, size & biomass lag.'))
 
+    # PR #88 re-review
+    def test_better_and_worse_are_directions(self):
+        self.assertIn('direction', self.check('q2', 'The studies cannot say how long. Created marshes are better than '
+                                                    'natural ones on growth, size and biomass (high certainty).'))
+        self.assertIsNotNone(self.check('q2', 'The studies cannot say how long. Restoration succeeds in every way.'))
+
+    def test_more_timeline_wording_rejected(self):
+        for t in ('Created marshes reach natural levels later on.', 'In the long run created marshes become like natural ones.',
+                  'Created marshes take a while to resemble natural ones.', 'Created marshes do converge on natural ones.'):
+            self.assertIn('duration', self.check('q2', 'The studies cannot say how long. ' + t), t)
+
+    def test_more_negative_gap_wording_rejected(self):
+        for t in ('Nursery fertilization is not supported by evidence for seedling survival.',
+                  'Nursery fertilization has no support for seedling survival.',
+                  'Livestock grazing management is unhelpful for these outcomes.',
+                  'Nobody studied the 5 interventions because they do not matter.'):
+            self.assertIn('negative', llm.validate(t, ['5']), t)
+
+    def test_commands_rejected(self):
+        for t in ('Use bigger seedlings and control vegetation.',
+                  'Seedling size helps growth (high certainty), so plant big seedlings.',
+                  'Site preparation is a good idea for growth (high certainty).'):
+            self.assertIsNotNone(self.check('q1', t), t)
+
+    def test_ellipsis_and_one_word_sentences_rejected(self):
+        self.assertIsNotNone(llm.validate('Seedling size helps growth. Wow.', []))
+        self.assertIsNotNone(llm.validate('Seedling size helps growth... and more.', []))
+
     def test_every_template_passes(self):
         import summarize
         for qid, q in self.data.questions.items():

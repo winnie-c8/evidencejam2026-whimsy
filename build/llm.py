@@ -63,9 +63,9 @@ SYSTEM = (
 DIR_WORDS = [
     (r'\bno (?:clear )?(?:effect|change|difference)\b', {'no_effect', 'comparable'}),
     (r'\b(?:increas\w*|rais\w*|ris(?:e|es|ing)|improv\w*|boost\w*|helps?|helped|helping|benefit\w*'
-     r'|works?|working|effective\w*|worth\w*)\b', {'increase', 'above_reference'}),
+     r'|works?|working|effective\w*|worth\w*|better|superior|succeed\w*)\b', {'increase', 'above_reference'}),
     (r'\b(?:decreas\w*|reduc\w*|lowers?|lowered|lowering|hurts?|harms?|harmed|hold\w* (?:\w+ )?back|worsen\w*'
-     r'|falls?|drops?|declin\w*)\b', {'decrease', 'below_reference'}),
+     r'|falls?|drops?|declin\w*|worse|inferior|bad for|kills?)\b', {'decrease', 'below_reference'}),
     (r'\b(?:behind|lag\w*|below|trail\w*|fall short)\b', {'below_reference', 'decrease'}),
     (r'\b(?:ahead|above|exceed\w*|outperform\w*)\b', {'above_reference', 'increase'}),
     (r'\b(?:level with|comparable|similar|match\w*|no different|same as)\b', {'comparable', 'no_effect'}),
@@ -75,12 +75,16 @@ DIR_WORDS = [
 CERT_RE = re.compile(r'\b(very low|high|moderate|low)(?:-| )certainty\b|\bcertainty (?:is |of )?(very low|high|moderate|low)\b')
 # words that would make "not studied" read as a failed or harmful result
 NEGATIVE = ('ineffective', 'does not work', "doesn't work", 'no effect on', 'harmful', 'fails', 'failed', 'useless',
-            'not shown to work', 'not been shown', 'not worth', 'skip')
+            'not shown to work', 'not been shown', 'not worth', 'skip', 'not supported', 'no support', 'unhelpful',
+            'do not matter', "don't matter", 'unimportant', 'pointless')
 # claims stronger than any grade in the pack, or advice the pack doesn't give
 OVERCLAIM = re.compile(r'\b(?:proven|proves?|clearly|clear evidence|definitely|certainly|always|guarantee\w*|'
                        r'conclusive\w*|strong(?:ly)?|weak(?:ly)?|robust|well[- ](?:established|supported)|'
                        r'will|should|must|recommend\w*|best practice|key step|the key|prioriti\w*|'
-                       r'managers can|practitioners can)\b')
+                       r'managers can|practitioners can|good idea|bad idea)\b')
+# advice given as a command: "Use bigger seedlings", "..., so plant big seedlings"
+COMMAND = re.compile(r'(?:^|[.!?]\s+|\bso\s+)(?:use|plant|apply|choose|avoid|try|control|consider|add|start|stop|'
+                     r'pick|select)\b')
 # reads as machine-written: dashes, symbols copied from labels, jargon, stock filler phrases
 STYLE = re.compile(r'[\u2012-\u2015&/]|\s-\s|--|\b(?:notably|importantly|crucial(?:ly)?|delve\w*|underscor\w*|'
                    r'highlight\w*|landscape|comprehensive|it is worth noting|it is important to note|'
@@ -88,7 +92,7 @@ STYLE = re.compile(r'[\u2012-\u2015&/]|\s-\s|--|\b(?:notably|importantly|crucial
 # Q2's honest answer is that nobody knows how long: any timeline or trajectory is invented
 TIMELINE = re.compile(r'\b(?:years?|months?|decades?|eventually|quickly|rapidly|soon|slowly|long[- ]term|'
                       r'short[- ]term|over time|with time|in time|catch(?:es|ing)? up|caught up|gradual\w*|'
-                      r'matur\w*)\b')
+                      r'matur\w*|later|in the long run|takes? a while|converg\w*|over the years|becomes? like)\b')
 NUMBER_WORDS = {w: i for i, w in enumerate(
     'zero _ two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen '
     'seventeen eighteen nineteen twenty'.split()) if w != '_'}
@@ -288,7 +292,8 @@ def check_claims(text: str, fl: List[Fact]) -> Optional[str]:
         for f in fl:
             if f.context and not re.search(f.context, clause):
                 continue
-            at = [clause.find(n) for n in f.names if n in clause]
+            # whole words only: the name "rest" must not match inside "restoration"
+            at = [m.start() for n in f.names for m in [re.search(r'(?<!\w)%s(?!\w)' % re.escape(n), clause)] if m]
             if at:
                 hits.append((min(at), f))
         if any(f.exclusive for _, f in hits):
@@ -340,8 +345,12 @@ def validate(text: str, allowed: List[str], fl: Optional[List[Fact]] = None) -> 
         return 'markup'
     if not t.endswith(('.', '!', '?')):
         return 'cut off mid-sentence'
+    if '...' in t or '\u2026' in t:
+        return 'ellipsis'
     if len(re.findall(r'[.!?](?=\s|$)', t)) > MAX_SENTENCES:
         return 'more than %d sentences' % MAX_SENTENCES
+    if any(len(s.split()) < 3 for s in re.split(r'(?<=[.!?])\s+', t)):
+        return 'a sentence too short to say anything'
     low = t.lower()
     m = TIMELINE.search(low)
     if m:
@@ -349,6 +358,9 @@ def validate(text: str, allowed: List[str], fl: Optional[List[Fact]] = None) -> 
     m = OVERCLAIM.search(low)
     if m:
         return 'overclaims: %r' % m.group(0)
+    m = COMMAND.search(low)
+    if m:
+        return 'gives advice: %r' % m.group(0).strip()
     m = STYLE.search(low)
     if m:
         return 'machine-sounding wording: %r' % m.group(0)
