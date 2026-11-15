@@ -60,6 +60,7 @@
   --dir-up: #1b6e3a;       /* green: increase */
   --dir-down: #c0262d;     /* red: decrease */
   --dir-mixed: #1a5fb4;    /* blue: mixed */
+  --accent: #a3402f;       /* 6.4:1 on white: words picked out in headings (not --dir-down: red = decrease) */
   --dir-none: #5f5f5f;     /* grey: no effect / unclear */
   --gap: #767676;
   --d-thin: #eef3fa;
@@ -514,7 +515,7 @@ button.help:hover { background: var(--link); color: var(--bg); }
 
 /* sidebar layout */
 .layout { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--space-4); margin: 0; padding: 0 var(--edge); }
-.layout main { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
+.layout > main, .layout > .content { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
 .side { position: sticky; top: var(--top-h); align-self: start; max-height: calc(100vh - var(--top-h)); overflow-y: auto; padding: var(--space-3) 0; }
 /* the left menu, on every page (home's section menu and the other pages' sidebar look the same) */
 ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
@@ -529,7 +530,7 @@ ul.qnav.more { margin-top: var(--space-3); }
 ul.jumps { list-style: none; margin: 0 0 .5rem 4.25rem; padding: 0; font-size: var(--text-sm); }
 ul.jumps a { display: block; padding: .15rem 0; color: var(--muted); text-decoration: none; }
 ul.jumps a:hover { color: var(--link); text-decoration: underline; }
-.layout main h1 { margin-top: 1.5rem; }
+.layout > main h1, .layout > .content h1 { margin-top: 1.5rem; }
 
 /* short answer: the cream box */
 p.short { background: var(--cream); border-radius: 6px; padding: .75rem 1rem; max-width: none; }
@@ -561,7 +562,7 @@ section.tab h2 { color: var(--link); }
 /* Graph page: the left menu runs across the top (same look, in a row) so the graph gets the full width */
 .layout.wide { display: block; }
 .layout.wide::before { display: none; }
-.layout.wide main { max-width: none; }
+.layout.wide > main { max-width: none; }
 .layout.wide .side { position: static; max-height: none; overflow: visible; padding: var(--space-2) 0 0; }
 .layout.wide .side nav { display: flex; flex-wrap: wrap; gap: 0 var(--space-3);
   border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
@@ -707,10 +708,19 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 .boxnav { list-style: none; margin: 0; padding: 0; display: flex; border: 1px solid var(--text); border-top: 0; }
 .boxnav li { max-width: none; border-left: 1px solid var(--text); }
 .boxnav li:first-child { border-left: 0; }
-.boxnav a { display: block; padding: .3rem .7rem; font-size: .8125rem; text-transform: uppercase;
-  letter-spacing: .02em; color: var(--text); text-decoration: none; }
-.boxnav a:hover { text-decoration: underline; }
-.boxnav a[aria-current="page"] { font-weight: 700; }
+.boxnav a { position: relative; isolation: isolate; display: block; min-width: 4.5rem; padding: .45rem 1.4rem;
+  font-size: .9375rem; text-align: center; text-transform: uppercase; letter-spacing: .02em; color: var(--text);
+  text-decoration: none; transition: color .6s ease-in-out; }
+/* hover / focus: a blue fill rises from the bottom and the text turns white (like mecha-xyz) */
+.boxnav a::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--link);
+  transform: scaleY(0); transform-origin: bottom; transition: transform .6s cubic-bezier(.65, 0, .35, 1); }
+.boxnav a:hover, .boxnav a:focus-visible { color: #fff; }
+.boxnav a:hover::before, .boxnav a:focus-visible::before { transform: scaleY(1); }
+.boxnav a[aria-current="page"], .boxnav a.here { font-weight: 700; }
+.boxnav a[aria-current="page"]::after, .boxnav a.here::after { content: ""; position: absolute; left: 25%; right: 25%; bottom: .2rem;
+  height: 2px; background: var(--link); transition: background-color .6s ease-in-out; }
+.boxnav a:hover::after, .boxnav a:focus-visible::after { background: #fff; }   /* stays visible on the blue fill */
+@media (prefers-reduced-motion: reduce) { .boxnav a, .boxnav a::before { transition: none; } }
 
 /* Left column on every page: --col wide, then a thin vertical line (fixed to the screen, from the
    top line down) in the middle of the --gap before the content. --col-x is where the column starts,
@@ -768,7 +778,7 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
   .site-top-in, .layout { padding: 0 var(--space-2); }
   .site-top .logo { margin-top: .6rem; }
   .site-top .logo img { width: 7.5rem; }
-  .boxnav a { padding: .15rem .45rem; font-size: .8125rem; }
+  .boxnav a { min-width: 0; padding: .3rem .6rem; font-size: .8125rem; }
   .home-grid { display: block; padding: 0 var(--space-2); }
   .home-side { position: static; width: auto; height: auto; padding: 0; }
   footer.site { padding: .6rem var(--space-2); }
@@ -865,3 +875,93 @@ ol.densest { margin-bottom: .2rem; }
 details.more-densest > summary { cursor: pointer; color: var(--link); margin: 0 0 .5rem; }
 ul.key-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .75rem; }
 ul.key-list li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+/* Question page hero (Figma): kicker, the question with one phrase in the accent colour, dotted
+   blue shapes, a picture (beside the text for Q1, a landscape band for Q2 and Q3) and a blue bar
+   of counts. Pictures and shapes are decorative (alt="", aria-hidden). */
+main.has-hero { max-width: none; margin: 0; padding: 0; }
+.has-hero > .content.solo { max-width: 62rem; margin: 0 auto; padding: 0 var(--edge) 3rem; }
+.hero { position: relative; overflow: hidden; isolation: isolate; padding: var(--space-4) var(--edge) 0; }
+.hero-in { position: relative; z-index: 1; max-width: 90rem; margin: 0 auto; }
+.hero-side .hero-in { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-4); align-items: end; }
+.hero-txt { padding: clamp(1rem, 5vw, 5rem) clamp(0rem, 3vw, 3rem) var(--space-4); }
+.hero .kicker { margin: 0 0 1rem; font-size: clamp(1rem, 1.6vw, 1.5rem); font-weight: 400; letter-spacing: .14em; }
+.hero h1 { margin: 0; max-width: 24ch; font-family: var(--font-body); font-weight: 400; color: var(--text);
+  font-size: clamp(1.75rem, 3.6vw, 3.4rem); line-height: 1.1; letter-spacing: -.01em; }
+.hero-band h1 { max-width: 30ch; }
+.hero .hl { color: var(--accent); }
+.hero-lead { margin: clamp(2rem, 8vw, 7rem) 0 0 clamp(0rem, 4vw, 4rem); max-width: 46rem; font-size: 1rem; }
+.hero-pic img { display: block; width: 100%; height: auto; }
+.hero-side .hero-pic { margin-right: calc(-1 * var(--edge)); align-self: end; }
+.hero-side .hero-pic img { max-height: 44rem; width: auto; max-width: 100%; margin-left: auto; }
+.hero-band .hero-pic { margin: 0 calc(-1 * var(--edge)); }
+.hero-band .hero-pic img { height: clamp(14rem, 32vw, 26rem); object-fit: cover; object-position: center 72%;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 25%); mask-image: linear-gradient(to bottom, transparent, #000 25%); }
+.hero-band .hero-txt { padding-bottom: var(--space-2); }
+.hero.no-pic .hero-txt { padding-bottom: var(--space-5); }
+/* dotted shapes: a dot pattern clipped to soft blobs */
+.blob { position: absolute; z-index: 0; pointer-events: none; opacity: .75;
+  background-image: radial-gradient(circle, var(--link) 1.1px, transparent 1.4px); background-size: 7px 7px;
+  border-radius: 58% 42% 63% 37% / 46% 55% 45% 54%; }
+.blob.b1 { top: -12%; left: 36%; width: 34rem; height: 26rem; transform: rotate(-12deg); }
+.blob.b2 { top: 34%; left: -6%; width: 26rem; height: 24rem; opacity: .55; }
+.blob.b3 { bottom: 12%; right: -8%; width: 30rem; height: 16rem; transform: rotate(8deg); opacity: .5; }
+.hero-side .blob.b3 { bottom: 30%; right: 4%; }
+/* the blue bar of counts */
+.hero-stats { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-around; gap: var(--space-2) var(--space-4);
+  padding: clamp(1rem, 2.5vw, 2rem) var(--edge); background: var(--link); color: #f2ead9; }   /* cream as in Figma: 5.4:1 */
+.hero-stats > div { display: flex; align-items: center; gap: .9rem; }
+.hero-stats dt { font-size: clamp(.8rem, 1.2vw, 1.1rem); letter-spacing: .08em; text-transform: uppercase; max-width: 22ch; line-height: 1.1; }
+.hero-stats dd { margin: 0; font-family: var(--font-heading); font-weight: 300; font-size: clamp(2rem, 4vw, 3.6rem); line-height: 1; }
+@media (max-width: 760px) {
+  .hero-side .hero-in { grid-template-columns: 1fr; }
+  .hero-side .hero-pic { display: none; }   /* phones: the question first, no tall picture */
+  .hero-txt { padding: var(--space-3) 0; }
+  .hero-lead { margin: var(--space-3) 0 0; }
+  .blob.b1 { left: 30%; width: 20rem; height: 16rem; }
+  .blob.b2 { width: 14rem; height: 14rem; }
+  .hero-stats { justify-content: flex-start; }
+  .hero-stats > div { flex: 1 1 40%; }
+}
+
+/* Q3 (Figma "Desktop - 5"): the photo fills the hero, sky included, under the Figma's own dotted
+   clouds (static/hero-q3-clouds.svg); the header sits over the sky until the photo scrolls away. */
+.hero-full, .hero-sky { margin-top: calc(-1 * var(--top-h)); padding-top: var(--top-h); min-height: clamp(34rem, 65vw, 58.6rem);
+  box-sizing: border-box; }
+.hero-full { background: #2f57b4; }   /* the photo's own top-of-sky blue, as Figma's Rectangle 16 */   /* the photo's own top-of-sky blue, as Figma's Rectangle 16 */
+.hero-bg { position: absolute; inset: 7.7vw 0 0; z-index: -1; }   /* Figma: photo starts 111px down a 1440 frame */
+.hero-bg img { width: 100%; height: 100%; object-fit: cover; object-position: center top;
+  -webkit-mask-image: linear-gradient(transparent, #000 8%); mask-image: linear-gradient(transparent, #000 8%); }
+.hero-clouds { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
+.hero-full .hero-txt { padding-top: clamp(1rem, 6vw, 5.5rem); }
+.hero-full .kicker { color: #fff; }
+.hero-full h1 { max-width: min(64rem, 100%); }
+@media (max-width: 760px) {   /* phones: the question on plain sky, the photo below it */
+  .hero-full { display: flex; flex-direction: column; min-height: 0; }
+  .hero-full .hero-bg { position: relative; inset: auto; order: 2; margin: 0 calc(-1 * var(--edge)); height: 15rem; }
+  .hero-full .hero-bg img { object-position: center 35%; }
+  .hero-full h1 { color: #fff; }
+  .hero-full .hl { color: #ffd4c2; }   /* light accent: 9:1 on the sky blue */
+  .hero-full .hero-txt { padding-bottom: var(--space-3); }
+}
+.site-top { transition: background-color .3s; }
+.site-top.over { background: linear-gradient(rgba(255, 255, 255, .7), rgba(255, 255, 255, .7)) 0 var(--top-line) / 100% 1px no-repeat, transparent; }
+.site-top.over.light .logo img { filter: brightness(0) invert(1) sepia(.35) brightness(.97); }   /* cream, as in Figma */
+.site-top.over.light .boxnav, .site-top.over.light .boxnav li { border-color: #fff; }
+.site-top.over.light .boxnav a { color: #fff; }
+.site-top.over.light .boxnav a[aria-current="page"]::after { background: #fff; }
+.site-top.over.light a:focus-visible { outline-color: #fff; }
+
+/* Q2 (Figma "Desktop - 4"): white sky fading to pale blue (Rectangle 15: y 321 to 606 of the 938px
+   hero), the marsh photo from y 573 (cropped as in the frame), and the frame's dotted clouds over both. */
+.hero-sky { background: linear-gradient(#fff 34.2%, #d7eef4 64.6%); }
+.hero-sky .hero-bg { inset: 39.8vw 0 auto; height: 31.7vw; z-index: -1; }
+.hero-sky .hero-bg img { object-position: center top; -webkit-mask-image: none; mask-image: none; }
+.hero-sky .hero-clouds { z-index: 0; }
+.hero-sky .hero-txt { padding-top: clamp(1rem, 16vw, 15rem); }
+.hero-sky h1 { max-width: 34ch; }
+@media (max-width: 760px) {
+  .hero-sky { display: flex; flex-direction: column; min-height: 0; }
+  .hero-sky .hero-bg { position: relative; inset: auto; order: 2; margin: 0 calc(-1 * var(--edge)); height: 13rem; }
+  .hero-sky .hero-txt { padding-bottom: var(--space-3); }
+}

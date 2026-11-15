@@ -742,24 +742,41 @@ with open(os.path.join(ROOT, 'static', 'tree.svg'), encoding='utf-8') as _f:
 
 def page(data: SiteData, filename: str, title: str, description: str, body: str, *,
          side: bool = True, jumps: Optional[List[Tuple[str, str]]] = None,
-         script: Optional[str] = None, home_menu: Optional[str] = None, wide: bool = False) -> str:
+         script: Optional[str] = None, home_menu: Optional[str] = None, wide: bool = False,
+         hero: str = '') -> str:
     """Every page has the same top bar (Figma "home page" frame): a thin line across the top of
     the screen, the boxed menu hanging from it (the line is the boxes' top edge) and the WHIMSY
     logo, which always links home. The bar stays at the top while scrolling.
     Home (home_menu given) then has the tree and a numbered menu of its own sections on the left;
     every other page has the left sidebar, styled the same way."""
     main = '<main id="main" tabindex="-1">\n%s\n</main>' % body
-    top = [('index.html', 'Home')] + [(graph_file(q), 'Graph') for q in data.graphs] + \
-          [('method.html', 'Guide')]
-    boxed = ''.join('<li><a href="%s"%s>%s</a></li>' % (esc(h), ' aria-current="page"' if h == filename else '',
-                                                       esc(t)) for h, t in top)
-    header = ('<header class="site-top"><div class="site-top-in"><a class="logo" href="index.html">'
+    # HOME | Q1 | Q2 | Q3 (Figma). Graph and Guide stay in the left menu. Each Qn also carries the
+    # question's name for screen readers. The open page and its graph mark their own box.
+    top = [('index.html', 'Home', '', ())] + [
+        ('%s.html' % qid, 'Q%d' % n, question_name(q), (graph_file(qid),) if qid in data.graphs else ())
+        for n, (qid, q) in enumerate(data.questions.items(), 1)]
+    boxed = ''.join('<li><a href="%s"%s>%s%s</a></li>'
+                    % (esc(h), ' aria-current="page"' if h == filename else (' class="here"' if filename in also else ''),
+                       esc(t), '<span class="sr-only">: %s</span>' % esc(name) if name else '')
+                    for h, t, name, also in top)
+    over = 'hero-full' in hero or 'hero-sky' in hero   # header see-through over the hero's sky
+    header = ('<header class="site-top%s"><div class="site-top-in"><a class="logo" href="index.html">'
               '<img src="static/logo.svg" alt="Whimsy: home" width="293" height="51"></a><nav aria-label="Main"><ul class="boxnav">%s</ul></nav>'
-              '</div></header>' % boxed)
+              '</div></header>' % ((' over light' if 'hero-full' in hero else ' over') if over else '', boxed))
+    if over:   # on a full-photo hero the header is see-through until the photo scrolls past
+        header += ('<script>addEventListener("DOMContentLoaded",function(){var h=document.querySelector(".site-top"),'
+                   'b=document.querySelector(".hero");if(!h||!b)return;'
+                   'function f(){h.classList.toggle("over",b.getBoundingClientRect().bottom>h.offsetHeight);}'
+                   'addEventListener("scroll",f,{passive:true});addEventListener("resize",f);f();});</script>')
     if home_menu is not None:
         layout = ('%s<div class="home-grid"><div class="home-side">%s'
                   '<nav class="home-menu" aria-label="On this page">%s</nav></div>%s</div>'
                   % (header, TREE_HTML, home_menu, main))
+    elif side and hero:
+        # question pages: the full-width hero, then the content; no left menu (the top menu has
+        # Home and Q1-Q3, the page links to its graph and to the Guide)
+        layout = ('%s<main id="main" tabindex="-1" class="has-hero">%s<div class="content solo">\n%s\n</div></main>'
+                  % (header, hero, body))
     elif side:
         # wide (the graph page): the menu runs across the top so the content gets the full width
         layout = '%s<div class="layout%s">%s%s</div>' % (header, ' wide' if wide else '',
@@ -959,14 +976,74 @@ def not_studied(q: Question) -> str:
            ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings'))
 
 
+# The phrase picked out in each question's hero (Figma). Only used if the question contains it.
+HERO_MARK = {
+    'q1': 'planting-stock traits',
+    'q2': 'biodiversity and function',
+    'q3': 'intervention-outcome combinations',
+}
+HERO_EXT = ('webp', 'avif', 'jpg', 'png')
+# 'full': the photo fills the whole hero, sky included, with the header over it (Q3 in Figma).
+# 'sky': a white-to-pale-blue sky gradient with the photo along the bottom (Q2 in Figma).
+# Default: Q1-style picture beside the text ('effects' questions), else a landscape band.
+HERO_STYLE = {'q2': 'sky', 'q3': 'full'}
+
+
+def hero_image(qid: str) -> Optional[str]:
+    """static/hero-<qid>.<ext> if the team added a picture for this question."""
+    for ext in HERO_EXT:
+        if os.path.exists(os.path.join(ROOT, 'static', 'hero-%s.%s' % (qid, ext))):
+            return 'static/hero-%s.%s' % (qid, ext)
+    return None
+
+
+def hero_stats(data: SiteData, q: Question) -> List[Tuple[str, str]]:
+    """The blue bar under the hero: the same four labels on every question (Figma), each count
+    taken straight from that question's data (0 where it has none)."""
+    papers = len({(e.doi or e.title) for e in q.evidence.values()})
+    return [('Findings', esc(len(q.all_findings()))), ('Not studied', esc(len(q.gaps))),
+            ('Papers', esc(papers)), ('Combined-treatment claims', esc(len(q.extra.get('interactions') or [])))]
+
+
+def hero(data: SiteData, q: Question, n: int, name: str, lead: str = '') -> str:
+    """Top of a question page (Figma): kicker, the question with one phrase picked out, dotted
+    shapes, a picture, and a blue bar of counts. Q1 has the picture beside the text, the others
+    a landscape band under it. Shapes and picture are decorative."""
+    text = esc(q.text)
+    mark = HERO_MARK.get(q.qid)
+    if mark and esc(mark) in text:
+        text = text.replace(esc(mark), '<span class="hl">%s</span>' % esc(mark), 1)
+    img = hero_image(q.qid)
+    side = data.kinds.get(q.qid) == 'effects'
+    style = HERO_STYLE.get(q.qid) if img is not None else None
+    full = style in ('full', 'sky')
+    pic = '<div class="hero-pic"><img src="%s" alt="" decoding="async"></div>' % esc(img) if img else ''
+    clouds = os.path.join(ROOT, 'static', 'hero-%s-clouds.svg' % q.qid)
+    if full and os.path.exists(clouds):   # the Figma frame's own dotted clouds
+        blobs = '<img class="hero-clouds" src="static/hero-%s-clouds.svg" alt="">' % esc(q.qid)
+    else:
+        blobs = ''.join('<span class="blob b%d" aria-hidden="true"></span>' % i for i in (1, 2, 3))
+    if full:   # the photo goes behind everything, not in the text's grid
+        blobs, pic = pic.replace('hero-pic', 'hero-bg') + blobs, ''
+    stats = ''.join('<div><dt>%s</dt><dd>%s</dd></div>' % (esc(k), v) for k, v in hero_stats(data, q))
+    return ('<div class="hero %s%s">%s<div class="hero-in"><div class="hero-txt">'
+            '<p class="kicker">Q%d · %s</p><h1>%s</h1>%s</div>%s</div></div>'
+            '<dl class="hero-stats" aria-label="This question in numbers">%s</dl>'
+            % ('hero-full' if style == 'full' else 'hero-sky' if style == 'sky' else 'hero-side' if side else 'hero-band', '' if img else ' no-pic', blobs, n, esc(name), text,
+               '<p class="hero-lead">%s</p>' % lead if lead else '', pic, stats))
+
+
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
                   jumps: List[Tuple[str, str]], short: Optional[str] = None, scripts: str = '') -> str:
     """The one template every question page uses, in this order: kicker + h1, short answer,
     limitations, MAIN VIEW, not studied, link to the Guide."""
     n = list(data.questions).index(q.qid) + 1
     name = question_name(q)
-    body = '<p class="kicker">Question %02d · %s</p><h1>%s</h1>' % (n, esc(name), esc(q.text))
-    body += short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
+    lead = ''
+    if data.kinds.get(q.qid) == 'effects':
+        lead = '<span class="hl">Each finding</span> below shows its direction, certainty and number of studies; open one to read the studies behind it.'
+    top = hero(data, q, n, name, lead)
+    body = short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
     body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
     body += not_studied(q)
@@ -974,7 +1051,7 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
              'comes from, and the limits →</a></p>')
     jumps = [('#short', 'Short answer')] + jumps + ([('#not-studied', 'Not studied')] if q.gaps else [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
-                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps)
+                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps, hero=top)
 
 
 def by_strength(fs: Iterable[Finding]) -> List[Finding]:
@@ -1637,7 +1714,8 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'logo.svg'):
+    heroes = [f for f in os.listdir(os.path.join(ROOT, 'static')) if f.startswith('hero-')]
+    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'logo.svg'] + heroes:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
