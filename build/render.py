@@ -875,31 +875,88 @@ def search_template(gaps: List[Gap]) -> Optional[str]:
 OUTCOME_SLOT = '{outcome}'
 
 
+NS_SHOWN = 12  # not-studied pairings listed before "+ N more"
+NS_OPEN = 3    # a list this short starts open: no click needed to see it
+
+# Topic / outcome pickers and "+ N more" for the Not studied dropdown live in static/ns.js
+# (shared and cached across pages). Without script every pairing is listed and the pickers stay hidden.
+
+
 def not_studied(q: Question) -> str:
-    """Gaps, the same compact way on every page: grouped by what was tested, each one
-    "? Not studied: <outcome>". Never worded as a negative result."""
+    """Gaps, the same way on every page: a "See not-studied pairings" dropdown listing each
+    pairing as "<topic> → <outcome>", with topic and outcome filters. Never worded as a negative
+    result: each item says "Not studied" (to screen readers; the dashed "?" ring shows it)."""
     if not q.gaps:
         return ''
+    subjects: Dict[str, str] = {}
+    outcomes: Dict[str, str] = {}
     groups: Dict[str, List[Gap]] = {}
     for g in q.gaps:
-        groups.setdefault(g.subject_label, []).append(g)
-    parts = []
-    for subj, gs in groups.items():
+        subjects.setdefault(g.subject_id, g.subject_label)
+        outcomes.setdefault(g.outcome_id, g.outcome_label)
+        groups.setdefault(g.subject_id, []).append(g)
+    s_ix = {k: str(i) for i, k in enumerate(subjects)}
+    o_ix = {k: str(i) for i, k in enumerate(outcomes)}
+    n = len(q.gaps)
+    word = plural(n, 'pairing', 'pairings')
+    # What was searched for: said once per topic when the pack uses one sentence for all its
+    # outcomes (shown when that topic is picked), else on each pairing.
+    notes, own = [], set()
+    for sid, gs in groups.items():
         template = search_template(gs)
-        note = ''
-        if template is not None:
-            note = ('<p class="searched" data-template="%s">Searched for and not found: %s.</p>'
-                    % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
-        items = ''.join(
-            '<li class="gap" id="gap-%s"><strong>Not studied:</strong> %s%s</li>'  # the "?" is drawn by CSS (261 on Q3)
-            % (esc(g.slug), esc(g.outcome_label),
-               '' if template is not None else ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for))
-            for g in gs)
-        parts.append('<section class="gapgrp" aria-label="%s"><h3>%s</h3>%s<ul class="gaps">%s</ul></section>'
-                     % (esc(subj), esc(subj), note, items))
-    return fold('gaps-h', 'Not studied', 2, '%d %s' % (len(q.gaps), plural(len(q.gaps), 'pairing', 'pairings')),
-                '<p>Looked for in this body of research and not found. That is not evidence that something '
-                'fails: nobody here tested it.</p>%s' % ''.join(parts))
+        if template is None:
+            own.update(g.slug for g in gs)
+            continue
+        notes.append('<p class="searched" data-s="%s" data-template="%s">Searched for and not found: %s.</p>'
+                     % (s_ix[sid], esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
+    items = ''.join(
+        '<li class="gap" id="gap-%s" data-s="%s" data-o="%s"><strong class="sr-only">Not studied:</strong> '
+        '%s <span class="o">%s</span>%s</li>'
+        % (esc(g.slug), s_ix[g.subject_id], o_ix[g.outcome_id], esc(g.subject_label), esc(g.outcome_label),
+           ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for) if g.slug in own else '')
+        for g in q.gaps)
+
+    def picker(key: str, label: str, name: str, empty: str, opts: Dict[str, str], ix: Dict[str, str]):
+        """A box of removable chips plus a "Choose a ..." button that opens a grid of toggle
+        buttons, one per value: several values can be chosen. A chosen value leaves the grid and
+        shows as a chip (Figma frames 7-9)."""
+        if len(opts) < 2:
+            return '', ''
+        box = ('<div class="ns-pick" data-k="%s" data-name="%s" data-panel="ns-%s-p">'
+               '<span class="ns-lab" id="ns-%s-l">%s</span><div class="ns-box"><span class="ns-chips"></span>'
+               '<button type="button" class="ns-open" id="ns-%s-b" aria-labelledby="ns-%s-l ns-%s-b" '
+               'aria-expanded="false" aria-controls="ns-%s-p">%s</button></div></div>'
+               % (key, esc(name), key, key, esc(label), key, key, key, key, esc(empty)))
+        panel = ('<div class="ns-panel" id="ns-%s-p" role="group" aria-labelledby="ns-%s-l" hidden>%s</div>'
+                 % (key, key, ''.join('<button type="button" data-v="%s">%s</button>'
+                                      % (ix[k], esc(v)) for k, v in opts.items())))
+        return box, panel
+    sb, sp = picker('s', 'Topic (intervention)', 'Topic', 'Choose a topic', subjects, s_ix)
+    ob, op = picker('o', 'Outcome', 'Outcome', 'Choose an outcome', outcomes, o_ix)
+    filters = sb + ob + sp + op
+    ns_t, no_t = len(subjects), len(outcomes)
+    scope = 'Across %d %s and %d %s.' % (ns_t, plural(ns_t, 'topic', 'topics'), no_t, plural(no_t, 'outcome', 'outcomes'))
+    if filters:
+        scope += ' Choose topics or outcomes to narrow the list.'
+    scope = '<p class="ns-sub">%s</p>' % scope if n > 1 else ''
+    intro = ('<h2 class="ns-h" id="not-studied">Not studied</h2>'
+             '<p class="ns-intro">These are combinations <em>nobody</em> in this body of research has '
+             '<em>tested</em>. We searched for studies and found none. <em>“Not studied”</em> means '
+             '<em>we simply don’t know</em>: it might help, harm, or do nothing.</p>')
+    return (
+        '<section class="ns-sec" aria-labelledby="not-studied">' + intro +
+        '<details class="ns" id="gaps-h" data-shown="%d"%s><summary><span class="ns-q" aria-hidden="true">?</span>'
+        '<h3><span class="v-see">See</span><span class="v-hide">Hide</span> not-studied pairings</h3>'
+        '<span class="ns-c">%d</span></summary>'
+        '%s<div class="ns-p"><p class="ns-t" role="status"><strong><span class="ns-n">%d</span> not-studied '
+        '<span class="ns-w">%s</span></strong></p>%s'
+        '<p class="ns-key"><span class="ns-dot" aria-hidden="true"></span> Not studied: no paper here tested the pairing.</p>%s'
+        '<ul class="gaps">%s</ul><p class="ns-none" hidden>None of the chosen pairings is in the not-studied list. '
+        'Remove a topic or an outcome to see more.</p><button type="button" class="ns-more" hidden></button>'
+        '<p class="ns-foot">No paper in this body of research tested %s. Not studied is not a '
+        'negative result: nobody here tested it.</p></div></details></section><script src="static/ns.js" defer></script>'
+        % (NS_SHOWN, ' open' if n <= NS_OPEN else '', n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
+           ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings'))
 
 
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
@@ -915,7 +972,7 @@ def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
     body += not_studied(q)
     body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
-    jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else [])
+    jumps = [('#short', 'Short answer')] + jumps + ([('#not-studied', 'Not studied')] if q.gaps else [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
                 body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps)
 
@@ -1575,7 +1632,7 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'logo.svg'):
+    for f in ('style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'logo.svg'):
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
