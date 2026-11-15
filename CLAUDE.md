@@ -31,12 +31,12 @@ Audience: restoration practitioners (non-coders, e.g. conservation authorities, 
 5. Q1 graph: labels as DOM/SVG text (no canvas), direction + certainty readable without hover and not by colour alone, moderation edge points at the edge it changes, combination node shows members, don't present multi-hop paths as one tested effect.
 6. Output = static files with index.html, works OFFLINE (no CDNs, no external fonts/scripts). Judges serve with `python -m http.server`, test with Lighthouse + axe-core.
 7. One command from a clean checkout: `./build.sh site/`. Pinned deps. Judges run on ARM64 (aarch64) Linux. A broken build halves automatic scores.
-8. LLM optional, build time only. Read BRINE_URL / BRINE_MODEL / BRINE_API_KEY from env. NEVER hardcode or commit keys. Token use counts against the sustainability score (we currently use no LLM).
+8. LLM optional, build time only. Read BRINE_URL / BRINE_MODEL / BRINE_API_KEY from env. NEVER hardcode or commit keys. Token use counts against the sustainability score. We use it only for the 3 home-page summaries (`build/llm.py`: small prompts, every reply validated, template fallback; `--no-llm` turns it off).
 9. Accessibility (WCAG 2.1 AA) is also Lane 3's sustainability prize: keyboard nav, contrast, semantic HTML, one h1, lang attr, table view of the graph, no sideways scroll at 375px.
 10. Page weight per view is scored and ranked against other teams. Keep answer pages light: quotes live on `sources-<slug>.html` pages, not on the answer pages. Don't add images, fonts or libraries without checking the size (the independent checker prints every page's size).
 
 ## Code layout
-- `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; template-only, LLM off), `check.py` (built-in checker)
+- `build.sh` → `build/build.py` (entry), `load.py` (read answers), `render.py` (HTML), `graph_svg.py` (Q1 SVG), `summarize.py` (prose; templates, plus home summaries from `llm.py` when BRINE_* are set), `check.py` (built-in checker)
 - `static/style.css`; `static/graph.js` (Q1 graph only: drag boxes/arrows, pin highlight, filters, sort, side panel with sources; its routing mirrors `route_all` in graph_svg.py, keep them in step). `FLOW` in graph_svg.py switches the graph between top-down ('down', default) and left-to-right ('right')
 - **Add a new question:** drop its JSON in `answers/` and rebuild; the layout is picked from the data's shape (`detect_kind()` in `load.py`: gap map → comparison → effects → generic), and a `qN_..._graph.json` gets its own `qN-graph.html`. Per-question wording (`AUDIENCE`, `GRAPH_INTRO` in `render.py`) falls back to a default.
 - `tests/check_independent.py` (stdlib-only second checker), `tests/test_checkers.py` (build + mutation tests: each breaks the site on purpose and must be caught), `tests/a11y/` (axe, phone width, keyboard Tab order and focus outlines; CI only, needs Node)
