@@ -920,37 +920,54 @@ def problem_section() -> str:
             '</div></section>')
 
 
-# Home question blocks (Figma "home page" frame): a short title per question and its photos,
-# placed as in the frame. Each photo: (file in static/, left, top, width) in frame px, measured
-# from the block's top-left (the content column starts at x 525 and is 890 px wide).
+# Home question titles (Figma), a plain question each; a new qN uses its short name.
 HOME_TITLE = {
     'q1': 'What helps planted seedlings survive and grow?',
     'q2': 'How long until a created marsh matches a natural one?',
     'q3': 'Where is grassland restoration research missing?',
 }
-HOME_PHOTOS = {
-    'q1': (574, [('home-02-tree-planting.webp', 0, 179, 425, 239), ('home-04-grassland.webp', 457, 0, 406, 254),
-                 ('home-03-restored-wetland-aerial.webp', 474, 326, 372, 248)]),
-    'q2': (426, [('home-05-parkland.webp', 476, 0, 400, 268), ('home-06-seedling-harvest.webp', 8, 134, 437, 292)]),
-    'q3': (649, [('home-08-toronto-wetland.webp', 8, 0, 413, 310), ('home-07-seedling-roots.webp', 401, 344, 457, 305)]),
-}
-HOME_COL = 890
 # Hide the reveal-on-scroll parts before first paint (static/reveal.js shows them); not for
 # people who ask for reduced motion. Without script nothing is hidden.
 REVEAL_EARLY = ('<script>if(!matchMedia("(prefers-reduced-motion: reduce)").matches)'
                 'document.documentElement.classList.add("rv-js");</script>')
 
 
-def home_photos(qid: str) -> str:
-    """The question's photo cluster; decorative, so hidden from screen readers and lazy loaded."""
-    if qid not in HOME_PHOTOS:
-        return ''
-    h, photos = HOME_PHOTOS[qid]
-    imgs = ''.join(
-        '<img class="rv" src="static/%s" alt="" loading="lazy" decoding="async" width="%d" height="%d" '
-        'style="left:%.2f%%;top:%.2f%%;width:%.2f%%">'
-        % (f, w, ph, x * 100 / HOME_COL, y * 100 / h, w * 100 / HOME_COL) for f, x, y, w, ph in photos)
-    return '<div class="hphotos" aria-hidden="true" style="aspect-ratio:%d / %d">%s</div>' % (HOME_COL, h, imgs)
+def sketch(name: str, w: int, h: int, cls: str, style: str = '') -> str:
+    """One decorative blue sketch (static/home-<name>.webp); w x h is its size in the Figma frame."""
+    return ('<img class="%s" src="static/home-%s.webp" alt="" width="%d" height="%d" loading="lazy" '
+            'decoding="async"%s>' % (cls, name, w, h, ' style="%s"' % style if style else ''))
+
+
+def mission_section(papers: str = '') -> str:
+    """"Our Mission" (Figma "home page final"): the heading and first sentence beside the blue
+    tree, then the plant beside the second sentence. Sketches are decorative."""
+    # shown once the paper band has filled in (static/reveal.js, data-after)
+    return ('<section class="hsec mission rv" data-after="papers" id="top" aria-labelledby="top-h">'
+            '<div class="ms-a"><div class="ms-text"><h2 id="top-h">Our Mission</h2>'
+            '<p>We put the evidence%s in plain language: what the studies found, how sure we can be, and '
+            'where nobody has looked yet.</p></div>'
+            '<div class="ms-tree">%s%s</div></div>'
+            '<div class="ms-b">%s<p>Every finding links back to a sentence in a paper. Every gap is shown as '
+            'a gap, not hidden or mistaken for failure. When the research can’t answer a question, we say so.'
+            '</p></div></section>'
+            % (papers, sketch('tree-blue', 421, 490, 'ms-tree-img'), sketch('leaf', 69, 92, 'ms-leaf'),
+               sketch('plant', 493, 424, 'ms-plant')))
+
+
+def question_body(qid: str, text: str) -> str:
+    """A question's summary on the home page, set in the empty space the Figma frame leaves for it
+    among that question's sketches: Q1 beside the sprout, above the pots; Q2 under the reeds,
+    beside the deer. A question without sketches gets the text alone."""
+    if qid == 'q1':
+        return ('<div class="qgrid q1g"><div class="qtext">%s</div>%s%s</div>'
+                % (text, sketch('sprout', 216, 207, 'sk-sprout'), sketch('pots', 607, 346, 'sk-pots')))
+    if qid == 'q2':
+        return ('<div class="qgrid q2g"><div class="qtext">%s</div>%s%s</div>'
+                % (text, sketch('reed', 833, 579, 'sk-reed'), sketch('deer', 299, 409, 'sk-deer')))
+    if qid == 'q3':
+        return ('<div class="qtext qtext-right">%s</div><div class="q3s">%s%s</div>'
+                % (text, sketch('grass', 72, 113, 'sk-grass'), sketch('flowers2', 99, 134, 'sk-flowers2')))
+    return '<div class="qtext qtext-right">%s</div>' % text
 
 
 def render_index(data: SiteData, prose: Prose) -> str:
@@ -968,16 +985,8 @@ def render_index(data: SiteData, prose: Prose) -> str:
     m = data.manifest.get('graph') or {}
     papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
               if m.get('source_documents') else '')
-    # Our Mission (Figma): shown once the paper band has filled in (static/reveal.js, data-after)
     menu.append(('#top', '?', 'Who we are'))
-    sections.append(
-        '<section class="hsec mission rv" data-after="papers" id="top" aria-labelledby="top-h">'
-        '<h2 id="top-h">Our Mission</h2><div class="hsec-body">'
-        '<p class="m1">We put the evidence%s in plain language: what the studies found, how sure we can be, and '
-        'where nobody has looked yet.</p>'
-        '<p class="m2">Every finding links back to a sentence in a paper. Every gap is shown as a gap, not hidden '
-        'or mistaken for failure. When the research can’t answer a question, we say so.</p></div></section>'
-        % papers)
+    sections.append(mission_section(papers))
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
         if qid in data.graphs:
@@ -988,10 +997,10 @@ def render_index(data: SiteData, prose: Prose) -> str:
         sections.append(
             '<section class="hsec qsec" id="card-%s" aria-labelledby="card-%s-h">'
             '<h2 id="card-%s-h" class="rv"><a href="%s.html"><span class="qn">Q%d.</span> %s</a></h2>'
-            '<div class="hsec-body rv">%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
-            '</span></a>%s</p></div>%s</section>'
-            % (esc(qid), esc(qid), esc(qid), esc(qid), n, esc(title), home_summary(prose, qid), esc(qid),
-               esc(question_name(q)), graph, home_photos(qid)))
+            '<div class="hsec-body rv">%s</div></section>'
+            % (esc(qid), esc(qid), esc(qid), esc(qid), n, esc(title), question_body(qid,
+               '%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s</span></a>%s</p>'
+               % (home_summary(prose, qid), esc(qid), esc(question_name(q)), graph))))
     # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
     menu_html = '<ol class="qnav">%s</ol>' % ''.join(
         '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
@@ -3122,13 +3131,14 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     # a big one is reported so page weight doesn't grow unnoticed
     heroes = [f for f in os.listdir(os.path.join(ROOT, 'static'))
               if re.fullmatch(r'hero-q\d+(?:-clouds)?\.(?:webp|avif|jpg|png|svg)', f)]
-    heroes += [f for _, ps in HOME_PHOTOS.values() for f, *_ in ps]
     for f in heroes:
         kb = os.path.getsize(os.path.join(ROOT, 'static', f)) // 1024
         if kb > 150:
             print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
     for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'gm.js', 'mc.js', 'bc.js', 'problem.js', 'ov.js', 'pin.webp',
-              'ov-wave.svg', 'reveal.js', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes:
+              'ov-wave.svg', 'reveal.js', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes + [
+              'home-%s.webp' % n for n in ('tree-blue', 'leaf', 'plant', 'sprout', 'pots', 'reed', 'deer',
+                                           'grass', 'flowers2')]:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
