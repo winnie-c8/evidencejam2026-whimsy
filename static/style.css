@@ -107,7 +107,7 @@ body {
   color: var(--text);
   background: var(--bg);
 }
-main, footer.site { max-width: none; margin: 0; padding: 0 var(--space-2); }
+main, footer.site { max-width: 72rem; margin: 0 auto; padding: 0 var(--space-2); }
 main { padding-bottom: var(--space-4); }
 main:focus { outline: none; }
 p, li, dd, .lead, figcaption { max-width: 68ch; }
@@ -131,7 +131,7 @@ a.edge:focus-visible, a.gap-link:focus-visible { outline: 3px solid var(--focus)
 .skip:focus { left: var(--space-2); top: var(--space-1); }
 
 /* one short line at the very bottom */
-footer.site { max-width: none; padding: .6rem var(--space-4); border-top: 1px solid var(--rule); color: var(--muted); font-size: .8125rem; }
+footer.site { max-width: 90rem; padding: .6rem var(--space-4); border-top: 1px solid var(--rule); color: var(--muted); font-size: .8125rem; }
 footer.site p { margin: 0; max-width: none; }
 
 .lead { font-size: var(--text-lg); line-height: 1.4; }
@@ -527,7 +527,7 @@ button.help:hover { background: var(--link); color: var(--bg); }
 
 /* sidebar layout */
 .layout { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--space-4); margin: 0; padding: 0 var(--edge); }
-.layout > main, .layout > .content { max-width: none; margin: 0; padding: 0 0 3rem; }
+.layout > main, .layout > .content { max-width: 62rem; margin: 0; padding: 0 0 3rem; }
 .side { position: sticky; top: var(--top-h); align-self: start; max-height: calc(100vh - var(--top-h)); overflow-y: auto; padding: var(--space-3) 0; }
 /* the left menu, on every page (home's section menu and the other pages' sidebar look the same) */
 ol.qnav, ul.qnav { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
@@ -751,14 +751,14 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 .home-grid { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--gap);
   margin: 0; padding: 0 var(--edge); }
 .home-grid main { margin: 0; padding: var(--space-5) 0 var(--space-4); }
-.home-grid main > .hsec { max-width: none; }   /* the Problem opening may run to the right edge */
+.home-grid main > .hsec { max-width: 56rem; }   /* the Problem opening may run to the right edge */
 /* pinned to the screen (fixed, not sticky) so it stays put even at the very bottom of the page;
    the grid's first column stays empty to keep its place */
 .home-side { position: fixed; top: var(--top-h); bottom: 0; left: var(--col-x); width: var(--col);
   box-sizing: border-box; display: flex; flex-direction: column; padding: var(--space-2) 0 var(--space-3); }
 .home-grid main { grid-column: 2; }
 /* home: the footer sits in the right column, clear of the menu, with its line only above the text */
-.home-grid + footer.site { border-top: 0; max-width: none;
+.home-grid + footer.site { border-top: 0; max-width: calc(56rem + var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4));
   margin: 0; padding: 0 var(--edge) 0 calc(var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4)); box-sizing: border-box; }
 .home-grid + footer.site p { border-top: 1px solid var(--rule); padding: .6rem 0; }
 /* the turning tree (static/tree.js) fills the space above the menu; the menu stays at the bottom
@@ -1105,9 +1105,9 @@ details.more-densest > summary { cursor: pointer; color: var(--link); margin: 0 
    blue shapes, a picture (beside the text for Q1, a landscape band for Q2 and Q3) and a blue bar
    of counts. Pictures and shapes are decorative (alt="", aria-hidden). */
 main.has-hero { max-width: none; margin: 0; padding: 0; }
-.has-hero > .content.solo { max-width: none; margin: 0; padding: 0 var(--edge) 3rem; }
+.has-hero > .content.solo { max-width: 62rem; margin: 0 auto; padding: 0 var(--edge) 3rem; }
 .hero { position: relative; overflow: hidden; isolation: isolate; padding: var(--space-4) var(--edge) 0; }
-.hero-in { position: relative; z-index: 1; max-width: none; margin: 0; }
+.hero-in { position: relative; z-index: 1; max-width: 90rem; margin: 0 auto; }
 .hero-side .hero-in { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-4); align-items: end; }
 .hero-txt { padding: clamp(1rem, 5vw, 5rem) clamp(0rem, 3vw, 3rem) var(--space-4); }
 .hero .kicker { margin: 0 0 1rem; font-size: clamp(1rem, 1.6vw, 1.5rem); font-weight: 400; letter-spacing: .14em; }
@@ -1650,7 +1650,7 @@ details.ns li.gap .searched { font-size: .85rem; }
    sits right under the logo; static/tree.js marks the section being read. */
 :root { --gd-beige: #f8f4ee; --gd-warn-bg: #fbefef; }
 .guide-grid .home-menu { margin-top: 0; }
-.guide-grid main { position: relative; padding-top: var(--space-4); max-width: none; }
+.guide-grid main { position: relative; padding-top: var(--space-4); max-width: 60rem; }
 .gd-top { position: sticky; top: calc(var(--top-h) + var(--space-1)); z-index: 5; display: flex; justify-content: flex-end;
   align-items: flex-start; height: 0; overflow: visible; }
 .gd-back { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .9rem; border: 1px solid var(--text);
