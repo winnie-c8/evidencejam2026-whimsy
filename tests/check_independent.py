@@ -131,7 +131,8 @@ def word_to_code(text: str) -> str:
     t = norm(text).lower()
     t = re.sub(r'\s*certainty$', '', t)
     # plain words for the reference directions (Q2 chart), each meaning exactly one pack value
-    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference'}.get(t, t)
+    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference',
+         'no change': 'no effect'}.get(t, t)
     return t.replace(' ', '_')
 
 
@@ -418,7 +419,8 @@ class Checker:
         while sec is not None and sec.tag not in ('section', 'details'):  # a row may fold (details)
             sec = sec.parent
         notes = [n for n in (sec.iter() if sec is not None else []) if 'data-template' in n.attrs]
-        ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) == want
+        # The pack may write the outcome in lower case mid-sentence: match the slot either way.
+        ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) in (want, norm(gap['searched_for'].replace(outcome.lower(), outcome)))
                  and norm(n.attrs['data-template'].replace('{outcome}', 'that outcome')) in n.text()
                  for n in notes)
         self.ok(ok, f'{where}: what was searched for ("{gap["searched_for"]}") is not shown')
