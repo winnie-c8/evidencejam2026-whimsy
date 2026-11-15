@@ -131,7 +131,10 @@ def word_to_code(text: str) -> str:
     t = norm(text).lower()
     t = re.sub(r'\s*certainty$', '', t)
     # plain words for the reference directions (Q2 chart), each meaning exactly one pack value
-    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference'}.get(t, t)
+    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference',
+         # Q1 card words, each meaning exactly one pack value
+         'increases': 'increase', 'decreases': 'decrease', 'studies disagree': 'mixed',
+         'no change found': 'no effect'}.get(t, t)
     return t.replace(' ', '_')
 
 
@@ -505,17 +508,18 @@ class Checker:
                         if dc.endswith('/' + field) and field not in shown:
                             shown[field] = n.text()
                 if e['direction'] == 'mixed' and e['kind'] != 'moderation':
-                    # A mixed arrow shows how many studies went up and down ("⇅ ↑5 ↓1"), leaving
-                    # out a zero ("⇅ ↑1", "⇅"); the values themselves are checked against the
-                    # pack by check_every_value. The ⇅ must be there, so it can't pass for ↑.
-                    dcs = {n.attrs.get('data-check', '') for n in a.iter()}
-                    sd = e.get('study_directions') or {}
-                    for d_ in ('increase', 'decrease'):
-                        if sd.get(d_, 0):
-                            self.ok(f'q1graph/{s}/study_directions/{d_}' in dcs,
-                                    f'{where}: mixed arrow does not show how many studies found {d_}')
+                    # A mixed arrow shows ⇅ and its total ("⇅ 11"); how the studies split is in its
+                    # card. The ⇅ must be there, so it can't pass for ↑.
                     self.ok('⇅' in a.text(), f'{where}: mixed arrow does not show the mixed symbol ⇅')
-                elif self.ok('studies' in shown, f'{where}: studies not visible on the arrow (needs hover?)'):
+                    # its card shows how the studies split, every direction with its count
+                    sec = ids.get('e-' + s)
+                    if sec is not None and e['kind'] != 'moderation':
+                        dcs = {n.attrs.get('data-check', '').rsplit('/', 1)[-1] for n in sec.iter()
+                               if '/study_directions/' in n.attrs.get('data-check', '')}
+                        for d_, v in (e.get('study_directions') or {}).items():
+                            if v:
+                                self.ok(d_ in dcs, f'{where}: card does not show how many studies found {d_}')
+                if self.ok('studies' in shown, f'{where}: studies not visible on the arrow (needs hover?)'):
                     self.ok(str(shown_value('studies', shown['studies'])) == str(e['studies']),
                             f'{where}: arrow shows studies "{shown["studies"]}", pack says "{e["studies"]}"')
                 if 'certainty' in shown:
