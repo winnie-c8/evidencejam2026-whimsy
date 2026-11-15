@@ -9,10 +9,11 @@ number wrapped in a data-check span, ready to insert into a page).
 from __future__ import annotations
 
 import html
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from load import EFFECTS, GAPMAP, Finding, SiteData
+from load import COMPARISON, EFFECTS, GAPMAP, Finding, SiteData
 
 DIR_PHRASE = {
     'increase': 'studies found it increases', 'decrease': 'studies found it decreases',
@@ -200,40 +201,120 @@ def short_answer_template(qid: str, data: SiteData) -> ProseItem:
     return ProseItem(text, _esc(text))
 
 
+FIRM = ('high', 'moderate')
+
+
+def _plain(label: str) -> str:
+    """A label as it reads mid-sentence: 'Seeding / sowing' -> 'seeding or sowing'."""
+    s = re.sub(r'\s*\(.*?\)', '', label).replace(' & ', ' and ').replace(' / ', ' or ')
+    return _lower_first(s.strip())
+
+
+def _cert_n(f) -> str:
+    return '%s certainty, %d %s' % (CERT_WORD[f.certainty].lower(), f.studies, 'study' if f.studies == 1 else 'studies')
+
+
+def _gapmap_home(q) -> str:
+    from llm import empty_lines
+    s = q.extra['summary']
+    rows, _, cols, n_sub = empty_lines(q)
+    parts = ['only %s of %s intervention and outcome combinations have been studied' % (s['filled'], s['cells'])]
+    if rows:
+        parts.append('%d of the %d interventions (including %s) have no studies at all'
+                     % (len(rows), n_sub, _join(_plain(r) for r in rows[:2])))
+    if cols:
+        parts.append('no study measures %s' % ' or '.join(_plain(c) for c in cols[:2]))
+    out = ['Most of the evidence map is empty: %s.' % (', '.join(parts[:-1]) + ', and ' + parts[-1]
+                                                       if len(parts) > 1 else parts[0])]
+    by_id = {f.id: f for f in q.findings}
+    dense = [by_id[i] for i in (s.get('densest') or []) if i in by_id]
+    if dense:
+        n_mixed = sum(f.direction == 'mixed' for f in dense)
+        eg = '%s on %s (%s)' % (_plain(dense[0].subject_label), _plain(dense[0].outcome_label), _cert_n(dense[0]))
+        if n_mixed == len(dense):   # said only when the pack's densest cells really are all mixed
+            out.append('The most-studied combinations, such as %s, all give mixed results, meaning the studies '
+                       'disagree.' % eg)
+        else:
+            out.append('Of the most-studied combinations, such as %s, %d of %d give mixed results.'
+                       % (eg, n_mixed, len(dense)))
+    out.append('An empty cell means nobody tested that pairing, which is not evidence against it, and %s '
+               'studied combinations rest on a single study.' % s['thin'])
+    return ' '.join(out)
+
+
+def _comparison_home(q) -> str:
+    out = []
+    sa = q.extra.get('short_answer') or {}
+    if 'time_to_reference' in sa and sa.get('time_to_reference') is None:
+        out.append('The studies cannot say how long a created marsh takes to match a natural one.')
+    firm = [f for f in q.findings if f.certainty in FIRM and f.direction == 'below_reference']
+    if firm:
+        out.append('The firmest findings show created marshes behind natural ones on %s.'
+                   % _join('%s (%s)' % (_plain(f.outcome_label), _cert_n(f)) for f in firm))
+    rest = [f for f in q.all_findings() if f.certainty not in FIRM]
+    tail = []
+    if rest:
+        levels = [CERT_WORD[c].lower() for c in CERT_ORDER if any(f.certainty == c for f in rest)]
+        tail.append('%d other findings have only %s certainty' % (len(rest), ' or '.join(levels)))
+    if q.gaps:
+        tail.append('%d attributes, such as %s, have never been compared with natural marshes'
+                    % (len(q.gaps), _plain(q.gaps[0].outcome_label)))
+    if tail:
+        out.append(_cap(', and '.join(tail)) + '.')
+    return ' '.join(out)
+
+
+def _effects_home(qid: str, data: SiteData) -> str:
+    from llm import combined
+    q = data.questions[qid]
+    high = [f for f in q.findings if f.certainty == 'high']
+    parts = []
+    for d, one, many in (('increase', 'helps', 'help'), ('decrease', 'lowers', 'lower')):
+        by_out: Dict[str, list] = {}
+        for f in high:
+            if f.direction == d:
+                by_out.setdefault(f.outcome_label, []).append(_plain(f.subject_label))
+        for outcome, subs in by_out.items():
+            parts.append('%s %s %s' % (_join(subs), one if len(subs) == 1 else many, _plain(outcome)))
+    out = [('With high certainty, %s.' % ', and '.join(parts)) if parts else 'Few findings are rated high certainty.']
+    subjects: Dict[str, list] = {}
+    for f in q.findings:
+        if f.certainty in FIRM:
+            subjects.setdefault(f.subject_label, []).append(f.direction)
+    mixed = [_plain(s) for s, ds in subjects.items() if set(ds) == {'mixed'}]
+    second = []
+    if mixed:
+        second.append('Results are mixed for %s, meaning the studies disagree' % _join(mixed))
+    for members, target, e in combined(data, qid)[:1]:
+        second.append('%s combined with %s %s %s (%s certainty, %d %s)' % (
+            _plain(members[0]), _join(_plain(m) for m in members[1:]),
+            {'increase': 'increases', 'decrease': 'decreases'}.get(e['direction'], 'gives mixed results for'),
+            _plain(target), CERT_WORD[e['certainty']].lower(), e['studies'], 'study' if e['studies'] == 1 else 'studies'))
+    if second:
+        out.append(_cap(', while '.join(second)) + '.')
+    tail = []
+    rest = [f for f in q.findings if f.certainty not in FIRM]
+    if rest:
+        levels = [CERT_WORD[c].lower() for c in CERT_ORDER if any(f.certainty == c for f in rest)]
+        tail.append('%d other findings have only %s certainty' % (len(rest), ' or '.join(levels)))
+    for g in q.gaps[:1]:
+        tail.append('%s has not been studied for %s' % (_plain(g.subject_label), _plain(g.outcome_label)))
+    if tail:
+        out.append(_cap(', and '.join(tail)) + '.')
+    return ' '.join(out)
+
+
 def home_template(qid: str, data: SiteData) -> str:
-    """Two plain sentences per question for the home page, from the pack's values (the LLM's fallback)."""
+    """Three plain sentences per question for the home page (the answer, the firmest evidence, the limit),
+    from the pack's values. The LLM's fallback; tests/test_llm.py checks each passes llm.validate()."""
     q = data.questions[qid]
     kind = data.kinds[qid]
     if kind == GAPMAP and 'summary' in q.extra:
-        s = q.extra['summary']
-        lead = ('Only %s of %s treatment and outcome combinations have been studied, and %s of those rest on a '
-                'single study.' % (s['filled'], s['cells'], s['thin']))
-        by_id = {f.id: f for f in q.findings}
-        dense = [by_id[i] for i in (s.get('densest') or []) if i in by_id]
-        n_mixed = sum(f.direction == 'mixed' for f in dense)
-        if dense and n_mixed == len(dense):   # said only when the pack's densest cells really are all mixed
-            lead += ' Even the best-studied combinations give mixed results.'
-        elif n_mixed:
-            lead += ' %s of the %s best-studied combinations give mixed results.' % (
-                _cap(NUMBER_WORD.get(n_mixed, str(n_mixed))), NUMBER_WORD.get(len(dense), str(len(dense))))
-        return lead
-    sa = q.extra.get('short_answer') or {}
-    if 'time_to_reference' in sa and sa.get('time_to_reference') is None:
-        firm = [f.outcome_label.lower() for f in q.findings
-                if f.certainty in ('high', 'moderate') and f.direction == 'below_reference']
-        lag = (' The firmest findings show created marshes behind natural ones on %s.' % _join(firm)) if firm else ''
-        return 'The studies cannot say how long a created marsh takes to match a natural one.' + lag
+        return _gapmap_home(q)
+    if kind == COMPARISON:
+        return _comparison_home(q) or DEFAULT_SHORT_ANSWER
     if kind == EFFECTS:
-        high = [f for f in q.findings if f.certainty == 'high']
-        ups = [_lower_first(f.subject_label) for f in high if f.direction == 'increase']
-        downs = [_lower_first(f.subject_label) for f in high if f.direction == 'decrease']
-        parts = []
-        if ups:
-            parts.append('%s %s' % (_join(sorted(set(ups))), 'helps' if len(set(ups)) == 1 else 'help'))
-        if downs:
-            parts.append('%s %s' % (_join(sorted(set(downs))), 'holds seedlings back' if len(set(downs)) == 1 else 'hold seedlings back'))
-        lead = ('With high certainty, %s.' % '; '.join(parts)) if parts else 'Few findings are rated high certainty.'
-        return _cap(lead[:1].upper() + lead[1:]) + ' Most of the less certain findings are mixed.'
+        return _effects_home(qid, data)
     return DEFAULT_SHORT_ANSWER
 
 
