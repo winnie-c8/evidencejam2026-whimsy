@@ -758,14 +758,14 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 .home-grid { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: var(--gap);
   margin: 0; padding: 0 var(--edge); }
 .home-grid main { margin: 0; padding: var(--space-5) 0 var(--space-4); }
-.home-grid main > .hsec { max-width: 56rem; }   /* the Problem opening may run to the right edge */
+.home-grid main > .hsec { max-width: none; }   /* home sections run to the right edge of the screen */
 /* pinned to the screen (fixed, not sticky) so it stays put even at the very bottom of the page;
    the grid's first column stays empty to keep its place */
 .home-side { position: fixed; top: var(--top-h); bottom: 0; left: var(--col-x); width: var(--col);
   box-sizing: border-box; display: flex; flex-direction: column; padding: var(--space-2) 0 var(--space-3); }
 .home-grid main { grid-column: 2; }
 /* home: the footer sits in the right column, clear of the menu, with its line only above the text */
-.home-grid + footer.site { border-top: 0; max-width: calc(56rem + var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4));
+.home-grid + footer.site { border-top: 0; max-width: none;
   margin: 0; padding: 0 var(--edge) 0 calc(var(--edge) + clamp(16rem, 22vw, 19rem) + var(--space-4)); box-sizing: border-box; }
 .home-grid + footer.site p { border-top: 1px solid var(--rule); padding: .6rem 0; }
 /* the turning tree (static/tree.js) fills the space above the menu; the menu stays at the bottom
@@ -799,6 +799,50 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
 .hsec.guide, .hsec.key-strip { border-top: 0; padding-top: 0; }
 .hsec.qsec .q { color: var(--text); }
 
+/* Figma "home page final": Our Mission between blue sketches, and sketches under Q1 and Q2.
+   Sizes are the frame's (an 890 px column) as a share of the column, so they scale with it. */
+.hsec.mission { margin-bottom: var(--space-3); }
+.hsec.mission > .ms-a > .ms-text > h2 { margin: clamp(1rem, 6vw, 3.3rem) 0 0; padding: 0; border: 0;
+  font-family: var(--font-heading); font-weight: var(--heading-weight); color: var(--heading);
+  font-size: clamp(2.5rem, 5vw, 3.885rem); line-height: 1.25; max-width: none; }
+.mission p { margin: 0; font-family: var(--font-heading); font-weight: var(--heading-weight); color: var(--text);
+  font-size: clamp(1.15rem, 1.8vw, 1.5625rem); line-height: 1.05; max-width: 27rem; }
+.ms-a { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 47.3%); column-gap: var(--space-2); align-items: start; }
+.ms-text { padding-left: 4.4%; }
+.ms-text p { margin-top: var(--space-2); }
+.ms-tree { position: relative; justify-self: end; width: 100%; max-width: 421px; }
+.mission img, .sketches img { display: block; height: auto; }
+.ms-tree-img { width: 100%; }
+.ms-leaf { position: absolute; left: -13.8%; top: 70.4%; width: 16.4%; }
+.ms-b { display: grid; grid-template-columns: minmax(0, min(55.4%, 493px)) minmax(0, 1fr); column-gap: var(--space-2);
+  align-items: start; margin-top: max(-5.2%, -46px); }   /* the plant starts just above the tree's foot */
+.ms-plant { width: 100%; max-width: 493px; }
+.ms-b p { justify-self: end; text-align: right; margin: min(21.8%, 194px) 2.6% 0 0; }
+/* each question's summary sits in the space its sketches leave (Q1: left of the sprout, Q2: under
+   the reeds, left of the deer, which overlaps the reeds as in the frame) */
+.qgrid { display: grid; column-gap: var(--space-4); align-items: start; }
+.qgrid img { display: block; height: auto; }
+.q1g { grid-template-columns: minmax(0, 1fr) minmax(0, min(24.3%, 216px)); }
+.q1g .qtext { grid-column: 1; grid-row: 1; }
+.sk-sprout { grid-column: 2; grid-row: 1; width: 100%; margin-top: var(--space-4); }
+.sk-pots { grid-column: 1 / -1; grid-row: 2; width: 68.3%; max-width: 607px; margin-top: var(--space-3); }
+.q2g { grid-template-columns: minmax(0, 1fr) minmax(0, min(33.6%, 299px)); }
+.q2g .qtext { grid-column: 1; grid-row: 1; }
+.sk-reed { grid-column: 1 / -1; grid-row: 2; width: 93.6%; max-width: 833px; margin-top: var(--space-3); }
+.sk-deer { grid-column: 2; grid-row: 3; width: 100%; margin-top: -70.9%; }   /* over the reeds' right end */
+.qtext-right { margin-left: auto; text-align: right; max-width: 68ch; }
+.qtext-right p { margin-left: auto; }
+/* Q3: grass on the right, flowers lower down on the left */
+.q3s { display: grid; grid-template-columns: 1fr 1fr; margin-top: var(--space-3); }
+.q3s img { display: block; height: auto; }
+.sk-grass { grid-column: 2; justify-self: end; width: 9rem; }
+.sk-flowers2 { grid-column: 1; grid-row: 2; width: 12rem; margin-top: var(--space-3); }
+/* the home page reads in Newsreader throughout (the left menu and the top bar keep theirs) */
+.home-grid main, .home-grid main *, .home-grid + footer.site, .home-grid + footer.site * { font-family: var(--font-heading); }
+.home-grid main .hsec-body { padding: var(--space-2) 0 0; }   /* text straight under its heading */
+.home-grid main .hsec-body p:not(.qsum) { font-size: var(--text-base); }
+.hsec .qtext .qsum { font-size: 1.25rem; line-height: 1.45; }
+
 @media (max-width: 900px) {
   :root { --top-h: 4.25rem; --top-line: .5rem; }
   .site-top-in, .layout { padding: 0 var(--space-2); }
@@ -819,6 +863,17 @@ html { scroll-padding-top: calc(var(--top-h) + var(--space-2)); }   /* in-page l
   .home-grid main { padding-top: var(--space-4); }
   .hsec { margin-bottom: var(--space-4); }
   .hsec-body { padding-left: 0; }
+  .ms-a, .ms-b { grid-template-columns: minmax(0, 1fr); margin-top: 0; }
+  .ms-text { padding-left: 0; }
+  .ms-tree { justify-self: center; width: 70%; margin-top: var(--space-3); }
+  .ms-plant { width: 70%; margin-top: var(--space-2); }
+  .ms-b p { justify-self: start; text-align: left; margin: var(--space-2) 0 0; }
+  .qgrid { grid-template-columns: minmax(0, 1fr); }
+  .q1g .qtext, .sk-sprout, .sk-pots, .sk-reed, .q2g .qtext, .sk-deer { grid-column: 1; grid-row: auto; }
+  .sk-sprout { width: 40%; justify-self: end; margin-top: var(--space-2); }
+  .sk-pots, .sk-reed { width: 100%; }
+  .sk-deer { width: 50%; justify-self: end; margin-top: var(--space-2); }
+  .qtext-right { text-align: left; }
 }
 
 /* Q2 "Outcome by outcome" (Figma frame "current graph"): result, certainty blocks, marsh ages

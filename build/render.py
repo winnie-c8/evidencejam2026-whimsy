@@ -917,6 +917,50 @@ def problem_section() -> str:
             '</div></section>')
 
 
+# Figma "home page final": each question's heading on the home page, as a plain question.
+# A question not listed here (a new qN) uses its short name.
+HOME_HEADING = {'q1': 'What helps planted seedlings survive and grow?',
+                'q2': 'How long until a created marsh matches a natural one?',
+                'q3': 'Where is grassland restoration research missing?'}
+
+
+def sketch(name: str, w: int, h: int, cls: str, style: str = '') -> str:
+    """One decorative blue sketch (static/home-<name>.webp); w x h is its size in the Figma frame."""
+    return ('<img class="%s" src="static/home-%s.webp" alt="" width="%d" height="%d" loading="lazy" '
+            'decoding="async"%s>' % (cls, name, w, h, ' style="%s"' % style if style else ''))
+
+
+def mission_section() -> str:
+    """"Our Mission" (Figma "home page final"): the heading and first sentence beside the blue
+    tree, then the plant beside the second sentence. Sketches are decorative."""
+    return ('<section class="hsec mission" id="top" aria-labelledby="top-h">'
+            '<div class="ms-a"><div class="ms-text"><h2 id="top-h">Our Mission</h2>'
+            '<p>We put evidence in plain language: what the studies found, how sure we can be, and where '
+            'nobody has looked yet.</p></div>'
+            '<div class="ms-tree">%s%s</div></div>'
+            '<div class="ms-b">%s<p>Every finding links back to a sentence in a paper. Every gap is shown as '
+            'a gap, not hidden or mistaken for failure. When the research can’t answer a question, we say so.'
+            '</p></div></section>'
+            % (sketch('tree-blue', 421, 490, 'ms-tree-img'), sketch('leaf', 69, 92, 'ms-leaf'),
+               sketch('plant', 493, 424, 'ms-plant')))
+
+
+def question_body(qid: str, text: str) -> str:
+    """A question's summary on the home page, set in the empty space the Figma frame leaves for it
+    among that question's sketches: Q1 beside the sprout, above the pots; Q2 under the reeds,
+    beside the deer. A question without sketches gets the text alone."""
+    if qid == 'q1':
+        return ('<div class="qgrid q1g"><div class="qtext">%s</div>%s%s</div>'
+                % (text, sketch('sprout', 216, 207, 'sk-sprout'), sketch('pots', 607, 346, 'sk-pots')))
+    if qid == 'q2':
+        return ('<div class="qgrid q2g"><div class="qtext">%s</div>%s%s</div>'
+                % (text, sketch('reed', 833, 579, 'sk-reed'), sketch('deer', 299, 409, 'sk-deer')))
+    if qid == 'q3':
+        return ('<div class="qtext qtext-right">%s</div><div class="q3s">%s%s</div>'
+                % (text, sketch('grass', 72, 113, 'sk-grass'), sketch('flowers2', 99, 134, 'sk-flowers2')))
+    return '<div class="qtext qtext-right">%s</div>' % text
+
+
 def render_index(data: SiteData, prose: Prose) -> str:
     """Home, laid out as the Figma "home page" frame: each section has a big blue heading over a
     thin rule, with its text indented below; a numbered menu on the left (pinned bottom-left)
@@ -928,15 +972,7 @@ def render_index(data: SiteData, prose: Prose) -> str:
                 % (' ' + cls if cls else '', sid, sid, level, sid, heading, level, inner))
 
     menu = []      # (link, mark, label) for the left menu
-    sections = [problem_section()]
-    m = data.manifest.get('graph') or {}
-    papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
-              if m.get('source_documents') else '')
-    sections.append(section(
-        'top', 'our mission',
-        '<p class="lead">Plain answers to %s restoration questions%s: what works, how sure we can be, '
-        'and where nothing has been studied. Works offline.</p>' % (number_word(len(data.questions)), papers),
-        level=2, cls='mission'))
+    sections = [problem_section(), mission_section()]
     menu.append(('#guide', '?', 'How to use this site'))
     sections.append(section(
         'guide', 'How to use this site',
@@ -956,9 +992,10 @@ def render_index(data: SiteData, prose: Prose) -> str:
         menu.append(('%s.html' % qid, '%02d' % n, question_name(q)))   # the question's own page
         sections.append(section(
             'card-%s' % qid,
-            '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(question_name(q))),
-            '<p class="q">%s</p>%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
-            '</span></a>%s</p>' % (esc(q.text), home_summary(prose, qid), esc(qid), esc(question_name(q)), graph), cls='qsec'))
+            '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(HOME_HEADING.get(qid, question_name(q)))),
+            question_body(qid, '%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
+                          '</span></a>%s</p>' % (home_summary(prose, qid), esc(qid), esc(question_name(q)), graph)),
+            cls='qsec'))
     # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
     menu_html = '<ol class="qnav">%s</ol>' % ''.join(
         '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
@@ -2343,7 +2380,9 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
         if kb > 150:
             print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
     for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'mc.js', 'problem.js', 'ov.js', 'pin.webp',
-              'ov-wave.svg', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes:
+              'ov-wave.svg', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes + [
+              'home-%s.webp' % n for n in ('tree-blue', 'leaf', 'plant', 'sprout', 'pots', 'reed', 'deer',
+                                           'grass', 'flowers2')]:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
     # bundled fonts (no font is loaded from the internet), sorted so builds are repeatable
     fonts = os.path.join(ROOT, 'static', 'fonts')
