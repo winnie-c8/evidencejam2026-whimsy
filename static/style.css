@@ -1606,3 +1606,8 @@ svg.pale.hl a.edge:not(.on), svg.pale.hl a.gap-link:not(.on), svg.pale.hl .membe
 .fig-v { font-size: 30px; }
 .fig-v .dir > span[aria-hidden] { font-size: 26px; }
 #card-slot h3:focus, #card-slot h3:focus-visible { outline: none; }
+.flow-lims { margin: 12px 0 0; font-size: 14px; }
+.flow-lims[hidden] { display: none; }
+.flow-lims .paths { margin: 0 0 6px; }
+.flow-lims summary { cursor: pointer; color: #024fec; }
+.flow-lims .lims { padding-left: 1.1rem; margin: 6px 0 0; }

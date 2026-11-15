@@ -1050,6 +1050,8 @@
     var setView = function (v) {
       figure.hidden = v !== 'flow';
       each(together, function (t) { t.hidden = v !== 'flow'; });
+      var fl = document.querySelector('.flow-lims');
+      if (fl) fl.hidden = v !== 'flow';
       vBars.hidden = v !== 'bars';
       vTable.hidden = v !== 'table';
       var st = document.querySelector('.flow-steps');

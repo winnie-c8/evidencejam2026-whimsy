@@ -1399,8 +1399,8 @@ def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: Lis
     table_view = ('<section id="table" class="gtable" aria-labelledby="table-h"><h2 id="table-h">All arrows as a '
                   'table</h2>%s</section>' % gp['table'])
     main = ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h" class="g-label">Graph</h2>'
-            '%s%s%s%s<div id="card-slot"></div>%s</section>%s%s'
-            % (flow_toolbar(), flow_steps(), figure, strip, table_view, howto_dialog(g, gp_), GRADING_TPL +
+            '%s%s%s%s%s<div id="card-slot"></div>%s</section>%s%s'
+            % (flow_toolbar(), flow_steps(), figure, flow_limits(g, gp_), strip, table_view, howto_dialog(g, gp_), GRADING_TPL +
                '<script type="application/json" id="card-lims">%s</script>'
                % json.dumps(CARD_LIMITS, ensure_ascii=False).replace('</', '<\\/')))
     store = gp['combos'] + gp['arrows']
@@ -2187,11 +2187,21 @@ def flow_toolbar() -> str:
             '<button type="button" data-view="bars" aria-pressed="false">Bars</button>'
             '<button type="button" data-view="table" aria-pressed="false">Table</button></div>'
             '<button type="button" class="howto-btn" aria-haspopup="dialog" aria-controls="howto">'
-            '<span aria-hidden="true">?</span> How to read the Flow diagram</button></div>')
+            '<span aria-hidden="true">?</span> How to read the flow diagram</button></div>')
 
 
 def _sample(cls: str, w: int = 56) -> str:
     return _line(cls, w)
+
+
+def flow_limits(g: Any, gp_: str) -> str:
+    """Always on the page under the flow diagram (hard rule 5): a path through a middle box is not
+    one tested effect, then the flow diagram's limitations word for word."""
+    lims = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (gp_, i), t) for i, t in enumerate(g.limitations))
+    return ('<div class="flow-lims"><p class="callout paths" role="note"><strong>Read each arrow on its own.</strong> '
+            'A route through a middle box joins separate groups of studies; it is not one tested effect.</p>'
+            '<details><summary>%d things the flow diagram can\u2019t tell you</summary><ul class="lims">%s</ul></details></div>'
+            % (len(g.limitations), lims))
 
 
 def howto_dialog(g: Any, gp_: str) -> str:
@@ -2231,10 +2241,8 @@ def howto_dialog(g: Any, gp_: str) -> str:
              'on the other; it means we don’t know.'),
             ('Middle boxes', 'The middle boxes (weeds, seedling nutrients and soil) were filled by searching the papers for '
              'keywords. A study that described them in unusual words may have been missed.')]
-    lims = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (gp_, i), t) for i, t in enumerate(g.limitations))
     cons = fold_btn('ht-cons', 'Constraints (%d)' % len(rows),
-                    ''.join(fold_btn('sub', esc(k), '<p>%s</p>' % esc(t)) for k, t in rows) +
-                    '<p class="lim-h">In the data team’s words:</p><ul class="lims">%s</ul>' % lims)
+                    ''.join(fold_btn('sub', esc(k), '<p>%s</p>' % esc(t)) for k, t in rows))
     return ('<dialog class="howto" id="howto" aria-labelledby="howto-h"><div class="howto-head"><h2 id="howto-h">How to read '
             'the flow diagram</h2><button type="button" class="x" data-close>✕<span class="sr-only"> Close</span></button></div>'
             '<div class="howto-body">%s%s%s%s%s%s%s</div></dialog>' % (use, ex, cert, find, thick, also, cons))
@@ -2446,16 +2454,21 @@ def combo_cards(data: SiteData, qid: str) -> Tuple[str, set]:
         outcomes = list(dict.fromkeys(outcomes))
         names = ' and '.join(g.node(o)['label'] for o in outcomes)
         cs = slug(node['id'])
-        n_st = len(parts)
+        n_st = sum(e['studies'] for e in g.edges if (e.get('source') == node['id'] and e.get('kind') != 'moderation')
+                   or (e.get('kind') == 'moderation' and {e['source'], g.edge(e['target_edge'])['source']} == {a, b}))
+        n_aside = sum(1 for p_ in parts if 'combo-part aside' in p_)
         ladder = ''.join('<h5>%s</h5>%s' % (esc(t), l) for t, l in ladders if l)
         cards.append(
             '<section class="edge-panel combo-panel fcard" id="combo-%s" aria-labelledby="h-combo-%s" data-node="%s" '
             'data-members="%s %s" data-outcomes="%s"><p class="fc-kicker">Two treatments used together</p>'
             '<h3 id="h-combo-%s">%s + %s \u2192 %s</h3>'
-            '<p>%s studies tested these two treatments together. Each is shown on its own; they are not added up.</p>'
+            '<p>%s</p>'
             '<div class="combo-grid">%s</div><div class="fc-btns">%s</div></section>'
             % (cs, cs, esc(node['id']), esc(a), esc(b), esc(' '.join(outcomes)), cs, esc(la), esc(lb), esc(names),
-               {1: 'One', 2: 'Two', 3: 'Three', 4: 'Four'}.get(n_st, str(n_st)), ''.join(parts),
+               '%s %s tested these two treatments together%s. Each is shown on its own; they are not added up.' % (
+                   {1: 'One', 2: 'Two', 3: 'Three', 4: 'Four'}.get(n_st, str(n_st)), plural(n_st, 'study', 'studies'),
+                   (', and %s more %s set aside' % ({1: 'one'}.get(n_aside, str(n_aside)), plural(n_aside, 'claim was', 'claims were')))
+                   if n_aside else ''), ''.join(parts),
                fold_btn('calc', 'Certainty calculation', ladder + '<div class="grading-slot"></div>')))
     return ''.join(cards), placed
 
