@@ -2176,11 +2176,9 @@ GRADING_TPL = ''   # the grading explainer lives in static/graph.js (GRADING), s
 
 
 def flow_steps() -> str:
-    steps = [('Click something you do', 'a box in the top row'), ('Click a seedling result', 'survival, or growth & size'),
-             ('Read what the studies found', 'it opens below the flow diagram')]
-    return ('<ol class="flow-steps">%s</ol>'
-            % ''.join('<li><span class="num" aria-hidden="true">%d</span><span><strong>%s</strong><span class="st-s">%s</span></span></li>'
-                      % (i, esc(a), esc(b)) for i, (a, b) in enumerate(steps, 1)))
+    """How to use the flow view, in one sentence (the Bars and Table views have their own)."""
+    return ('<p class="view-note flow-steps">Pick something you do in the top row, then a seedling result. What the '
+            'studies found opens below the flow diagram.</p>')
 
 
 def flow_toolbar() -> str:

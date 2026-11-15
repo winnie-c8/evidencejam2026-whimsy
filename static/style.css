@@ -1594,3 +1594,15 @@ svg.pale.hl a.edge:not(.on), svg.pale.hl a.gap-link:not(.on), svg.pale.hl .membe
   font-size: clamp(1.6rem, 2.6vw, 2.4rem); line-height: 1.1; margin: var(--space-3) 0 var(--space-2); }
 .flow-steps[hidden], .flow-bar .howto-btn[hidden] { display: none; }
 .flow-bar + .flow-steps { margin-top: 0; }
+/* one type scale for the Q1 graph section: section label = OVERVIEW / CONSTRAINTS; one title size inside */
+.graph-sec .g-label { font-size: clamp(1.6rem, 2.1vw, 1.9rem); }
+.graph-sec { --title: 28px; }
+#card-slot h3, .q1v h3.ch, .vtable caption { font-size: var(--title); line-height: 1.2; }
+.together p { font-size: 22px; }
+.flow-steps.view-note { display: block; border: 0; margin: 0 0 12px; padding: 0; }
+@media (max-width: 760px) { .graph-sec { --title: 24px; } }
+/* NOT STUDIED uses the same section-label size as OVERVIEW / CONSTRAINTS / GRAPH on Q1 */
+.content .ns-h { font-size: clamp(1.6rem, 2.1vw, 1.9rem); font-weight: 300; }
+.fig-v { font-size: 30px; }
+.fig-v .dir > span[aria-hidden] { font-size: 26px; }
+#card-slot h3:focus, #card-slot h3:focus-visible { outline: none; }
