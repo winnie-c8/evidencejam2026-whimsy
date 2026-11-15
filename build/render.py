@@ -875,31 +875,85 @@ def search_template(gaps: List[Gap]) -> Optional[str]:
 OUTCOME_SLOT = '{outcome}'
 
 
+NS_SHOWN = 12  # not-studied pairings listed before "+ N more"
+
+# Topic / outcome filters and "+ N more" for the Not studied dropdown. Without script every
+# pairing is listed and the filters stay hidden. A link to #gap-<slug> clears the filters first.
+NS_JS = ('<script>(function(){document.querySelectorAll("details.ns").forEach(function(d){'
+         'var f=d.querySelector(".ns-f"),ss=d.querySelector(".ns-fs"),so=d.querySelector(".ns-fo"),'
+         'm=d.querySelector(".ns-more"),c=d.querySelector(".ns-n"),w=d.querySelector(".ns-w"),'
+         'lis=[].slice.call(d.querySelectorAll("li.gap")),ns=[].slice.call(d.querySelectorAll(".searched[data-s]")),all=false;'
+         'if(f)f.hidden=false;'
+         'function run(){var s=ss?ss.value:"",o=so?so.value:"",n=0;lis.forEach(function(li){'
+         'var ok=(!s||li.dataset.s===s)&&(!o||li.dataset.o===o);if(ok)n++;li.hidden=!ok||(!all&&n>%d);});'
+         'ns.forEach(function(x){x.hidden=x.dataset.s!==s;});'
+         'c.textContent=n;w.textContent=n===1?"pairing":"pairings";var r=n-%d;m.hidden=all||r<1;'
+         'm.textContent="+ "+r+" more";}'
+         '[ss,so].forEach(function(x){if(x)x.addEventListener("change",function(){all=false;run();});});'
+         'm.addEventListener("click",function(){all=true;run();});'
+         'function hash(){var t=location.hash&&document.getElementById(decodeURIComponent(location.hash.slice(1)));'
+         'if(t&&d.contains(t)&&t.matches("li.gap")){if(ss)ss.value="";if(so)so.value="";all=true;run();}}'
+         'addEventListener("hashchange",hash);run();hash();});})();</script>') % (NS_SHOWN, NS_SHOWN)
+
+
 def not_studied(q: Question) -> str:
-    """Gaps, the same compact way on every page: grouped by what was tested, each one
-    "? Not studied: <outcome>". Never worded as a negative result."""
+    """Gaps, the same way on every page: a "See not-studied pairings" dropdown listing each
+    pairing as "<topic> → <outcome>", with topic and outcome filters. Never worded as a negative
+    result: each item says "Not studied" (to screen readers; the dashed "?" ring shows it)."""
     if not q.gaps:
         return ''
+    subjects: Dict[str, str] = {}
+    outcomes: Dict[str, str] = {}
     groups: Dict[str, List[Gap]] = {}
     for g in q.gaps:
-        groups.setdefault(g.subject_label, []).append(g)
-    parts = []
-    for subj, gs in groups.items():
+        subjects.setdefault(g.subject_id, g.subject_label)
+        outcomes.setdefault(g.outcome_id, g.outcome_label)
+        groups.setdefault(g.subject_id, []).append(g)
+    s_ix = {k: str(i) for i, k in enumerate(subjects)}
+    o_ix = {k: str(i) for i, k in enumerate(outcomes)}
+    n = len(q.gaps)
+    word = plural(n, 'pairing', 'pairings')
+    # What was searched for: said once per topic when the pack uses one sentence for all its
+    # outcomes (shown when that topic is picked), else on each pairing.
+    notes, own = [], set()
+    for sid, gs in groups.items():
         template = search_template(gs)
-        note = ''
-        if template is not None:
-            note = ('<p class="searched" data-template="%s">Searched for and not found: %s.</p>'
-                    % (esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
-        items = ''.join(
-            '<li class="gap" id="gap-%s"><strong>Not studied:</strong> %s%s</li>'  # the "?" is drawn by CSS (261 on Q3)
-            % (esc(g.slug), esc(g.outcome_label),
-               '' if template is not None else ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for))
-            for g in gs)
-        parts.append('<section class="gapgrp" aria-label="%s"><h3>%s</h3>%s<ul class="gaps">%s</ul></section>'
-                     % (esc(subj), esc(subj), note, items))
-    return fold('gaps-h', 'Not studied', 2, '%d %s' % (len(q.gaps), plural(len(q.gaps), 'pairing', 'pairings')),
-                '<p>Looked for in this body of research and not found. That is not evidence that something '
-                'fails: nobody here tested it.</p>%s' % ''.join(parts))
+        if template is None:
+            own.update(g.slug for g in gs)
+            continue
+        notes.append('<p class="searched" data-s="%s" data-template="%s">Searched for and not found: %s.</p>'
+                     % (s_ix[sid], esc(template), esc(template.replace(OUTCOME_SLOT, 'that outcome'))))
+    items = ''.join(
+        '<li class="gap" id="gap-%s" data-s="%s" data-o="%s"><strong class="sr-only">Not studied:</strong> '
+        '%s <span class="o">%s</span>%s</li>'
+        % (esc(g.slug), s_ix[g.subject_id], o_ix[g.outcome_id], esc(g.subject_label), esc(g.outcome_label),
+           ' <span class="searched">Searched for: %s</span>' % esc(g.searched_for) if g.slug in own else '')
+        for g in q.gaps)
+
+    def select(cls: str, label: str, empty: str, opts: Dict[str, str], ix: Dict[str, str]) -> str:
+        if len(opts) < 2:
+            return ''
+        return ('<label>%s<select class="%s"><option value="">%s</option>%s</select></label>'
+                % (esc(label), cls, esc(empty),
+                   ''.join('<option value="%s">%s</option>' % (ix[k], esc(v)) for k, v in opts.items())))
+    filters = select('ns-fs', 'Topic (intervention)', 'All topics', subjects, s_ix) + \
+        select('ns-fo', 'Outcome', 'All outcomes', outcomes, o_ix)
+    ns_t, no_t = len(subjects), len(outcomes)
+    scope = 'Across %d %s and %d %s.' % (ns_t, plural(ns_t, 'topic', 'topics'), no_t, plural(no_t, 'outcome', 'outcomes'))
+    if filters:
+        scope += ' Choose a topic or an outcome to narrow the list.'
+    scope = '<p class="ns-sub">%s</p>' % scope if n > 1 else ''
+    return (
+        '<details class="ns" id="gaps-h"><summary><span class="ns-q" aria-hidden="true">?</span>'
+        '<h2><span class="v-see">See</span><span class="v-hide">Hide</span> not-studied pairings</h2>'
+        '<span class="ns-c">%d</span></summary>'
+        '%s<div class="ns-p"><p class="ns-t"><strong><span class="ns-n">%d</span> not-studied '
+        '<span class="ns-w">%s</span></strong></p>%s%s'
+        '<ul class="gaps">%s</ul><button type="button" class="ns-more" hidden></button>'
+        '<p class="ns-foot">No paper in this body of research tested %s. Not studied is not a '
+        'negative result: nobody here tested it.</p></div></details>%s'
+        % (n, '<div class="ns-f" hidden>%s</div>' % filters if filters else '', n, word, scope,
+           ''.join(notes), items, 'this pairing' if n == 1 else 'these pairings', NS_JS))
 
 
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
