@@ -1052,6 +1052,10 @@
       each(together, function (t) { t.hidden = v !== 'flow'; });
       vBars.hidden = v !== 'bars';
       vTable.hidden = v !== 'table';
+      var st = document.querySelector('.flow-steps');
+      if (st) st.hidden = v !== 'flow';
+      var hb = bar.querySelector('.howto-btn');
+      if (hb) hb.hidden = v !== 'flow';
       if (current && slotHome) slotHome.parentNode.insertBefore(slot, slotHome.nextSibling);   // the open card stays open
       each(bar.querySelectorAll('[data-view]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v)); });
     };

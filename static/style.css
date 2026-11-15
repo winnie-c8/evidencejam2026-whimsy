@@ -1590,3 +1590,7 @@ svg.pale.hl a.edge:not(.on), svg.pale.hl a.gap-link:not(.on), svg.pale.hl .membe
 .bax-s b { text-align: right; }
 .bax-s small { grid-column: 1 / -1; text-align: center; font-weight: 400; letter-spacing: 1.6px; color: #6b6b6b; margin-top: 10px; }
 .bchart .brow, .q1v .ckey li { max-width: none; }
+.graph-sec .g-label { font-family: var(--font-heading); font-weight: 300; color: var(--link); text-transform: uppercase;
+  font-size: clamp(1.6rem, 2.6vw, 2.4rem); line-height: 1.1; margin: var(--space-3) 0 var(--space-2); }
+.flow-steps[hidden], .flow-bar .howto-btn[hidden] { display: none; }
+.flow-bar + .flow-steps { margin-top: 0; }

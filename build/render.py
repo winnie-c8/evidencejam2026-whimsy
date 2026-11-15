@@ -1391,9 +1391,9 @@ def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: Lis
                   % (esc(node['label']), res, cs, n_claims))
     table_view = ('<section id="table" class="gtable" aria-labelledby="table-h"><h2 id="table-h">All arrows as a '
                   'table</h2>%s</section>' % gp['table'])
-    main = ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h" class="sr-only">The flow diagram</h2>'
+    main = ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h" class="g-label">Graph</h2>'
             '%s%s%s%s<div id="card-slot"></div>%s</section>%s%s'
-            % (flow_steps(), flow_toolbar(), figure, strip, table_view, howto_dialog(g, gp_), GRADING_TPL +
+            % (flow_toolbar(), flow_steps(), figure, strip, table_view, howto_dialog(g, gp_), GRADING_TPL +
                '<script type="application/json" id="card-lims">%s</script>'
                % json.dumps(CARD_LIMITS, ensure_ascii=False).replace('</', '<\\/')))
     store = gp['combos'] + gp['arrows']
