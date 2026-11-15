@@ -2,11 +2,12 @@
 
 The model is called only when BRINE_URL, BRINE_MODEL and BRINE_API_KEY are all set (README:
 "Read the LLM endpoint, model and key from the environment"). It gets a short fact sheet built
-from the answer pack and writes two plain sentences. Its text is used only if it passes
-validate(): no number that is not in the fact sheet, no invented durations, no wording that turns
-a gap into a negative result, and a sane length. Otherwise the template sentence is used, so the
-build never depends on the network. Standard library only; small prompts and max_tokens to keep
-token use (and so build energy) low.
+from the answer pack and writes three plain sentences: the answer, the firmest evidence, the limit.
+Its text is used only if it passes validate(): every direction and certainty it states belongs to
+the item it names, no number that is not in the fact sheet, no durations, no overclaiming, no
+wording that turns a gap into a negative result. Otherwise the template sentence is used, so the
+build never depends on the network. Standard library only; three small calls with max_tokens set
+to keep token use (and so build energy) low.
 """
 from __future__ import annotations
 
@@ -16,51 +17,153 @@ import re
 import urllib.request
 from typing import Dict, List, Optional, Tuple
 
-from load import EFFECTS, GAPMAP, Question, SiteData
+from load import COMPARISON, GAPMAP, Question, SiteData
 
+FIRM = ('high', 'moderate')
 CERT = {'high': 'high', 'moderate': 'moderate', 'low': 'low', 'very_low': 'very low'}
-DIR = {'increase': 'increases', 'decrease': 'decreases', 'mixed': 'mixed results', 'no_effect': 'no clear effect',
-       'unclear': 'unclear', 'below_reference': 'behind natural marshes', 'above_reference': 'ahead of natural marshes',
-       'comparable': 'level with natural marshes'}
-# words that would make "not studied" read as a failed or harmful result
-NEGATIVE = ('ineffective', 'does not work', "doesn't work", 'no effect on', 'harmful', 'fails', 'failed', 'useless')
-MAX_CHARS = 420
-SYSTEM = ('You write for restoration practitioners who are not scientists. Using ONLY the facts given, write '
-          'exactly two short plain-English sentences summarising what the evidence says for this question. '
-          'Refer to each item by the exact name given before its colon. Keep each item\'s direction and '
-          'certainty exactly as given, in the same clause as its name. Do not add numbers, years, durations or '
-          'claims that are not in the facts. "Not studied" means nobody tested it, never that it does not work. '
-          'Reply with the two sentences only.')
+EFFECT = {'increase': 'increases it', 'decrease': 'decreases it', 'mixed': 'mixed results (the studies disagree)',
+          'no_effect': 'no clear effect (tested, nothing found)', 'unclear': 'direction unclear'}
+REF = {'below_reference': 'behind natural marshes', 'above_reference': 'ahead of natural marshes',
+       'comparable': 'level with natural marshes', 'mixed': 'mixed results (the studies disagree)',
+       'unclear': 'unclear'}
+TREND = {'increase': 'rises as marshes age', 'decrease': 'falls as marshes age',
+         'no_effect': 'no clear change as marshes age', 'mixed': 'mixed results as marshes age (the studies disagree)',
+         'unclear': 'unclear as marshes age'}
+DENSEST = ['most-studied', 'most studied', 'best-studied', 'best studied', 'densest']
+
+MAX_CHARS = 640
+MAX_SENTENCES = 3
+SYSTEM = (
+    'You write the home-page summary of one research question for restoration practitioners '
+    '(conservation staff, consultants) who are not scientists. Use ONLY the facts given.\n\n'
+    'Write exactly three plain-English sentences, about 70 words in total, following the PLAN:\n'
+    '1. Answer the question as it was asked.\n'
+    '2. Give the firmest evidence. Name each item exactly as written before its colon, with its direction, '
+    'and put its certainty in brackets straight after it, for example "site preparation gives mixed results '
+    '(high certainty)". Never merge certainties ("high and moderate certainty"). An item can have different '
+    'results for different outcomes: give each outcome its own clause.\n'
+    '3. Say what this evidence cannot tell the reader.\n\n'
+    'Meanings you must keep:\n'
+    '- "mixed" means the studies disagree. It does not mean the treatment sometimes works.\n'
+    '- "no clear effect" means it was tested and nothing was found.\n'
+    '- "not studied" means nobody tested it. Never say or imply that it does not work.\n'
+    '- Certainty (high, moderate, low, very low) is how far the evidence can be trusted, not how big '
+    'the effect is. Never raise, lower or generalise it, and never call evidence strong, weak, proven '
+    'or clear.\n\n'
+    'Do not add numbers, years, durations, advice or causes that are not in the facts. Write numbers '
+    'as digits.\n\n'
+    'Style: write like a field ecologist talking to a colleague, in plain everyday words. Write item names '
+    'in lower case (unless one starts the sentence), with "and" instead of "&" and "or" instead of "/". '
+    'Say "most studied", not "densest" or "graph". No dashes, no semicolons, no lists, headings, markdown '
+    'or abbreviations, and no filler such as "notably", "importantly", "highlights" or "it is worth noting". '
+    'Reply with the three sentences only.')
 
 # Words that state a direction, and which pack directions each one is consistent with. A clause
-# of the reply that uses one must name a fact whose direction it fits (see check_claims).
+# of the reply that uses one must name items whose direction it fits (see check_claims).
 DIR_WORDS = [
     (r'\bno (?:clear )?(?:effect|change|difference)\b', {'no_effect', 'comparable'}),
-    (r'\b(?:increas\w*|rais\w*|improv\w*|boost\w*|helps?|helped|helping|benefit\w*)\b', {'increase', 'above_reference'}),
-    (r'\b(?:decreas\w*|reduc\w*|lowers?|lowered|lowering|hurts?|harms?|harmed|hold\w* (?:\w+ )?back|worsen\w*)\b',
-     {'decrease', 'below_reference'}),
+    (r'\b(?:increas\w*|rais\w*|ris(?:e|es|ing)|improv\w*|boost\w*|helps?|helped|helping|benefit\w*'
+     r'|works?|working|effective\w*|worth\w*|better|superior|succeed\w*)\b', {'increase', 'above_reference'}),
+    (r'\b(?:decreas\w*|reduc\w*|lowers?|lowered|lowering|hurts?|harms?|harmed|hold\w* (?:\w+ )?back|worsen\w*'
+     r'|falls?|drops?|declin\w*|worse|inferior|bad for|kills?)\b', {'decrease', 'below_reference'}),
     (r'\b(?:behind|lag\w*|below|trail\w*|fall short)\b', {'below_reference', 'decrease'}),
     (r'\b(?:ahead|above|exceed\w*|outperform\w*)\b', {'above_reference', 'increase'}),
-    (r'\b(?:level with|comparable|similar|match\w*|catch\w* up)\b', {'comparable', 'no_effect'}),
+    (r'\b(?:level with|comparable|similar|match\w*|no different|same as)\b', {'comparable', 'no_effect'}),
     (r'\b(?:mixed|disagree\w*|inconsistent|conflicting)\b', {'mixed'}),
     (r'\b(?:unclear|uncertain direction)\b', {'unclear'}),
 ]
 CERT_RE = re.compile(r'\b(very low|high|moderate|low)(?:-| )certainty\b|\bcertainty (?:is |of )?(very low|high|moderate|low)\b')
+# words that would make "not studied" read as a failed or harmful result
+NEGATIVE = ('ineffective', 'does not work', "doesn't work", 'no effect on', 'harmful', 'fails', 'failed', 'useless',
+            'not shown to work', 'not been shown', 'not worth', 'skip', 'not supported', 'no support', 'unhelpful',
+            'do not matter', "don't matter", 'unimportant', 'pointless')
+# claims stronger than any grade in the pack, or advice the pack doesn't give
+OVERCLAIM = re.compile(r'\b(?:proven|proves?|clearly|clear evidence|definitely|certainly|always|guarantee\w*|'
+                       r'conclusive\w*|strong(?:ly)?|weak(?:ly)?|robust|well[- ](?:established|supported)|'
+                       r'will|should|must|recommend\w*|best practice|key step|the key|prioriti\w*|'
+                       r'managers can|practitioners can|good idea|bad idea)\b')
+# advice given as a command: "Use bigger seedlings", "..., so plant big seedlings"
+COMMAND = re.compile(r'(?:^|[.!?]\s+|\bso\s+)(?:use|plant|apply|choose|avoid|try|control|consider|add|start|stop|'
+                     r'pick|select)\b')
+# reads as machine-written: dashes, symbols copied from labels, jargon, stock filler phrases
+STYLE = re.compile(r'[\u2012-\u2015&/]|\s-\s|--|\b(?:notably|importantly|crucial(?:ly)?|delve\w*|underscor\w*|'
+                   r'highlight\w*|landscape|comprehensive|it is worth noting|it is important to note|'
+                   r'in summary|overall|furthermore|moreover|additionally|graph|densest)\b')
+# Q2's honest answer is that nobody knows how long: any timeline or trajectory is invented
+TIMELINE = re.compile(r'\b(?:years?|months?|decades?|eventually|quickly|rapidly|soon|slowly|long[- ]term|'
+                      r'short[- ]term|over time|with time|in time|catch(?:es|ing)? up|caught up|gradual\w*|'
+                      r'matur\w*|later|in the long run|takes? a while|converg\w*|over the years|becomes? like)\b')
+NUMBER_WORDS = {w: i for i, w in enumerate(
+    'zero _ two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen '
+    'seventeen eighteen nineteen twenty'.split()) if w != '_'}
+NUMBER_WORDS.update({'thirty': 30, 'forty': 40, 'fifty': 50, 'hundred': 100, 'dozen': 12})
+VAGUE_SHARE = re.compile(r'\b(?:half|third|quarter|majority|minority|most of the interventions)\b')
+STUDIES_RE = re.compile(r'\b(\d+) stud(?:y|ies)\b')
+# wording that ties a finding to marsh age (a with-age trend), not to a comparison with natural marshes
+AGE_RE = r'\b(?:as (?:the )?marshes? age|as they age|marsh age|with age|older marshes|younger marshes)\b'
+HOW_LONG_RE = re.compile(r"\bcan(?:not|'t| not) say\b")
 
 
 class Fact:
-    """One line of the fact sheet: the names that point to it, its directions and certainties."""
-    def __init__(self, line: str, names: List[str], dirs=(), certs=()):
-        self.line, self.names = line, [n.lower() for n in names if n]
-        self.dirs, self.certs = set(dirs), set(certs)
+    """One line of the fact sheet: the item it is about (key), the names that point to it, its
+    directions and certainties, and the outcome words that tell its findings apart."""
+    def __init__(self, line: str, key: str, names: List[str], dirs=(), certs=(), outcomes=(), exclusive=False,
+                 studies=(), context: Optional[str] = None, opens: bool = False):
+        self.line, self.key = line, key
+        self.names = [n.lower() for n in names if n]
+        self.dirs, self.certs, self.outcomes = set(dirs), set(certs), set(outcomes)
+        self.studies = {int(n) for n in studies}
+        self.exclusive = exclusive   # combined treatments: when named, the clause is about them alone
+        self.context = context       # regex the clause must also match for this fact to be meant
+        self.opens = opens           # the reply's first sentence must say this (Q2: can't say how long)
 
 
 def _names(label: str) -> List[str]:
-    """How a reply may name an item: its label without brackets, and its first two words."""
+    """How a reply may name an item: its label without brackets, its first part, its first two words."""
     base = re.sub(r'\s*\(.*?\)', '', label).strip().lower()
-    words = [w for w in re.split(r'[\s,&/]+', base) if w]
-    head = ' '.join(words[:1] if len(words) > 1 and words[1] in ('or', 'and', 'of', 'at', 'in', 'to') else words[:2])
-    return [base, head] if head and head != base else [base]
+    seg = re.split(r'\s*(?:&|/|,|\+| or | and )\s*', base)[0].strip()
+    two = ' '.join(seg.split()[:2])
+    said = base.replace(' & ', ' and ').replace(' / ', ' or ')   # how a plain sentence writes it
+    return list(dict.fromkeys(n for n in (base, said, seg, two) if len(n) > 3))
+
+
+def _studies(n: int) -> str:
+    return '%d %s' % (n, 'study' if n == 1 else 'studies')
+
+
+def _words(label: str) -> set:
+    return {w for w in re.findall(r'[a-z]+', label.lower()) if len(w) > 3}
+
+
+def empty_lines(q: Question) -> Tuple[List[str], int, List[str], int]:
+    """Gap map: interventions with no studies on any outcome, the number of outcomes, outcomes no
+    intervention was studied for, the number of interventions."""
+    subs: Dict[str, List[int]] = {}
+    outs: Dict[str, List[int]] = {}
+    for f in q.findings:
+        subs.setdefault(f.subject_label, [0, 0])[0] += 1
+        outs.setdefault(f.outcome_label, [0, 0])[0] += 1
+    for g in q.gaps:
+        subs.setdefault(g.subject_label, [0, 0])[1] += 1
+        outs.setdefault(g.outcome_label, [0, 0])[1] += 1
+    return ([k for k, v in subs.items() if v[0] == 0], len(outs),
+            [k for k, v in outs.items() if v[0] == 0], len(subs))
+
+
+def combined(data: SiteData, qid: str) -> List[Tuple[List[str], str, dict]]:
+    """Graph edges from a combination node (two treatments together) with high or moderate certainty:
+    (member labels, target label, edge)."""
+    g = data.graphs.get(qid)
+    out = []
+    for e in (g.edges if g else ()):
+        if e.get('kind') != 'effect' or e.get('certainty') not in FIRM:
+            continue
+        src = g.node(e['source'])
+        if src.get('kind') != 'combination':
+            continue
+        members = [g.node(m)['label'] for m in src.get('members') or []]
+        out.append((members, g.node(e['target'])['label'], e))
+    return out
 
 
 def facts(data: SiteData, q: Question) -> Tuple[str, List[str], List[Fact]]:
@@ -70,75 +173,164 @@ def facts(data: SiteData, q: Question) -> Tuple[str, List[str], List[Fact]]:
     lines = ['Question: ' + q.text]
     nums: List[str] = []
     fl: List[Fact] = []
+
+    def add(line: str, fact: Optional[Fact] = None, *ns) -> None:
+        lines.append(line)
+        nums.extend(str(n) for n in ns)
+        if fact:
+            fl.append(fact)
+
+    sa = q.extra.get('short_answer') or {}
     if kind == GAPMAP and 'summary' in q.extra:
         s = q.extra['summary']
-        lines.append('%s of %s intervention-outcome combinations have been studied; %s of those by a single study.'
-                     % (s['filled'], s['cells'], s['thin']))
-        lines.append('%d combinations have not been studied (nobody tested them).' % len(q.gaps))
-        nums += [str(s['filled']), str(s['cells']), str(s['thin']), str(len(q.gaps))]
+        lines.insert(0, 'PLAN: sentence 1 says where evidence is missing: the interventions nobody studied, and '
+                        'the outcomes nobody measured (an intervention is studied, an outcome is measured). '
+                        'Sentence 2 says which combinations are most studied and what those results show. '
+                        'Sentence 3 says that an empty cell means nobody tested it.')
+        add('%s of %s intervention-outcome combinations have been studied; %s of those by a single study.'
+            % (s['filled'], s['cells'], s['thin']), None, s['filled'], s['cells'], s['thin'])
+        add('%d combinations have not been studied (nobody tested them).' % len(q.gaps), None, len(q.gaps))
+        rows, n_out, cols, n_sub = empty_lines(q)
+        if rows:
+            line = '- %d of the %d interventions, not studied for any of the %d outcomes: %s' % (
+                len(rows), n_sub, n_out, '; '.join(rows))
+            add(line, Fact(line, 'empty-rows', [n for r in rows for n in _names(r)]), n_out, len(rows), n_sub)
+        if cols:
+            line = '- Outcomes no study measured, for any of the %d interventions: %s' % (n_sub, '; '.join(cols))
+            add(line, Fact(line, 'empty-cols', [n for c in cols for n in _names(c)]), n_sub, len(cols))
         by_id = {f.id: f for f in q.findings}
         dense = [by_id[i] for i in (s.get('densest') or []) if i in by_id]
         if dense:
             n_mixed = sum(f.direction == 'mixed' for f in dense)
-            line = ('Most-studied combinations: all %d have mixed results.' % len(dense) if n_mixed == len(dense)
-                    else 'Most-studied combinations: %d of the %d have mixed results.' % (n_mixed, len(dense)))
-            lines.append(line)
-            nums += [str(len(dense)), str(n_mixed)]
-            fl.append(Fact(line, ['most-studied', 'most studied', 'best-studied', 'best studied'],
-                           {f.direction for f in dense}, {f.certainty for f in dense}))
-    else:
-        sa = q.extra.get('short_answer') or {}
+            head = ('all %d have mixed results (the studies disagree)' % len(dense) if n_mixed == len(dense)
+                    else '%d of the %d have mixed results (the studies disagree)' % (n_mixed, len(dense)))
+            line = 'Most-studied combinations: %s.' % head
+            add(line, Fact(line, 'densest', DENSEST, {f.direction for f in dense}, {f.certainty for f in dense},
+                           studies=[f.studies for f in dense]), len(dense), n_mixed)
+            for f in dense[:3]:
+                line = '- %s on %s: %s (%s certainty, %s)' % (f.subject_label, f.outcome_label, EFFECT[f.direction],
+                                                              CERT[f.certainty], _studies(f.studies))
+                add(line, Fact(line, 'cell:' + f.subject_id, _names(f.subject_label), {f.direction}, {f.certainty},
+                               _words(f.outcome_label), studies=[f.studies]), f.studies)
+    elif kind == COMPARISON:
         if 'time_to_reference' in sa:
+            lines.insert(0, 'PLAN: sentence 1 says the studies cannot say how long. Sentence 2 names the attributes '
+                            'that differ from natural marshes, with their certainty. Sentence 3 says how little '
+                            'else is known.')
             line = 'How long until created marshes match natural ones: the studies cannot say.'
-            lines.append(line)
-            fl.append(Fact(line, ['how long', 'cannot say', "can't say", 'catch up'], {'comparable'}))
-        firm = [f for f in q.all_findings() if f.certainty in ('high', 'moderate')]
-        for f in firm:
-            name = f.outcome_label if f.reference or f.kind == 'trend' else f.subject_label
-            line = '- %s: %s (%s certainty, %d %s%s)' % (
-                name, DIR.get(f.direction, f.direction), CERT[f.certainty], f.studies,
-                'study' if f.studies == 1 else 'studies', '' if (f.reference or f.kind == 'trend') else ', on ' + f.outcome_label)
-            lines.append(line)
-            nums.append(str(f.studies))
-            fl.append(Fact(line, _names(name), {f.direction}, {f.certainty}))
-        rest = [f for f in q.all_findings() if f not in firm]
-        if rest:
-            levels = [CERT[c] for c in ('high', 'moderate', 'low', 'very_low') if any(f.certainty == c for f in rest)]
-            line = '%d other findings have %s certainty.' % (len(rest), ' or '.join(levels))
-            lines.append(line)
-            nums.append(str(len(rest)))
-            fl.append(Fact(line, ['other', 'less certain', 'remaining', 'rest'],
-                           {f.direction for f in rest}, {f.certainty for f in rest}))
+            add(line, Fact(line, 'how-long', ['how long', 'cannot say', "can't say"], {'comparable'}, opens=True))
+        for f in q.findings:
+            if f.certainty in FIRM:
+                line = '- %s: %s (%s certainty, %s)' % (f.outcome_label, REF.get(f.direction, EFFECT.get(f.direction)),
+                                                      CERT[f.certainty], _studies(f.studies))
+                add(line, Fact(line, f.outcome_id, _names(f.outcome_label), {f.direction}, {f.certainty},
+                               studies=[f.studies]), f.studies)
+        for f in q.trends:
+            if f.certainty in FIRM:
+                line = '- As marshes age, %s: %s (%s certainty, %s)' % (f.outcome_label, TREND[f.direction],
+                                                                      CERT[f.certainty], _studies(f.studies))
+                add(line, Fact(line, 'trend:' + f.outcome_id, _names(f.outcome_label), {f.direction}, {f.certainty},
+                               studies=[f.studies], context=AGE_RE), f.studies)
+        _rest(q, add)
         if q.gaps:
-            lines.append('%d pairing(s) not studied.' % len(q.gaps))
-            nums.append(str(len(q.gaps)))
+            labels = [g.outcome_label for g in q.gaps]
+            line = '- Never compared with natural marshes (nobody tested it), %d attributes: %s' % (
+                len(labels), '; '.join(labels))
+            add(line, Fact(line, 'gaps', [n for lb in labels for n in _names(lb)]), len(labels))
+    else:
+        lines.insert(0, 'PLAN: sentence 1 names what helps or holds back the outcome with high certainty. '
+                        'Sentence 2 covers the rest of the question: mixed results and combined treatments. '
+                        'Sentence 3 says what is less certain or not studied.')
+        for f in q.findings:
+            if f.certainty in FIRM:
+                line = '- %s, effect on %s: %s (%s certainty, %s)' % (f.subject_label, f.outcome_label,
+                                                                    EFFECT[f.direction], CERT[f.certainty],
+                                                                    _studies(f.studies))
+                add(line, Fact(line, f.subject_id, _names(f.subject_label), {f.direction}, {f.certainty},
+                               _words(f.outcome_label), studies=[f.studies]), f.studies)
+        for members, target, e in combined(data, q.qid):
+            line = '- %s combined with %s, effect on %s: %s (%s certainty, %s)' % (
+                members[0], ' and '.join(members[1:]), target, EFFECT[e['direction']], CERT[e['certainty']],
+                _studies(e['studies']))
+            add(line, Fact(line, 'combo:' + e['id'], ['combined', 'together', 'combination'], {e['direction']},
+                           {e['certainty']}, _words(target), exclusive=True, studies=[e['studies']]), e['studies'])
+        _rest(q, add)
+        for g in q.gaps:
+            line = '- Not studied (nobody tested it): %s, effect on %s' % (g.subject_label, g.outcome_label)
+            add(line, Fact(line, 'gap:' + g.subject_id, _names(g.subject_label)))
+    # outcome words that also appear in an item's name ("size") can't tell findings apart
+    named = {w for f in fl for n in f.names for w in n.split()}
+    for f in fl:
+        f.outcomes -= named
     return '\n'.join(lines), nums, fl
 
 
+def _rest(q: Question, add) -> None:
+    rest = [f for f in q.all_findings() if f.certainty not in FIRM]
+    if rest:
+        levels = [CERT[c] for c in ('high', 'moderate', 'low', 'very_low') if any(f.certainty == c for f in rest)]
+        line = '%d other findings have %s certainty.' % (len(rest), ' or '.join(levels))
+        add(line, Fact(line, 'rest', ['other', 'less certain', 'remaining', 'rest'],
+                       {f.direction for f in rest}, {f.certainty for f in rest}), len(rest))
+
+
 def check_claims(text: str, fl: List[Fact]) -> Optional[str]:
-    """Hard rule 1: every direction or certainty the reply states must belong to a fact named in the
-    same clause. Fails closed: a clause that states one without naming a fact is rejected."""
+    """Hard rule 1: every direction or certainty the reply states must belong to the items it names.
+    Each item named in a clause must fit every direction word in it, and each certainty must fit the
+    items named next to it. Fails closed: a clause that states a result without naming a fact is rejected."""
+    known = set().union(*(f.outcomes for f in fl)) if fl else set()
     for clause in re.split(r'[.;:]\s+|[.;]$|, (?:and|but|while|whereas) ', text.lower()):
         clause = clause.strip()
         if not clause:
             continue
-        dirs = set()
-        for rx, ok in DIR_WORDS:
-            if re.search(rx, clause):
-                dirs.add(frozenset(ok))
-        certs = {(m.group(1) or m.group(2)).replace(' ', '_') for m in CERT_RE.finditer(clause)}
-        if not dirs and not certs:
+        dirs = [ok for rx, ok in DIR_WORDS if re.search(rx, clause)]
+        certs = [(m.start(), (m.group(1) or m.group(2)).replace(' ', '_')) for m in CERT_RE.finditer(clause)]
+        counts = [(m.start(), int(m.group(1))) for m in STUDIES_RE.finditer(clause)]
+        if not dirs and not certs and not counts:
             continue
-        hit = [f for f in fl if any(n in clause for n in f.names)]
-        if not hit:
+        hits = []
+        for f in fl:
+            if f.context and not re.search(f.context, clause):
+                continue
+            # whole words only: the name "rest" must not match inside "restoration"
+            at = [m.start() for n in f.names for m in [re.search(r'(?<!\w)%s(?!\w)' % re.escape(n), clause)] if m]
+            if at:
+                hits.append((min(at), f))
+        if any(f.exclusive for _, f in hits):
+            hits = [(p, f) for p, f in hits if f.exclusive]
+        if not hits:
             return 'states a result without naming a fact: %r' % clause[:60]
-        allowed_d = set().union(*(f.dirs for f in hit))
-        allowed_c = set().union(*(f.certs for f in hit))
+        said = {w for w in known if re.search(r'\b%s\b' % w, clause)}
+        items: Dict[str, Tuple[int, List[Fact]]] = {}
+        for p, f in hits:
+            pos, fs = items.get(f.key, (p, []))
+            items[f.key] = (min(pos, p), fs + [f])
+        for key, (pos, fs) in items.items():
+            if said:
+                fs = [f for f in fs if not f.outcomes or f.outcomes & said]
+                if not fs:
+                    return 'no such finding: %r' % clause[:60]
+            items[key] = (pos, fs)
+        # an item with several findings left (say, mixed for survival but increases growth) must fit
+        # the direction word in every one of them, so a clause can't blur two findings into one
         for ok in dirs:
-            if not ok & allowed_d:
-                return 'direction not in the facts: %r' % clause[:60]
-        if certs - allowed_c:
-            return 'certainty not in the facts: %r' % clause[:60]
+            for _, fs in items.values():
+                if not all(ok & f.dirs for f in fs if f.dirs) or not any(f.dirs for f in fs):
+                    return 'direction not in the facts: %r' % clause[:60]
+        # a certainty or a study count belongs to the items named since the previous one; if none, to
+        # those after it. Every finding of those items must have that value.
+        for what, marks, values in (('certainty', certs, lambda f: f.certs), ('study count', counts, lambda f: f.studies)):
+            prev = -1
+            for i, (at, v) in enumerate(marks):
+                nxt = marks[i + 1][0] if i + 1 < len(marks) else len(clause)
+                near = [fs for pos, fs in items.values() if prev < pos < at] or \
+                       [fs for pos, fs in items.values() if at < pos < nxt]
+                if not near:
+                    return '%s not tied to a named fact: %r' % (what, clause[:60])
+                for fs in near:
+                    if not all(v in values(f) for f in fs):
+                        return '%s not in the facts: %r' % (what, clause[:60])
+                prev = at
     return None
 
 
@@ -149,40 +341,71 @@ def validate(text: str, allowed: List[str], fl: Optional[List[Fact]] = None) -> 
         return 'empty'
     if len(t) > MAX_CHARS:
         return 'too long'
+    if '<' in t or '>' in t or '*' in t or '#' in t:
+        return 'markup'
+    if not t.endswith(('.', '!', '?')):
+        return 'cut off mid-sentence'
+    if '...' in t or '\u2026' in t:
+        return 'ellipsis'
+    if len(re.findall(r'[.!?](?=\s|$)', t)) > MAX_SENTENCES:
+        return 'more than %d sentences' % MAX_SENTENCES
+    if any(len(s.split()) < 3 for s in re.split(r'(?<=[.!?])\s+', t)):
+        return 'a sentence too short to say anything'
     low = t.lower()
-    if re.search(r'\byears?\b|\bmonths?\b', low):
-        return 'mentions a duration'
+    m = TIMELINE.search(low)
+    if m:
+        return 'mentions a duration: %r' % m.group(0)
+    m = OVERCLAIM.search(low)
+    if m:
+        return 'overclaims: %r' % m.group(0)
+    m = COMMAND.search(low)
+    if m:
+        return 'gives advice: %r' % m.group(0).strip()
+    m = STYLE.search(low)
+    if m:
+        return 'machine-sounding wording: %r' % m.group(0)
     for w in NEGATIVE:
         if w in low:
             return 'negative wording: %r' % w
     for n in re.findall(r'\d+(?:\.\d+)?', t):
         if n not in allowed:
             return 'number %s not in the facts' % n
-    if '<' in t or '>' in t:
-        return 'markup'
+    for w in re.findall(r'[a-z]+', low):
+        if w in NUMBER_WORDS and str(NUMBER_WORDS[w]) not in allowed:
+            return 'number %r not in the facts' % w
+    m = VAGUE_SHARE.search(low)
+    if m:
+        return 'share not in the facts: %r' % m.group(0)
     if fl is not None:
+        first = re.split(r'[.!?](?:\s|$)', low, maxsplit=1)[0]
+        if any(f.opens for f in fl) and not HOW_LONG_RE.search(first):
+            return "first sentence doesn't say the studies can't say how long"
         return check_claims(t, fl)
     return None
 
 
-def ask(fact_sheet: str, timeout: float = 60.0) -> str:
-    """One chat completion from the LiteLLM (OpenAI-compatible) endpoint."""
+def ask(fact_sheet: str, timeout: float = 45.0) -> Tuple[str, int, str]:
+    """One chat completion from the LiteLLM (OpenAI-compatible) endpoint: (text, tokens used, finish reason)."""
     url = os.environ['BRINE_URL'].rstrip('/')
     if not url.endswith('/chat/completions'):
         url += '/chat/completions' if url.endswith('/v1') else '/v1/chat/completions'
     body = json.dumps({
         'model': os.environ['BRINE_MODEL'],
         'messages': [{'role': 'system', 'content': SYSTEM},
-                     {'role': 'user', 'content': fact_sheet + '\n/no_think'}],
-        'temperature': 0.2, 'max_tokens': 160,
+                     {'role': 'user', 'content': fact_sheet}],
+        'temperature': 0, 'max_tokens': 220,
+        # Qwen3 thinks by default (and ignores /no_think here): minutes and hundreds of tokens, empty reply
+        'chat_template_kwargs': {'enable_thinking': False},
     }).encode('utf-8')
     req = urllib.request.Request(url, data=body, headers={
         'Content-Type': 'application/json', 'Authorization': 'Bearer ' + os.environ['BRINE_API_KEY']})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         out = json.load(r)
-    text = out['choices'][0]['message'].get('content') or ''
+    choice = out['choices'][0]
+    text = choice['message'].get('content') or ''
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.S)   # Qwen3 reasoning, if any
-    return ' '.join(text.split())
+    return (' '.join(text.split()), int((out.get('usage') or {}).get('total_tokens') or 0),
+            choice.get('finish_reason') or '')
 
 
 def enabled() -> bool:
@@ -192,21 +415,30 @@ def enabled() -> bool:
 def home_summaries(data: SiteData, templates: Dict[str, str], use_llm: bool = True) -> Dict[str, Tuple[str, str]]:
     """{qid: (text, source)}: the model's summary where it passed validate(), else the template."""
     out: Dict[str, Tuple[str, str]] = {}
-    on = use_llm and enabled()
+    on = tried = use_llm and enabled()
+    tokens = calls = 0
     for qid, q in data.questions.items():
         out[qid] = (templates[qid], 'template')
         if not on:
             continue
         sheet, nums, fl = facts(data, q)
         try:
-            text = ask(sheet)
-        except Exception as exc:  # network, auth, timeout, bad JSON: keep the template
-            print('[build] llm %s: request failed (%s); template used' % (qid, type(exc).__name__))
+            text, used, finish = ask(sheet)
+        except Exception as exc:  # network, auth, timeout, bad JSON: keep the templates, stop calling
+            print('[build] llm %s: request failed (%s); templates used from here on' % (qid, type(exc).__name__))
+            on = False
             continue
-        why = validate(text, nums, fl)
+        calls += 1
+        tokens += used
+        why = 'stopped at the token limit' if finish == 'length' else validate(text, nums, fl)
         if why:
-            print('[build] llm %s: rejected (%s); template used' % (qid, why))
+            print('[build] llm %s: rejected (%s); template used. Reply was: %s' % (qid, why, text[:300]))
             continue
         out[qid] = (text, 'llm')
         print('[build] llm %s: summary written by %s' % (qid, os.environ['BRINE_MODEL']))
+    if tried:
+        TOKENS['calls'], TOKENS['total'] = calls, tokens
     return out
+
+
+TOKENS: Dict[str, int] = {}   # filled by home_summaries(); build.py prints it as the build's last line

@@ -50,7 +50,9 @@ class Page(HTMLParser):
         self.edge_ids: Set[str] = set()
         self.classes_td: Dict[str, int] = {}
         self.free_text: List[str] = []
+        self.in_section: Dict[str, str] = {}  # id="f-..." -> id of the nearest id="e-..." around it
         self._stack: List[Tuple[str, bool]] = []  # (tag, exempt)
+        self._idstack: List[str] = []  # each open element's id ('' if none), parallel to _stack
         self._caps: List[List[Any]] = []  # [depth, path, buf]
 
     def _exempt(self) -> bool:
@@ -59,8 +61,11 @@ class Page(HTMLParser):
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         a = {k: (v or '') for k, v in attrs}
         self._attrs(tag, a)
+        if a.get('id', '').startswith('f-'):
+            self.in_section[a['id']] = next((i for i in reversed(self._idstack) if i.startswith('e-')), '')
         if tag in VOID:
             return
+        self._idstack.append(a.get('id', ''))
         cls = a.get('class', '').split()
         exempt = 'data-check' in a or (tag == 'blockquote' and 'quote' in cls)
         self._stack.append((tag, exempt))
@@ -100,6 +105,7 @@ class Page(HTMLParser):
                     if self._caps:
                         self._caps[-1][2].append(''.join(buf))
                 del self._stack[i:]
+                del self._idstack[i:]
                 return
 
     def handle_data(self, data: str) -> None:
@@ -263,10 +269,25 @@ def check_site(out: str, data: SiteData, answers_dir: str = 'answers/') -> List[
             if 'gap-' + gp.slug not in p.ids:
                 problems.append('%s: no gap marker id="gap-%s" for %s' % (pname, gp.slug, gp.id))
 
-    # 3 + 4. graph edges and evidence boxes
-    for gq in data.graph_qids():  # every question that has a *_graph.json
+    # 2b. a question whose findings are all graph arrows (Q1) shows the graph on its own page,
+    #     and each finding sits inside its arrow's evidence section (the side card)
+    graph_answers = [gq for gq in data.graph_qids() if gq in data.questions and data.questions[gq].findings
+                     and all(f.slug in data.graph_join for f in data.questions[gq].findings)]
+    for gq in graph_answers:
+        p = pages.get('%s.html' % gq)
+        if p is None:
+            continue
+        for f in data.questions[gq].findings:
+            want = 'e-' + slug(data.graph_join[f.slug])
+            got = p.in_section.get('f-' + f.slug)
+            if got is not None and got != want:
+                problems.append('%s.html: finding f-%s is not inside its arrow\'s section id="%s" (found in %s)'
+                                % (gq, f.slug, want, got or 'no arrow section'))
+
+    # 3 + 4. graph edges and evidence boxes, on the graph page and (Q1) on the answer page
+    for gq, gname in [(q_, '%s-graph.html' % q_) for q_ in data.graph_qids()] + \
+            [(q_, '%s.html' % q_) for q_ in graph_answers]:
         g = data.graphs[gq]
-        gname = '%s-graph.html' % gq
         p = pages.get(gname)
         if p is None:
             problems.append('%s missing' % gname)

@@ -972,12 +972,22 @@ def build_svg(g: Graph, edge_index: Dict[str, Any], prefix: str = 'q1graph') -> 
 
 
 def write_graph(graph: Graph, edge_index: Dict[str, Any], out: str, qid: str = 'q1') -> None:
-    name = '%s-graph.html' % qid
-    path = os.path.join(out, name)
-    with open(path, encoding='utf-8') as fh:
-        text = fh.read()
-    if '<!--GRAPH-->' not in text:
-        raise RuntimeError('%s has no <!--GRAPH--> placeholder' % name)
-    text = text.replace('<!--GRAPH-->', build_svg(graph, edge_index, '%sgraph' % qid), 1)
-    with open(path, 'w', encoding='utf-8') as fh:
-        fh.write(text)
+    """Draw the graph into its graph page (qN-graph.html, required) and into the question's own
+    page (qN.html) when that page has a place for it (Q1: the graph is the answer)."""
+    svg = None
+    for name, required in (('%s-graph.html' % qid, True), ('%s.html' % qid, False)):
+        path = os.path.join(out, name)
+        if not os.path.exists(path):
+            if required:
+                raise RuntimeError('%s missing' % name)
+            continue
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+        if '<!--GRAPH-->' not in text:
+            if required:
+                raise RuntimeError('%s has no <!--GRAPH--> placeholder' % name)
+            continue
+        svg = svg or build_svg(graph, edge_index, '%sgraph' % qid)
+        text = text.replace('<!--GRAPH-->', svg, 1)
+        with open(path, 'w', encoding='utf-8') as fh:
+            fh.write(text)
