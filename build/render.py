@@ -1184,15 +1184,13 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
                       % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
                          span('%s/summary/thin' % qid, s['thin']), prose.short_answer[qid].html), 'short')
     main = ('<h2 id="map">Gap map %s</h2><dl class="key"><div><dt><span class="swatch empty" aria-hidden="true">–</span>'
-            ' Not studied</dt><dd>No study in this body of research tested the pairing. Not a negative '
-            'result.</dd></div><div><dt><span class="swatch d-thin" aria-hidden="true"></span> thin</dt>'
-            '<dd>1 study</dd></div><div><dt><span class="swatch d-some" aria-hidden="true"></span> some</dt>'
-            '<dd>2–3 studies</dd></div><div><dt><span class="swatch d-dense" aria-hidden="true"></span> '
-            'dense</dt><dd>4 or more studies</dd></div><div><dt><span class="bars b3" aria-hidden="true"></span> '
-            'bars</dt><dd>How sure we can be, 1 to 4 (not how much research)</dd></div></dl>'
-            '<p class="note">Each filled cell shows its number of studies and density word, then its certainty bars. Study counts '
-            'measure research effort, not effect size. Select a filled cell to open its finding. Scroll the map '
-            'sideways for more outcomes, or open it full screen.</p>' % HELP_BTN)
+            ' Not studied</dt><dd>no study tested the pairing (not a negative result)</dd></div>'
+            '<div><dt><span class="swatch d-thin" aria-hidden="true"></span> 1 study</dt></div>'
+            '<div><dt><span class="swatch d-some" aria-hidden="true"></span> 2–3 studies</dt></div>'
+            '<div><dt><span class="swatch d-dense" aria-hidden="true"></span> 4 or more</dt></div></dl>'
+            '<p class="note">The number in a box is how many studies tested that pairing: research effort, not '
+            'effect size. Select a box for its finding, how sure we can be, and its sources. Scroll sideways for '
+            'more outcomes, or open the map full screen.</p>' % HELP_BTN)
     head = ''.join('<th scope="col"><span>%s</span></th>' % esc(lbl) for _, lbl in grid['cols'])
     trs, pops = [], []
     for rid, rlbl in grid['rows']:
@@ -1205,18 +1203,15 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
                 continue
             dens = item.raw.get('density', '')
             # a cell is a button: it opens its intervention's popup, on this combination's card
-            tds.append('<td class="d-%s"><button popovertarget="%s" data-open="%s"><span class="cl">%s '
-                       '<span class="sr-only">%s, </span>%s</span><span class="bars b%d" aria-hidden="true"></span>'
-                       '<span class="sr-only">, %s</span></button></td>'
+            # just the study count (colour + border say how many); certainty is in the popup card
+            tds.append('<td class="d-%s"><button popovertarget="%s" data-open="%s">%s'
+                       '<span class="sr-only"> %s</span></button></td>'
                        % (esc(dens), rpop, q3_cell_id(rid, cid), span('%s/%s/studies' % (qid, item.slug), item.studies),
-                          esc(plural(item.studies, 'study', 'studies')), esc(dens), CERT_BARS.get(item.certainty, 0),
-                          span('%s/%s/certainty' % (qid, item.slug), certainty_text(item.certainty))))
+                          esc(plural(item.studies, 'study', 'studies'))))
             items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
                 data, item, sources, subject=False, level=4, quotes_shown=0, compact=True)))
         n_f = len(items)
-        # under the name: how many of its combinations were studied (counted from the pack)
-        info = '<small class="rinfo">%d studied · %d not studied</small>' % (n_f, len(grid['cols']) - n_f)
-        trs.append('<tr><th scope="row"><span class="rname">%s</span>%s</th>%s</tr>' % (esc(rlbl), info, ''.join(tds)))
+        trs.append('<tr><th scope="row">%s</th>%s</tr>' % (esc(rlbl), ''.join(tds)))
         pops.append('<div popover id="%s" class="pop fpop rowpop" role="dialog" aria-label="%s">'
                     '<button type="button" class="pop-x" popovertarget="%s" popovertargetaction="hide">'
                     '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>'
