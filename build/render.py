@@ -200,7 +200,7 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
 # from the glance table or gap map) opens it. Without script it is just one click away.
 OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
                   'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
-                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details");'
+                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details:not(.gmx)");'
                   'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover()}catch(x){}}'
                   'only(pp,e);e.scrollIntoView({block:"nearest"});}addEventListener("hashchange",openTarget);openTarget();'
                   # in a row popup, show just one card (class "only"); "Show all" lifts it
@@ -212,7 +212,7 @@ OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.g
                   'if(a){a.closest("[popover]").classList.remove("only");return;}'
                   'var b=ev.target.closest("[data-open]");if(!b)return;'
                   'setTimeout(function(){var t=document.getElementById(b.getAttribute("data-open"));if(!t)return;'
-                  'var d=t.querySelector("details");if(d)d.open=true;only(t.closest("[popover]"),t);'
+                  'var d=t.querySelector("details:not(.gmx)");if(d)d.open=true;only(t.closest("[popover]"),t);'
                   't.scrollIntoView({block:"nearest"});},0);});</script>')
 
 
@@ -827,11 +827,12 @@ with open(os.path.join(ROOT, 'static', 'tree.svg'), encoding='utf-8') as _f:
 def page(data: SiteData, filename: str, title: str, description: str, body: str, *,
          side: bool = True, jumps: Optional[List[Tuple[str, str]]] = None,
          script: Optional[str] = None, home_menu: Optional[str] = None, wide: bool = False,
-         hero: str = '') -> str:
+         hero: str = '', tree: bool = True) -> str:
     """Every page has the same top bar (Figma "home page" frame): a thin line across the top of
     the screen, the boxed menu hanging from it (the line is the boxes' top edge) and the WHIMSY
     logo, which always links home. The bar stays at the top while scrolling.
-    Home (home_menu given) then has the tree and a numbered menu of its own sections on the left;
+    Home (home_menu given) then has the tree and a numbered menu of its own sections on the left
+    (the Guide passes tree=False: the same menu, no tree);
     every other page has the left sidebar, styled the same way."""
     main = '<main id="main" tabindex="-1">\n%s\n</main>' % body
     # HOME | Q1 | Q2 | Q3 (Figma). Graph and Guide stay in the left menu. Each Qn also carries the
@@ -853,9 +854,10 @@ def page(data: SiteData, filename: str, title: str, description: str, body: str,
                    'function f(){h.classList.toggle("over",b.getBoundingClientRect().bottom>h.offsetHeight);}'
                    'addEventListener("scroll",f,{passive:true});addEventListener("resize",f);f();});</script>')
     if home_menu is not None:
-        layout = ('%s<div class="home-grid"><div class="home-side">%s'
+        # tree=False (the Guide): no tree, so the menu sits right under the logo
+        layout = ('%s<div class="home-grid%s"><div class="home-side">%s'
                   '<nav class="home-menu" aria-label="On this page">%s</nav></div>%s</div>'
-                  % (header, TREE_HTML, home_menu, main))
+                  % (header, '' if tree else ' guide-grid', TREE_HTML if tree else '', home_menu, main))
     elif side and hero:
         # question pages: the full-width hero, then the content; no left menu (the top menu has
         # Home and Q1-Q3, the page links to its graph and to the Guide)
@@ -874,18 +876,6 @@ def page(data: SiteData, filename: str, title: str, description: str, body: str,
 
 
 # --------------------------------------------------------------- pages
-
-# "How to read this site": the symbols used on every page (shown on the Guide page)
-READ_KEY = ('<ul class="key-list">'
-            '<li><span class="chip dir-increase"><span aria-hidden="true">▲</span> Increases</span> '
-            '<span class="chip dir-decrease"><span aria-hidden="true">▼</span> Decreases</span> '
-            '<span class="chip dir-mixed"><span aria-hidden="true">⇅</span> Mixed</span> what studies found</li>'
-            '<li><span class="bars b3" aria-hidden="true"></span> how sure we can be, 1 to 4</li>'
-            '<li><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span> nobody here tested it '
-            '(not “doesn’t work”)</li>'
-            '<li><span class="qmark" aria-hidden="true">“ ”</span> sentences quoted word for word from the papers</li>'
-            '</ul>')
-
 
 # Home "Problem" opening (Figma home page frame). Each flower in static/home-flowers.webp as
 # [centre x, centre y, radius] in percent, so the page can show them one at a time with clip-path.
@@ -917,11 +907,16 @@ def problem_section() -> str:
             '</div></section>')
 
 
-# Figma "home page final": each question's heading on the home page, as a plain question.
-# A question not listed here (a new qN) uses its short name.
-HOME_HEADING = {'q1': 'What helps planted seedlings survive and grow?',
-                'q2': 'How long until a created marsh matches a natural one?',
-                'q3': 'Where is grassland restoration research missing?'}
+# Home question titles (Figma), a plain question each; a new qN uses its short name.
+HOME_TITLE = {
+    'q1': 'What helps planted seedlings survive and grow?',
+    'q2': 'How long until a created marsh matches a natural one?',
+    'q3': 'Where is grassland restoration research missing?',
+}
+# Hide the reveal-on-scroll parts before first paint (static/reveal.js shows them); not for
+# people who ask for reduced motion. Without script nothing is hidden.
+REVEAL_EARLY = ('<script>if(!matchMedia("(prefers-reduced-motion: reduce)").matches)'
+                'document.documentElement.classList.add("rv-js");</script>')
 
 
 def sketch(name: str, w: int, h: int, cls: str, style: str = '') -> str:
@@ -930,18 +925,19 @@ def sketch(name: str, w: int, h: int, cls: str, style: str = '') -> str:
             'decoding="async"%s>' % (cls, name, w, h, ' style="%s"' % style if style else ''))
 
 
-def mission_section() -> str:
+def mission_section(papers: str = '') -> str:
     """"Our Mission" (Figma "home page final"): the heading and first sentence beside the blue
     tree, then the plant beside the second sentence. Sketches are decorative."""
-    return ('<section class="hsec mission" id="top" aria-labelledby="top-h">'
+    # shown once the paper band has filled in (static/reveal.js, data-after)
+    return ('<section class="hsec mission rv" data-after="papers" id="top" aria-labelledby="top-h">'
             '<div class="ms-a"><div class="ms-text"><h2 id="top-h">Our Mission</h2>'
-            '<p>We put evidence in plain language: what the studies found, how sure we can be, and where '
-            'nobody has looked yet.</p></div>'
+            '<p>We put the evidence%s in plain language: what the studies found, how sure we can be, and '
+            'where nobody has looked yet.</p></div>'
             '<div class="ms-tree">%s%s</div></div>'
             '<div class="ms-b">%s<p>Every finding links back to a sentence in a paper. Every gap is shown as '
             'a gap, not hidden or mistaken for failure. When the research can’t answer a question, we say so.'
             '</p></div></section>'
-            % (sketch('tree-blue', 421, 490, 'ms-tree-img'), sketch('leaf', 69, 92, 'ms-leaf'),
+            % (papers, sketch('tree-blue', 421, 490, 'ms-tree-img'), sketch('leaf', 69, 92, 'ms-leaf'),
                sketch('plant', 493, 424, 'ms-plant')))
 
 
@@ -972,37 +968,35 @@ def render_index(data: SiteData, prose: Prose) -> str:
                 % (' ' + cls if cls else '', sid, sid, level, sid, heading, level, inner))
 
     menu = []      # (link, mark, label) for the left menu
-    sections = [problem_section(), mission_section()]
-    menu.append(('#guide', '?', 'How to use this site'))
-    sections.append(section(
-        'guide', 'How to use this site',
-        '<p>Pick one of the questions below. Each answer starts with a short answer, then a chart or table '
-        'you can take in at a glance: what each treatment does, how sure we can be, and how many studies '
-        'looked at it.</p>'
-        '<p>Select any row or box to see why the evidence got its certainty grade and to read the exact '
-        'sentences from the papers, with a link to each one. Before acting on an answer, open “things this '
-        'answer can’t tell you”: it says how the studies were picked and grouped.</p>'
-        '<p class="go"><a href="method.html">The Guide: symbols, grading and where the data comes from →</a>'
-        '</p>', cls='guide'))
+    sections = [problem_section()]
+    m = data.manifest.get('graph') or {}
+    papers = (' from %s papers' % span('manifest/graph/source_documents', m['source_documents'])
+              if m.get('source_documents') else '')
+    menu.append(('#top', '?', 'Who we are'))
+    sections.append(mission_section(papers))
     for n, (qid, q) in enumerate(data.questions.items(), 1):
         graph = ''
         if qid in data.graphs:
             graph = (' · <a href="%s">See it as a graph<span class="sr-only">: %s</span></a>'
                      % (graph_file(qid), esc(question_name(q))))
         menu.append(('%s.html' % qid, '%02d' % n, question_name(q)))   # the question's own page
-        sections.append(section(
-            'card-%s' % qid,
-            '<span class="qn">Q%d.</span> <a href="%s.html">%s</a>' % (n, esc(qid), esc(HOME_HEADING.get(qid, question_name(q)))),
-            question_body(qid, '%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s'
-                          '</span></a>%s</p>' % (home_summary(prose, qid), esc(qid), esc(question_name(q)), graph)),
-            cls='qsec'))
+        title = HOME_TITLE.get(qid) or question_name(q)
+        sections.append(
+            '<section class="hsec qsec" id="card-%s" aria-labelledby="card-%s-h">'
+            '<h2 id="card-%s-h" class="rv"><a href="%s.html"><span class="qn">Q%d.</span> %s</a></h2>'
+            '<div class="hsec-body rv">%s</div></section>'
+            % (esc(qid), esc(qid), esc(qid), esc(qid), n, esc(title), question_body(qid,
+               '%s<p class="go"><a href="%s.html">Go to question →<span class="sr-only"> %s</span></a>%s</p>'
+               % (home_summary(prose, qid), esc(qid), esc(question_name(q)), graph))))
     # data-sec: the home section each item stands for, so static/tree.js can mark the one being read
     menu_html = '<ol class="qnav">%s</ol>' % ''.join(
         '<li data-sec="%s"><a href="%s"><span class="n" aria-hidden="true">%s</span> %s</a></li>'
         % (esc(h[1:] if h.startswith('#') else 'card-' + h[:-len('.html')]), esc(h), esc(mk), esc(t))
         for h, mk, t in menu)
     return page(data, 'index.html', 'Whimsy · Restoration evidence', 'Plain answers to restoration questions, '
-                'with certainty, gaps and sources.', ''.join(sections) + '<script src="static/problem.js" defer></script>',
+                'with certainty, gaps and sources.',
+                REVEAL_EARLY + ''.join(sections) + '<script src="static/problem.js" defer></script>'
+                '<script src="static/reveal.js" defer></script>',
                 home_menu=menu_html, script='static/tree.js')
 
 
@@ -1838,10 +1832,83 @@ def q3_cell_id(subject_id: str, outcome_id: str) -> str:
 OUTCOME_SLOT = '{outcome}'
 
 
+GM_TOP = 8   # gap map: pairings with this many studies or more get the darkest shade
+
+# The pack's density label for a studied box, in words (matches the gap map's key).
+GM_DENSITY = {'thin': ('Thin', '1 study'), 'some': ('Some', '2–3 studies'), 'dense': ('Dense', '4 or more studies')}
+# How a box's study split names each direction ("4 increase · 2 decrease · 3 no effect").
+GM_SPLIT = {'increase': 'increase', 'decrease': 'decrease', 'mixed': 'mixed', 'no_effect': 'no effect',
+            'unclear': 'unclear'}
+
+
+def gm_card(f: Finding, sources: List[SourcePage]) -> str:
+    """One studied box of the gap map, laid out like the Figma Q1 "Bottom card · one cause": what was
+    found, how sure, how many studies, how they split; then three fold-outs for more (certainty
+    calculation, citations, constraints). The fold-outs are filled by static/gm.js when opened, so the
+    page stays light (123 of these): without script the first two still hold the exact rule text and
+    the sources-page link; Constraints is added by the script (the limitations are on the page)."""
+    base = '%s/%s' % (f.question, f.slug)
+    sym, word = DIR_SYMBOL[f.direction]
+    dk = f.raw.get('density', '')
+    dens = GM_DENSITY.get(dk)
+    reason = headline_reason(rationale_checks(f.certainty_rationale))
+    finding_sources(sources, f, f.question)  # writes sources-<slug>.html, the quotes' own page
+    papers = len(paper_groups(f.quotes))
+    sd = f.study_directions or {}
+    keys = _keys(f.reference, sd) if sd else []
+    if f.direction in keys:  # the overall answer's own direction first
+        keys.remove(f.direction)
+        keys.insert(0, f.direction)
+    # the split in words; gm.js draws the bar above it from these numbers, CSS the coloured dots
+    split = ' · '.join('<span class="sp k-%s">%s %s</span>'
+                       % (esc(k.replace('_', '-')), span('%s/study_directions/%s' % (base, k), sd[k]),
+                          esc(GM_SPLIT.get(k, words(k)))) for k in keys)
+    warn = ('<p class="gmc-warn"><strong>One study only:</strong> treat it as a lead, not an answer.</p>'
+            if f.studies == 1 else '')
+    why = ('<span class="gmc-why"><span aria-hidden="true">%s</span> %s</span>' % (esc(reason[0]), esc(reason[1]))
+           if reason else '')
+    raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
+    return (
+        '<article class="gmc fdir-%s" id="f-%s">'
+        '<p class="gmc-k">Finding%s</p>'
+        '<h3 class="gmc-h">%s <span aria-hidden="true">→</span><span class="sr-only">, effect on</span> %s</h3>'
+        '<dl class="gmc-st">'
+        '<div><dt>Finding</dt><dd class="gmc-big dir-%s"><span aria-hidden="true">%s</span> %s</dd></div>'
+        '<div><dt>Certainty</dt><dd><span class="gmc-big"><span class="bars b%d" aria-hidden="true"></span> %s</span>%s</dd></div>'
+        '<div><dt>Studies</dt><dd><span class="gmc-big">%s</span> %s · %s %s</dd></div></dl>'
+        '<p class="gmc-sp">How the %d %s split: %s</p>%s'
+        '<div class="gmc-more">'
+        '<details class="gmx gmx-calc"><summary>Certainty calculation</summary><div class="gmx-b"><div class="gmc-calc"></div>'
+        '<p class="gmc-rule">The data’s rule, word for word: <span class="rule">%s</span></p></div></details>'
+        '<details class="gmx gmx-src" data-src="sources-%s.html"><summary>Citations (%d)</summary><div class="gmx-b">'
+        '<p class="gmx-n">%d %s · %d %s</p><p class="go"><a class="srclink" href="sources-%s.html">Read all sources'
+        ' →</a></p></div></details></div></article>'
+        % (esc(f.direction.replace('_', '-')), esc(f.slug),
+           (' · %s: %s' % dens) if dens else '',
+           esc(f.subject_label), esc(f.outcome_label),
+           esc(f.direction.replace('_', '-')), sym, span(base + '/direction', word),
+           CERT_BARS.get(f.certainty, 0), span(base + '/certainty', CERT_WORD[f.certainty]), why,
+           span(base + '/studies', f.studies), plural(f.studies, 'study', 'studies'),
+           span(base + '/claims', f.claims), plural(f.claims, 'claim', 'claims'),
+           f.studies, plural(f.studies, 'study', 'studies'), split, warn,
+           raw,
+           esc(f.slug), f.claims, papers, plural(papers, 'paper', 'papers'), f.claims, plural(f.claims, 'quote', 'quotes'),
+           esc(f.slug)))
+
+
+def gm_rules_json() -> str:
+    """The certainty recipe's plain words, once per page, for gm.js to build "Certainty calculation"."""
+    return ('<script type="application/json" id="gm-rules">%s</script>'
+            % json.dumps({'start': {k: v[1] for k, v in START_CHECK.items()},
+                          'steps': [[pat.pattern, t] for pat, (_, t) in STEP_CHECK]},
+                         ensure_ascii=False).replace('</', '<\\/'))
+
+
 def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """GAPMAP layout (Q3 today). Main view: the gap map (sticky names) and the ten most studied. A filled
-    cell, or a row's "?", opens a popup with that intervention's findings (one popup per row, to keep the
-    page light); a cell opens straight onto its own card. Gaps are in the shared Not studied."""
+    """GAPMAP layout (Q3 today). Main view: the gap map and the most studied. Every box is a button.
+    A studied box opens a side panel on its own card (one panel per treatment row, so the page stays
+    light; "Show all" lists the row). An empty box opens one shared "Not studied" panel, filled by
+    static/gm.js from the row, the column and the Not studied list (where the gaps themselves live)."""
     grid = data.grids[q.qid]
     qid = q.qid
     s = q.extra['summary']
@@ -1849,11 +1916,17 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
                       % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
                          span('%s/summary/thin' % qid, s['thin']), prose.short_answer[qid].html), 'short')
     # Figma "Q3 gap map" page, frame "C · Q2 layout, site colours": a titled grid of rounded boxes,
-    # outcome names turned upright, an "Outcomes studied" column, then the key and the takeaway.
-    ncols = len(grid['cols'])
+    # outcome names slanted, then the key and the takeaway.
     row_n = {rid: sum(1 for cid, _ in grid['cols'] if not isinstance(grid['cells'][(rid, cid)], Gap))
              for rid, _ in grid['rows']}
+    col_n = {cid: sum(1 for rid, _ in grid['rows'] if not isinstance(grid['cells'][(rid, cid)], Gap))
+             for cid, _ in grid['cols']}
     none = sum(1 for n in row_n.values() if n == 0)
+    # Which of the pack's limitations a box's "Constraints" shows: the one about empty cells goes
+    # with the Not studied panel, the rest with every studied box.
+    lims = list(q.limitations)
+    gap_lim = [i for i, t in enumerate(lims) if 'empty cell' in t.lower()]
+    box_lim = [i for i in range(len(lims)) if i not in gap_lim] or list(range(len(lims)))
     counts = ('%s of %s treatment × outcome pairings have been studied; %s of those by a single study.'
               % (span('%s/summary/filled' % qid, s['filled']), span('%s/summary/cells' % qid, s['cells']),
                  span('%s/summary/thin' % qid, s['thin'])))
@@ -1870,46 +1943,83 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
         for cid, clbl in grid['cols']:
             item = grid['cells'][(rid, cid)]
             if isinstance(item, Gap):
-                tds.append('<td class="empty" aria-label="Not studied">–</td>')  # 261 of these: kept minimal
+                # 261 of these, kept minimal: gm.js makes each a button that opens the Not studied panel
+                tds.append('<td class="empty" aria-label="Not studied">–</td>')
                 continue
             dens = item.raw.get('density', '')
-            # a cell is a button: it opens its intervention's popup, on this combination's card
-            # just the study count (colour + border say how many); certainty is in the popup card
+            # our own extra shade inside the pack's "dense" (4+): the few pairings with 8 or more
+            # studies stand out. Study counts are the pack's; only the colour step is ours.
+            if dens == 'dense' and item.studies >= GM_TOP:
+                dens = 'dense d-top'
+            # just the study count (shade + number); the direction is one click away in the panel.
+            # gm.js gives the button its full spoken name (treatment, outcome, studies, direction, certainty).
             tds.append('<td class="d-%s"><button popovertarget="%s" data-open="%s">%s'
                        '<span class="sr-only"> %s</span></button></td>'
                        % (esc(dens), rpop, q3_cell_id(rid, cid), span('%s/%s/studies' % (qid, item.slug), item.studies),
                           esc(plural(item.studies, 'study', 'studies'))))
-            items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), finding_card(
-                data, item, sources, subject=False, level=4, quotes_shown=0, compact=True)))
+            items.append('<li id="%s">%s</li>' % (q3_cell_id(rid, cid), gm_card(item, sources)))
         n_f = len(items)
-        n_o = row_n[rid]
-        tally = ('<td class="sum"><strong>%d of %d</strong><small>outcomes studied</small></td>' % (n_o, ncols)
-                 if n_o else '<td class="sum none"><strong>Not studied</strong></td>')
-        trs.append('<tr><th scope="row">%s</th>%s%s</tr>' % (esc(rlbl), ''.join(tds), tally))
+        trs.append('<tr><th scope="row">%s</th>%s<td class="tot">%d</td></tr>' % (esc(rlbl), ''.join(tds), row_n[rid]))
         pops.append('<div popover id="%s" class="pop fpop rowpop" role="dialog" aria-label="%s">'
                     '<button type="button" class="pop-x" popovertarget="%s" popovertargetaction="hide">'
                     '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>'
                     '<p class="pop-h">%s</p><p class="cnt">%d studied, %d not studied (listed under Not studied)</p>'
                     '<ul class="cells">%s</ul><button type="button" class="show-all">Show all %d for %s</button></div>'
                     % (rpop, esc(rlbl), rpop, esc(rlbl), n_f, len(grid['cols']) - n_f, ''.join(items), n_f, esc(rlbl)))
-    main += ('<p class="fs-row"><button type="button" class="fs-btn" data-fs="gapmap-wrap" hidden>'
+    foot = ''.join('<td class="tot">%d</td>' % col_n[cid] for cid, _ in grid['cols'])
+    # One shared panel for every empty box; gm.js fills in the pairing and what was searched for.
+    pops.append('<div popover id="gm-gap" class="pop fpop rowpop gm-gappop" role="dialog" aria-labelledby="gm-gap-h">'
+                '<button type="button" class="pop-x" popovertarget="gm-gap" popovertargetaction="hide">'
+                '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>'
+                '<article class="gmc gmc-gap"><p class="gmc-k">Not studied</p><h3 class="gmc-h" id="gm-gap-h">Not studied</h3>'
+                '<p class="gmc-lead">No study in this collection tested this pairing.</p>'
+                '<p class="gmc-searched"><strong>Searched for:</strong> <span></span></p>'
+                '<p class="gmc-not">This isn’t a negative result. Nobody in this collection has tested it, '
+                'so we can’t say either way.</p>'
+                '<div class="gmc-lims" data-lim="%s"></div>'
+                '<p class="go"><a class="gmc-list" href="#not-studied">See it in the Not studied list →</a></p>'
+                '</article></div>' % ','.join(str(i) for i in gap_lim))
+    # The legend: a one-line key anyone gets at a glance, and the full explanation one click away
+    # (a dropdown styled like "See not-studied pairings").
+    main += ('<div class="gm-legend" id="gm-legend">'
+             '<p class="gm-basic"><span class="gm-k">Studies per box:</span> '
+             '<span><span class="swatch d-thin" aria-hidden="true"></span> 1</span> '
+             '<span><span class="swatch d-some" aria-hidden="true"></span> 2–3</span> '
+             '<span><span class="swatch d-dense" aria-hidden="true"></span> 4–%d</span> '
+             '<span><span class="swatch d-dense d-top" aria-hidden="true"></span> %d or more</span> '
+             '<span><span class="swatch empty" aria-hidden="true">–</span> Not studied</span></p>'
+             '<details class="gm-mk"><summary><span class="ns-q" aria-hidden="true">i</span>'
+             '<span class="gm-mk-h"><span class="v-see">See</span><span class="v-hide">Hide</span> the full legend</span></summary>'
+             '<dl class="gm-mk-b">'
+             '<div><dt>The number in a box</dt><dd>How many studies tested that treatment for that outcome. It shows how much '
+             'research there is, not how well the treatment works: a box with 9 studies can still have mixed results.</dd></div>'
+             '<div><dt>The shade</dt><dd>The data\u2019s own labels: <strong>thin</strong> (1 study), <strong>some</strong> '
+             '(2–3) and <strong>dense</strong> (4 or more). The darkest shade picks out the few boxes with %d or more studies; '
+             'that step is ours, the counts are the data\u2019s.</dd></div>'
+             '<div><dt>A dash (–)</dt><dd>Not studied: nobody in this collection tested that pairing. It is not a negative '
+             'result; we simply don\u2019t know yet.</dd></div>'
+             '<div><dt>Grey numbers at the edges</dt><dd>Totals: how many outcomes each treatment was studied for (right) and '
+             'how many treatments each outcome was studied for (bottom). Our own count of the boxes; the data doesn\u2019t give them.</dd></div>'
+             '<div><dt>Selecting a box</dt><dd>Opens what the studies found, how sure we can be (and why), the papers with '
+             'their quotes, and what this map can\u2019t tell you. Empty boxes open what was searched for. Arrow keys move '
+             'between boxes; Full screen shows the whole map at once.</dd></div>'
+             '</dl></details></div>'
+             '<p class="fs-row"><button type="button" class="fs-btn" data-fs="gapmap-wrap" hidden>'
              '<span aria-hidden="true">⤢</span> Full screen</button></p>'
-             '<div class="grid-wrap" id="gapmap-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap">'
-             '<caption>Treatments (rows) by outcomes (columns): number of studies in each '
-             'combination. Select a filled box for its details.</caption><thead><tr><td class="gm-corner">Treatment</td>%s'
-             '<th scope="col" class="sum">Outcomes studied</th></tr></thead><tbody>%s</tbody></table></div>'
-             '<dl class="key gm-key"><div><dt class="gm-k">Studies:</dt></div>'
-             '<div><dt><span class="swatch d-thin" aria-hidden="true"></span> 1 study</dt></div>'
-             '<div><dt><span class="swatch d-some" aria-hidden="true"></span> 2–3 studies</dt></div>'
-             '<div><dt><span class="swatch d-dense" aria-hidden="true"></span> 4 or more</dt></div>'
-             '<div><dt><span class="swatch empty" aria-hidden="true">–</span> Not studied</dt>'
-             '<dd>nobody here tested it (not a negative result)</dd></div></dl>'
-             '<p class="gm-note">The number is how many studies tested that pairing: research effort, not effect size. '
-             'Select a box for its finding, how sure we can be, and its sources.</p>'
+             '<a class="gm-skip" href="#gm-after">Skip the map</a>'
+             '<div class="grid-wrap" id="gapmap-wrap" role="region" aria-label="Gap map" tabindex="0"><table class="gapmap" data-lim="%s">'
+             '<caption>Treatments (rows) by outcomes (columns): number of studies in each combination. '
+             'Select any box for details; arrow keys move between boxes.</caption>'
+             '<thead><tr><td class="gm-corner">Treatment</td>%s<th scope="col" class="tot"><span>Outcomes studied</span></th>'
+             '</tr></thead><tbody>%s</tbody><tfoot><tr><th scope="row">Treatments studied</th>%s<td></td></tr></tfoot>'
+             '</table></div>'
+             '<p class="gm-note" id="gm-after" tabindex="-1">Select any box, studied or not, for what is known and its sources. In a box’s study split, each study '
+             'counts once, by its own result; “mixed” means that study’s own results pointed different ways. The totals (outcomes studied per treatment, '
+             'treatments studied per outcome) are our own count of studied boxes; the pack doesn’t give them.</p>'
              '<div class="gm-take"><p><strong>Takeaway: most treatment–outcome pairings have never been studied, and many '
              'that have rest on a single study.</strong></p><p>%s of %s combinations studied; %s of those by one study.%s '
              'Blank is not evidence of no effect.</p></div></section>'
-             % (head, ''.join(trs), s['filled'], s['cells'], s['thin'],
+             % (GM_TOP - 1, GM_TOP, GM_TOP, ','.join(str(i) for i in box_lim), head, ''.join(trs), foot, s['filled'], s['cells'], s['thin'],
                 (' %d %s no studies for any outcome.' % (none, plural(none, 'treatment has', 'treatments have'))) if none else ''))
     by_id = {f.id: f for f in q.findings}
     dense = []
@@ -1928,7 +2038,8 @@ def render_gapmap(data: SiteData, prose: Prose, q: Question, sources: List[Sourc
              'order.</p><ol class="densest">%s</ol>%s' % (number_word(len(dense)), ''.join(dense[:3]), more))
     main += ''.join(pops)
     jumps = [('#map', 'Gap map'), ('#densest', 'Most studied')]
-    return question_page(data, prose, q, main, jumps=jumps, short=short, scripts=CHECKS_JS + FULLSCREEN_JS)
+    return question_page(data, prose, q, main, jumps=jumps, short=short,
+                         scripts=FULLSCREEN_JS + gm_rules_json() + '<script src="static/gm.js" defer></script>')
 
 
 def render_generic(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -2260,111 +2371,294 @@ def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> st
                 script='static/graph.js', wide=True)
 
 
-# --------------------------------------------------------------- method
+# --------------------------------------------------------------- guide (method.html)
+#
+# Laid out like the Figma frame "Q1 · graph section + cards": small blue capital labels, cream
+# panels, white cards with a blue offset shadow. A left menu like the home page's (no tree) jumps
+# to each section, and a Back button (top right) returns to the page the reader came from.
+# Section ids (read, certainty, data, limits, about) are linked from the question pages: keep them.
 
-def render_method(data: SiteData) -> str:
+GUIDE_SECTIONS = [('read', 'How to read this site'), ('certainty', 'Certainty'),
+                  ('data', 'Where the data comes from'), ('limits', 'Limits'), ('about', 'About us')]
+
+# Back button: goes back to the page the reader came from (same site only), named in its label.
+# Without script, or when opened directly, it goes home.
+GUIDE_BACK_JS = ('<script>(function(){var a=document.getElementById("gd-back");if(!a)return;var u;'
+                 'try{u=new URL(document.referrer);}catch(e){return;}'
+                 'if(u.origin!==location.origin||u.pathname===location.pathname)return;'
+                 'var f=u.pathname.split("/").pop()||"index.html",n=JSON.parse(a.getAttribute("data-names"))[f]'
+                 '||(f.indexOf("sources-")===0?"the sources":"");if(!n)return;'
+                 'a.href=u.href;a.querySelector(".gd-back-t").textContent="Back to "+n;'
+                 'a.addEventListener("click",function(e){if(!location.hash&&history.length>1){e.preventDefault();'
+                 'history.back();}});})();</script>')
+
+
+def gd_label(text: str) -> str:
+    return '<p class="gd-label">%s</p>' % esc(text)
+
+
+def gd_steps(steps: List[Tuple[str, str]]) -> str:
+    return '<ol class="gd-steps">%s</ol>' % ''.join(
+        '<li><span class="gd-num" aria-hidden="true">%d</span><div><strong>%s</strong> %s</div></li>'
+        % (i, t, d) for i, (t, d) in enumerate(steps, 1))
+
+
+def gd_card(kicker: str, title: str, body: str, href: str = '', go: str = '') -> str:
+    link = '<p class="gd-go"><a class="gd-btn" href="%s">%s <span aria-hidden="true">→</span></a></p>' % (
+        esc(href), esc(go)) if href else ''
+    return ('<article class="gd-card"><p class="gd-kicker">%s</p><h3>%s</h3>%s%s</article>'
+            % (esc(kicker), esc(title), body, link))
+
+
+def gd_bars(n: int) -> str:
+    return '<span class="bars b%d" aria-hidden="true"></span>' % n
+
+
+def guide_signs() -> str:
+    """The signs every question page shares, in one cream panel."""
+    chips = ''.join(chip(d, '').replace(' data-check=""', '') for d in
+                    ('increase', 'decrease', 'mixed', 'no_effect', 'unclear'))
+    marsh = ''.join(chip(d, '').replace(' data-check=""', '') for d in
+                    ('below_reference', 'comparable', 'above_reference'))
+    levels = ''.join('<span class="gd-lvl">%s %d %s</span>' % (gd_bars(n), n, w)
+                     for n, w in ((1, 'Very low'), (2, 'Low'), (3, 'Moderate'), (4, 'High')))
+    return ('<div class="gd-panel">' + gd_label('The signs on every page') +
+            '<dl class="gd-signs">'
+            '<div><dt>What the studies found</dt><dd><p class="gd-row">%s</p>'
+            '<p>Each result has its own symbol as well as its colour, so you never need to tell colours apart. '
+            '“Mixed” and “No effect” are findings too: studies tested it.</p></dd></div>'
+            '<div><dt>Created marshes, compared with natural ones</dt><dd><p class="gd-row">%s</p></dd></div>'
+            '<div><dt>How sure we can be</dt><dd><p class="gd-row">%s</p>'
+            '<p>Four bars is the most certain. The <a href="#certainty">Certainty</a> section shows how it is worked '
+            'out.</p></dd></div>'
+            '<div><dt>Nobody has tested it</dt><dd><p class="gd-row"><span class="chip gapchip"><span aria-hidden="true">?'
+            '</span> Not studied</span></p><p>Grey and dashed, always with the words “Not studied”. It means we don’t '
+            'know yet, never “doesn’t work”.</p></dd></div>'
+            '<div><dt>Quotes</dt><dd><p>Sentences in quotation marks are copied word for word from the papers, with '
+            'the paper’s title and year. Every result is at most two clicks from its quotes.</p></dd></div>'
+            '</dl></div>' % (chips, marsh, levels))
+
+
+def guide_views(data: SiteData) -> str:
+    """One card per question page (and the Q1 graph): how to use it and what its marks mean."""
+    names = {qid: question_name(q) for qid, q in data.questions.items()}
+    nums = {qid: n for n, qid in enumerate(data.questions, 1)}
+    cards = []
+    for qid, q in data.questions.items():
+        n, kind = nums[qid], data.kinds[qid]
+        kick = 'Q%d · %s' % (n, names[qid])
+        if kind == EFFECTS:
+            cards.append(gd_card(kick, 'The answer page', gd_label('How to use it') + gd_steps([
+                ('Read the overview.', 'A short answer for each outcome, then what the answer can’t tell you.'),
+                ('Scan “At a glance”.', 'One row per treatment, one column per outcome. Each box shows the result, '
+                 'the certainty bars and the number of studies. Select a box to jump to its finding.'),
+                ('Open a finding.', '“Why High?” lists each step of the certainty grade (✓ for, ✗ against). Below it '
+                 'are the quoted sources and, where the graph has them, possible pathways through a middle '
+                 'condition. Each step of a pathway is separate evidence, not one tested chain.')]),
+                '%s.html' % qid, 'Open Q%d' % n))
+        elif kind == COMPARISON:
+            cards.append(gd_card(kick, 'The answer page', gd_label('How to use it') + gd_steps([
+                ('Read the short answer first.', 'It starts with what the research can’t say: no study here reports '
+                 'how long a created marsh takes to match a natural one.'),
+                ('Read the chart.', 'One row per outcome. The bars show the marsh ages that studies measured. They '
+                 'are not a recovery curve. The colour and symbol give the overall result for that row.'),
+                ('Select a row', '(or its <span class="tl-q-inline" aria-hidden="true">?</span>) for its certainty, '
+                 'why, and the quoted sources. The same data is also a table under the chart.')]) +
+                gd_label('Legend') +
+                '<ul class="gd-legend">'
+                '<li><span class="gd-tl s-below-reference" aria-hidden="true"></span> ◀ Behind natural marshes</li>'
+                '<li><span class="gd-tl s-above-reference" aria-hidden="true"></span> ▶ Ahead of natural marshes</li>'
+                '<li><span class="gd-tl s-mixed" aria-hidden="true"></span> ⇅ Mixed</li>'
+                '<li><span class="gd-tl s-no-effect" aria-hidden="true"></span> – No clear change (= Matches)</li>'
+                '<li><span class="gd-tl s-unclear" aria-hidden="true"></span> ? Unclear</li>'
+                '<li><span class="gd-tl hatch" aria-hidden="true"></span> Hatched: the studies didn’t report the '
+                'marsh’s age</li></ul>',
+                '%s.html' % qid, 'Open Q%d' % n))
+        elif kind == GAPMAP:
+            cards.append(gd_card(kick, 'The gap map', gd_label('How to use it') + gd_steps([
+                ('Find a treatment and an outcome.', 'Treatments are rows, outcomes are columns.'),
+                ('Read the box.', 'The number is how many studies tested that pairing. It measures how much research '
+                 'there is, not how well the treatment works: a box with many studies can still be mixed. A dash '
+                 'means not studied.'),
+                ('Select a box.', 'A studied box opens what the studies found, the certainty and why, the papers '
+                 'with their quotes and the map’s limits. An empty box shows what was searched for. Arrow keys move '
+                 'between boxes.')]) +
+                gd_label('Legend') +
+                '<ul class="gd-legend">'
+                '<li><span class="swatch d-thin" aria-hidden="true"></span> 1 study</li>'
+                '<li><span class="swatch d-some" aria-hidden="true"></span> 2–3 studies</li>'
+                '<li><span class="swatch d-dense" aria-hidden="true"></span> 4–%d studies</li>'
+                '<li><span class="swatch d-dense d-top" aria-hidden="true"></span> %d or more</li>'
+                '<li><span class="swatch empty" aria-hidden="true">–</span> Not studied</li>'
+                '<li>Grey numbers at the edges are totals: how many outcomes each treatment was studied for, and '
+                'how many treatments each outcome was studied for.</li></ul>' % (GM_TOP - 1, GM_TOP),
+                '%s.html' % qid, 'Open Q%d' % n))
+        else:
+            cards.append(gd_card(kick, 'The answer page', '<p>Each finding shows its result, certainty and number '
+                                 'of studies. Open one for why it has that certainty and its quoted sources.</p>',
+                                 '%s.html' % qid, 'Open Q%d' % n))
+        if qid in data.graphs:
+            key = GRAPH_KEY.replace('<h3>', '<h4>').replace('</h3>', '</h4>')
+            cards.append(gd_card(kick, 'The graph', gd_label('How to use it') + gd_steps([
+                ('Read it from top to bottom.', 'What you do (top), the conditions it changes (middle), and how the '
+                 'seedlings did (bottom).'),
+                ('Select a box', 'to light up its arrows. Select an arrow to read its evidence and sources.'),
+                ('Prefer text?', 'The matrix view and the table under the graph list every arrow with the same '
+                 'numbers.')]) +
+                gd_label('Legend') + '<div class="gkey gd-key">%s</div>' % key +
+                '<p class="gd-note">A route through a middle box (for example site preparation → competing vegetation '
+                '→ growth) joins separate bodies of evidence, mostly from different papers. It is not one tested '
+                'effect, and the site never multiplies arrows into a pathway strength.</p>',
+                graph_file(qid), 'Open the Q%d graph' % n))
+    return '<div class="gd-cards">%s</div>' % ''.join(cards)
+
+
+def guide_certainty(rule: str) -> str:
+    start = [('Experiment with an untreated control', 4), ('Other controlled study', 3),
+             ('Observation only', 2), ('Model or case study', 1)]
+    moves = [('Only one study', '−1'), ('Studies disagree', '−1'), ('Most claims have no comparison', '−1'),
+             ('Three or more studies agree', '+1'), ('Shows how it works, and that it made a difference', '+1')]
+    levels = ''.join('<li>%s <span>%d %s</span></li>' % (gd_bars(n), n, w)
+                     for n, w in ((1, 'Very low'), (2, 'Low'), (3, 'Moderate'), (4, 'High')))
+    rows_s = ''.join('<li><span>%s</span><span class="gd-n">%d</span></li>' % (esc(t), v) for t, v in start)
+    rows_m = ''.join('<li><span>%s</span><span class="gd-n %s">%s</span></li>'
+                     % (esc(t), 'up' if v.startswith('+') else 'down', v) for t, v in moves)
+    return (
+        '<p class="gd-lead">Certainty says how sure we can be about a result, from 1 (very low) to 4 (high). It is '
+        'shown next to every finding, with its reasoning.</p>'
+        '<div class="gd-panel"><p class="gd-label">How certainty is graded</p>'
+        '<ul class="gd-levels">%s</ul>'
+        '<div class="gd-calc"><div><h3>1 Start from the best study</h3><ul class="gd-score">%s</ul></div>'
+        '<div><h3>2 Then move up or down</h3><ul class="gd-score">%s</ul></div></div>'
+        '<p class="gd-small">It always stays between 1 and 4. A single study never goes above 3 (moderate).</p></div>'
+        '<div class="gd-card"><p class="gd-label">Example</p>'
+        '<ol class="gd-example"><li><span class="gd-k">Start</span><span class="gd-big">4</span>'
+        '<span>proper experiments</span></li>'
+        '<li><span class="gd-k">Down</span><span class="gd-big down">−1</span><span>studies disagree</span></li>'
+        '<li><span class="gd-k">Up</span><span class="gd-big up">+1</span><span>shows how it works</span></li>'
+        '<li class="res"><span class="gd-k">Result</span><span class="gd-big">%s High</span>'
+        '<span>4 is the top</span></li></ol>'
+        '<p class="gd-small">On a question page, open “Why High?” (or Low, …) next to any finding to see its own steps '
+        'and the answer pack’s exact rule text.</p></div>'
+        '<div class="gd-warn"><p class="gd-label">Keep in mind</p><h3>The grade can overstate how sure we are</h3>'
+        '<p>It starts from the strongest study, not an average. One good experiment can lift a whole group of '
+        'weaker studies.</p></div>'
+        '<details class="gd-more"><summary>The rule in full (<code>%s</code>)</summary>'
+        '<ol><li>Start from the best study design in the body of evidence. A randomized experiment against an '
+        'untreated control starts high. Other randomized, quasi-experimental and controlled long-term designs '
+        'start moderate. Observational studies start low. Modelling and case studies start very low.</li>'
+        '<li>Go down one step for a single study, one if studies disagree, and one if most claims report no '
+        'comparison.</li>'
+        '<li>Go up one step if three or more studies agree, and one if there is both evidence of mechanism and '
+        'evidence that the treatment made a difference.</li>'
+        '<li>A single study never rises above moderate.</li></ol>'
+        '<p>How strongly a paper words its claim (“causes” versus “is associated with”) is shown with each source as '
+        '“Authors’ wording”. It is not part of the grade: how loudly a paper claims something and how strong its '
+        'evidence is are separate questions.</p></details>'
+        % (levels, rows_s, rows_m, gd_bars(4), esc(rule)))
+
+
+def guide_words() -> str:
+    def c(d: str) -> str:
+        return chip(d, '').replace(' data-check=""', '')
+    return ('<h3 class="gd-h3">What the result words mean</h3><dl class="gd-defs">'
+            '<div><dt>%s</dt><dd>Most studies (at least two thirds) found the outcome went up.</dd></div>'
+            '<div><dt>%s</dt><dd>Most studies found it went down.</dd></div>'
+            '<div><dt>%s</dt><dd>Studies disagree. That is a finding: the effect may depend on species, site or '
+            'timing. Open the sources.</dd></div>'
+            '<div><dt>%s</dt><dd>Studies tested it and found no clear change. A tested “no effect” is a finding, '
+            'and different from “not studied”.</dd></div>'
+            '<div><dt>%s</dt><dd>The claims don’t say which way.</dd></div>'
+            '<div><dt>%s %s %s</dt><dd>Created marshes only: how they compare with a natural marsh.</dd></div>'
+            '<div><dt><span class="chip gapchip"><span aria-hidden="true">?</span> Not studied</span></dt>'
+            '<dd>Nobody in this body of research tested that pairing. We searched and found none, so we don’t know: '
+            'it might help, harm or do nothing. Each question page lists these under “Not studied”, the graph draws '
+            'them as a thin grey dashed line, and the gap map shows a dash.</dd></div></dl>'
+            % (c('increase'), c('decrease'), c('mixed'), c('no_effect'), c('unclear'),
+               c('below_reference'), c('comparable'), c('above_reference')))
+
+
+def render_method(data: SiteData, prose: Optional[Prose] = None) -> str:
     m = data.manifest.get('graph') or {}
     if m:
-        src = ('The answers come from the Lane 2 causal graph: %s claims from %s papers, each recorded '
-               'in the CAMO schema (cause, effect, direction, the study design, the comparator and the '
-               'sentence in the paper).'
+        src = ('The answers come from the Lane 2 causal graph: %s claims from %s papers. Each claim records a '
+               'cause, an effect, which way it went, the study design, what it was compared with and the '
+               'sentence in the paper (the CAMO schema).'
                % (span('manifest/graph/claims', '{:,}'.format(m.get('claims'))),
                   span('manifest/graph/source_documents', m.get('source_documents'))))
     else:
-        src = ('The answers come from the Lane 2 causal graph, recorded in the CAMO schema (cause, effect, '
-               'direction, the study design, the comparator and the sentence in the paper).')
+        src = ('The answers come from the Lane 2 causal graph. Each claim records a cause, an effect, which way it '
+               'went, the study design, what it was compared with and the sentence in the paper (the CAMO schema).')
     rule = next((q.rule for q in data.questions.values() if q.rule), 'unknown')
-    body = (
-        '<h1>Guide</h1>'
-        '<nav class="tabs" aria-label="On this page"><ul><li><a href="#read">How to read this site</a></li>'
-        '<li><a href="#certainty">Certainty</a></li>'
-        '<li><a href="#data">Where the data comes from</a></li><li><a href="#limits">Limits</a></li>'
-        '<li><a href="#about">About us</a></li></ul></nav>'
-        '<section class="tab" aria-labelledby="read"><h2 id="read">How to read this site</h2>%%READKEY%%</section>'
-        '%%CERTAINTY%%'
-        '<section class="tab" aria-labelledby="data"><h2 id="data">Where the data comes from</h2>'
-        '<p>%s The answer pack pools those claims into findings with simple, visible rules: no '
-        'language model and no statistical modelling.</p>'
-        '<p>Every direction, certainty grade and study count on this site is read from the pack\'s answer '
-        'files when the site is built, and a check compares each one on every page with the pack before '
-        'the site is published. Nothing is typed in by hand.</p>%%BUILT%%</section>'
-        '%%LIMITS%%%%ABOUT%%'
-        '<section class="tab" aria-labelledby="certainty"><h2 id="certainty">Certainty: how sure we can be</h2>'
-        '<p class="lead">First we look at the best kind of study behind a finding. Experiments start at High, '
-        'observation-only studies start at Low. It moves down a level if there\'s only one study or studies '
-        'disagree, and up a level if several studies agree or they show how it works.</p>'
-        '<p>On this site the four levels are numbered and drawn as bars: <strong>4</strong> High, '
-        '<strong>3</strong> Moderate, <strong>2</strong> Low, <strong>1</strong> Very low. Each step moves exactly '
-        'one level, and the level stays between 1 and 4. For example: start 4 (proper experiments), −1 (studies '
-        'disagree), +1 (shows how it works) = 4, High.</p>'
-        '<p>The pack uses rule <code>%s</code>. In full:</p>'
-        '<ol><li>Start from the best study design in the body of evidence. A randomized experiment '
-        'against an untreated control starts high. Other randomized, quasi-experimental and controlled '
-        'long-term designs start moderate. Observational studies start low. Modelling and case studies '
-        'start very low.</li>'
-        '<li>Go down one step for a single study, one if studies disagree, and one if most claims '
-        'report no comparison.</li>'
-        '<li>Go up one step if three or more studies agree, and one if there is both evidence of '
-        'mechanism and evidence that the treatment made a difference.</li>'
-        '<li>A single study never rises above moderate.</li></ol>'
-        '<p>Every grade comes with its reasoning: open a finding and read its “Why …?” checklist. The '
-        'pack\'s exact rule text is under “exact rule text”.</p>'
-        '<p>How strongly a paper words its claim (“causes” versus “is associated with”) is shown with each '
-        'source as “Authors\' wording”. It is not used in the grade: how loudly a paper claims something '
-        'and how strong its evidence is are separate questions.</p>'
-        '<h2>Direction words</h2><dl class="defs">'
-        '<dt>%s</dt><dd>Most studies (at least two thirds) found the outcome went up.</dd>'
-        '<dt>%s</dt><dd>Most studies found it went down.</dd>'
-        '<dt>%s</dt><dd>Studies disagree. This is a finding: the effect may depend on species, site or '
-        'timing. Open the sources.</dd>'
-        '<dt>%s</dt><dd>Studies tested it and found no clear change. A tested null is a finding, and it '
-        'is different from a gap.</dd>'
-        '<dt>%s</dt><dd>The claims do not say which way.</dd>'
-        '<dt>%s, %s, %s</dt><dd>For created marshes: how they compare with a natural reference '
-        'wetland.</dd></dl>'
-        '<h2>Not studied is not “no effect”</h2>'
-        '<p>A “Not studied” marker means nobody in this body of research tested that pairing. It does not '
-        'mean the treatment fails. Gaps are shown in grey with a dashed border and the words “Not '
-        'studied”, never as a weak or negative result.</p>'
-        '<h2>Paths on the graph</h2>'
-        '<p>On the tree-planting graph, a route through a middle condition (for example site '
-        'preparation → competing vegetation → growth) joins two separate bodies of evidence, mostly from '
-        'different papers. It is not one tested effect, and the site never multiplies arrows into a '
-        'pathway strength.</p></section>'
-        % (src, esc(rule),
-           direction_badge('increase'), direction_badge('decrease'), direction_badge('mixed'),
-           direction_badge('no_effect'), direction_badge('unclear'), direction_badge('below_reference'),
-           direction_badge('comparable'), direction_badge('above_reference')))
-    # Certainty first (the "?" popups link here), then data, limits, about
-    cert_start = body.index('<section class="tab" aria-labelledby="certainty">')
-    cert = body[cert_start:]
-    body = body[:cert_start].replace('%CERTAINTY%', cert)
-    body = body.replace('%READKEY%', READ_KEY)
+    nums = list(enumerate(data.questions.items(), 1))
+
+    def section(i: int, sid: str, title: str, inner: str) -> str:
+        return ('<section class="gd-sec" id="%s" aria-labelledby="%s-h"><h2 id="%s-h"><span class="gd-sn" '
+                'aria-hidden="true">%02d</span> %s</h2><div class="gd-body">%s</div></section>'
+                % (sid, sid, sid, i, esc(title), inner))
+
+    read = ('<p class="gd-lead">Every question page uses the same few signs. Learn them once here, then see how '
+            'each page draws them.</p>' + guide_signs() + guide_words() +
+            '<h3 class="gd-h3">Page by page</h3>' + guide_views(data))
+
+    built = ''.join('<div class="gd-card slim"><p class="gd-kicker">Q%d · %s</p><p>%s</p></div>'
+                    % (n, esc(question_name(q)), esc(q.how_built)) for n, (qid, q) in nums if q.how_built)
+    where = ('<p class="gd-lead">%s</p>'
+             '<p>The answer pack pools those claims into findings with simple rules anyone can check: no language '
+             'model and no statistical modelling.</p>'
+             '<p>Every result, certainty grade and study count on this site is read from the pack’s answer files '
+             'when the site is built. Before it is published, a check compares each one on every page with the '
+             'pack. Nothing is typed in by hand.</p>%s' % (src, (gd_label('How each answer was built') +
+                                                            '<div class="gd-cards two">%s</div>' % built) if built else ''))
+
     lim = []
-    for n, (qid, q) in enumerate(data.questions.items(), 1):
-        lim.append('<h3>%02d %s</h3><ul>%s</ul>' % (n, esc(question_name(q)), ''.join(
-            '<li>%s</li>' % esc(t) for t in q.limitations)))
+    for n, (qid, q) in nums:
+        tags = LIMIT_TAGS.get(qid, [])
+        tags = tags if len(tags) == len(q.limitations) else [''] * len(q.limitations)
+        lim.append('<div class="gd-card slim"><p class="gd-kicker">Q%d · %s</p><ul>%s</ul></div>' % (
+            n, esc(question_name(q)), ''.join('<li>%s%s</li>' % ('<strong>%s:</strong> ' % esc(t) if t else '', esc(x))
+                                              for t, x in zip(tags, q.limitations))))
     for gq in data.graph_qids():
         if data.graphs[gq].limitations:
-            lim.append('<h3>%s graph</h3><ul>%s</ul>' % (esc(question_name(data.questions[gq])), ''.join(
-                '<li>%s</li>' % esc(t) for t in data.graphs[gq].limitations)))
-    built = ''.join('<h3>%02d %s</h3><p>%s</p>' % (n, esc(question_name(q)), esc(q.how_built))
-                    for n, (qid, q) in enumerate(data.questions.items(), 1) if q.how_built)
-    body = body.replace('%BUILT%', ('<h3 class="sub-h">How each answer was built</h3>%s' % built) if built else '')
-    body = body.replace('%LIMITS%', '<section class="tab" aria-labelledby="limits"><h2 id="limits">Limits</h2>'
-                        '<p>What each answer cannot tell you, as the answer pack states it. Each question page '
-                        'shows its own list too.</p>%s</section>' % ''.join(lim))
-    body = body.replace('%ABOUT%', '<section class="tab" aria-labelledby="about"><h2 id="about">About us</h2>'
-                        '<p>Built by team Whimsy for Evidence Jam 2026, Lane 3 (decision support). The site '
-                        'is static and works offline. It uses no language model: every sentence that states a '
-                        'finding is built from the answer pack with fixed rules, and a check compares every '
-                        'number on every page with the pack before the site is published.</p>'
-                        '<p>Site code: MIT licence. Data: the Evidence Jam 2026 Lane 3 answer pack, built from '
-                        'the Lane 2 CAMO causal graph.</p></section>')
-    jumps = [('#read', 'How to read this site'), ('#certainty', 'Certainty'), ('#data', 'Where the data comes from'),
-             ('#limits', 'Limits'), ('#about', 'About us')]
-    return page(data, 'method.html', 'Guide', 'How certainty is graded, what the direction '
-                'words mean and where every number comes from.', body, jumps=jumps)
+            lim.append('<div class="gd-card slim"><p class="gd-kicker">Q%d · %s graph</p><ul>%s</ul></div>' % (
+                list(data.questions).index(gq) + 1, esc(question_name(data.questions[gq])),
+                ''.join('<li>%s</li>' % esc(t) for t in data.graphs[gq].limitations)))
+    limits = ('<p class="gd-lead">What each answer can’t tell you, in the data team’s own words. Each question page '
+              'shows its own list too, under “Constraints”.</p><div class="gd-cards two">%s</div>' % ''.join(lim))
+
+    n_llm = sum(1 for p in (prose.home_summary.values() if prose else []) if p.source == 'llm')
+    if n_llm:
+        llm = ('The %d short summaries on the home page were written by a language model when the site was built, '
+               'from the answer pack’s findings; each was checked against the pack (names, results, certainty and '
+               'numbers) and would have been replaced by a fixed sentence if it failed. Everything else that states a '
+               'finding is built from the answer pack with fixed rules.' % n_llm)
+    else:
+        llm = ('No language model was used to build this copy of the site: every sentence that states a finding is '
+               'built from the answer pack with fixed rules.')
+    about = ('<p class="gd-lead">Built by team Whimsy for Evidence Jam 2026, Lane 3 (decision support).</p>'
+             '<p>The site is static and works offline. %s A check compares every number on every page with the pack '
+             'before the site is published.</p>'
+             '<p>Site code: MIT licence. Data: the Evidence Jam 2026 Lane 3 answer pack (rule <code>%s</code>), built '
+             'from the Lane 2 CAMO causal graph.</p>' % (llm, esc(rule)))
+
+    parts = {'read': read, 'certainty': guide_certainty(rule), 'data': where, 'limits': limits, 'about': about}
+    names = {'index.html': 'Home'}
+    for n, (qid, q) in nums:
+        names['%s.html' % qid] = 'Q%d · %s' % (n, question_name(q))
+        if qid in data.graphs:
+            names[graph_file(qid)] = 'the Q%d graph' % n
+    body = ('<div class="gd-top"><a class="gd-back" id="gd-back" href="index.html" data-names="%s">'
+            '<span aria-hidden="true">←</span> <span class="gd-back-t">Back to Home</span></a></div>'
+            '<header class="gd-head"><h1>Guide</h1><p class="gd-intro">How to read the answers: what the signs mean, '
+            'how sure we can be, where the data comes from and what it can’t tell you.</p></header>%s%s'
+            % (esc(json.dumps(names)), ''.join(section(i, sid, t, parts[sid])
+                                               for i, (sid, t) in enumerate(GUIDE_SECTIONS, 1)), GUIDE_BACK_JS))
+    menu = '<ol class="qnav">%s</ol>' % ''.join(
+        '<li data-sec="%s"><a href="#%s"><span class="n" aria-hidden="true">%02d</span> %s</a></li>'
+        % (sid, sid, i, esc(t)) for i, (sid, t) in enumerate(GUIDE_SECTIONS, 1))
+    return page(data, 'method.html', 'Guide', 'How to read the answers: what the signs mean, how certainty is '
+                'graded, where the data comes from and what it can’t tell you.', body,
+                home_menu=menu, tree=False, script='static/tree.js')
 
 
 # --------------------------------------------------------------- entry
@@ -2379,8 +2673,8 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
         kb = os.path.getsize(os.path.join(ROOT, 'static', f)) // 1024
         if kb > 150:
             print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
-    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'mc.js', 'problem.js', 'ov.js', 'pin.webp',
-              'ov-wave.svg', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes + [
+    for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'gm.js', 'mc.js', 'problem.js', 'ov.js', 'pin.webp',
+              'ov-wave.svg', 'reveal.js', 'home-flowers.webp', 'home-papers.webp', 'logo.svg'] + heroes + [
               'home-%s.webp' % n for n in ('tree-blue', 'leaf', 'plant', 'sprout', 'pots', 'reed', 'deer',
                                            'grass', 'flowers2')]:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))
@@ -2406,7 +2700,7 @@ def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
         pages['%s.html' % qid] = fn(data, prose, q, sources)
     for gq in data.graph_qids():
         pages[graph_file(gq)] = render_graph_page(data, gq, sources)
-    pages['method.html'] = render_method(data)
+    pages['method.html'] = render_method(data, prose)
     for sp in sources:
         if sp.fname in pages:
             raise RuntimeError('two pages named %s' % sp.fname)
