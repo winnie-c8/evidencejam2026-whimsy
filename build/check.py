@@ -25,6 +25,7 @@ DIR_WORDS = {
     'Behind': 'below_reference', 'Matches': 'comparable', 'Ahead': 'above_reference',  # plain words (Q2 chart)
     'Increases': 'increase', 'Decreases': 'decrease', 'Studies disagree': 'mixed',  # Q1 cards (#84 glossary)
     'No change found': 'no_effect',
+    'No change': 'no_effect',
 }
 CERT_WORDS = {}
 for _k, _w in (('high', 'High'), ('moderate', 'Moderate'), ('low', 'Low'), ('very_low', 'Very low')):
