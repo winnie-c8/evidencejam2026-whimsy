@@ -90,6 +90,12 @@ class ValidateTests(unittest.TestCase):
                   'Managers should use mulch.', 'Site preparation will improve growth.'):
             self.assertIn('overclaims', llm.validate(t, []), t)
 
+    def test_rejects_dashes_and_filler(self):
+        for t in ('Seeding helps \u2014 sometimes.', 'Seeding helps - sometimes.', 'Notably, seeding helps.',
+                  'This highlights a gap.', 'Overall, results are mixed.'):
+            self.assertIn('machine-sounding', llm.validate(t, []), t)
+        self.assertIsNone(llm.validate('Non-native species were rarely studied.', []))
+
     def test_rejects_number_words_not_in_facts(self):
         self.assertIn('number', llm.validate('Eleven studies looked at this.', ['3']))
         self.assertIsNone(llm.validate('Eleven studies looked at this.', ['11']))

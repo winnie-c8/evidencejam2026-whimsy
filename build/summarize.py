@@ -9,6 +9,7 @@ number wrapped in a data-check span, ready to insert into a page).
 from __future__ import annotations
 
 import html
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
@@ -204,7 +205,9 @@ FIRM = ('high', 'moderate')
 
 
 def _plain(label: str) -> str:
-    return _lower_first(label)
+    """A label as it reads mid-sentence: 'Seeding / sowing' -> 'seeding or sowing'."""
+    s = re.sub(r'\s*\(.*?\)', '', label).replace(' & ', ' and ').replace(' / ', ' or ')
+    return _lower_first(s.strip())
 
 
 def _cert_n(f) -> str:

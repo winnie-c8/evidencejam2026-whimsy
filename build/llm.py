@@ -51,7 +51,12 @@ SYSTEM = (
     'the effect is. Never raise, lower or generalise it, and never call evidence strong, weak, proven '
     'or clear.\n\n'
     'Do not add numbers, years, durations, advice or causes that are not in the facts. Write numbers '
-    'as digits. No lists, headings, markdown or abbreviations. Reply with the three sentences only.')
+    'as digits.\n\n'
+    'Style: write like a field ecologist talking to a colleague, in plain everyday words. Write item names '
+    'in lower case (unless one starts the sentence), with "and" instead of "&" and "or" instead of "/". '
+    'Say "most studied", not "densest" or "graph". No dashes, no semicolons, no lists, headings, markdown '
+    'or abbreviations, and no filler such as "notably", "importantly", "highlights" or "it is worth noting". '
+    'Reply with the three sentences only.')
 
 # Words that state a direction, and which pack directions each one is consistent with. A clause
 # of the reply that uses one must name items whose direction it fits (see check_claims).
@@ -74,6 +79,10 @@ NEGATIVE = ('ineffective', 'does not work', "doesn't work", 'no effect on', 'har
 OVERCLAIM = re.compile(r'\b(?:proven|proves?|clearly|clear evidence|definitely|certainly|always|guarantee\w*|'
                        r'conclusive\w*|strong(?:ly)?|weak(?:ly)?|robust|well[- ](?:established|supported)|'
                        r'will|should|must|recommend\w*|best practice)\b')
+# reads as machine-written: dashes, and stock filler phrases
+STYLE = re.compile(r'[\u2012-\u2015]|\s-\s|--|\b(?:notably|importantly|crucial(?:ly)?|delve\w*|underscor\w*|'
+                   r'highlight\w*|landscape|comprehensive|it is worth noting|it is important to note|'
+                   r'in summary|overall|furthermore|moreover|additionally)\b')
 TIMELINE = re.compile(r'\b(?:years?|months?|decades?|eventually|quickly|rapidly|soon|slowly|long[- ]term|short[- ]term)\b')
 NUMBER_WORDS = {w: i for i, w in enumerate(
     'zero _ two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen '
@@ -96,7 +105,8 @@ def _names(label: str) -> List[str]:
     base = re.sub(r'\s*\(.*?\)', '', label).strip().lower()
     seg = re.split(r'\s*(?:&|/|,|\+| or | and )\s*', base)[0].strip()
     two = ' '.join(seg.split()[:2])
-    return list(dict.fromkeys(n for n in (base, seg, two) if len(n) > 3))
+    said = base.replace(' & ', ' and ').replace(' / ', ' or ')   # how a plain sentence writes it
+    return list(dict.fromkeys(n for n in (base, said, seg, two) if len(n) > 3))
 
 
 def _studies(n: int) -> str:
@@ -315,6 +325,9 @@ def validate(text: str, allowed: List[str], fl: Optional[List[Fact]] = None) -> 
     m = OVERCLAIM.search(low)
     if m:
         return 'overclaims: %r' % m.group(0)
+    m = STYLE.search(low)
+    if m:
+        return 'machine-sounding wording: %r' % m.group(0)
     for w in NEGATIVE:
         if w in low:
             return 'negative wording: %r' % w
