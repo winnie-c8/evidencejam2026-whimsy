@@ -29,7 +29,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description='Build the Lane 3 evidence site.')
     ap.add_argument('out', nargs='?', default='site/', help='output directory (deleted and recreated)')
     ap.add_argument('--answers', default='answers/', help='answer pack directory')
-    ap.add_argument('--no-llm', action='store_true', help='accepted; the MVP never calls an LLM')
+    ap.add_argument('--no-llm', action='store_true', help='never call the LLM (home summaries use templates)')
     ap.add_argument('--verbose', action='store_true')
     ap.add_argument('--strict', action='store_true',
                     help='exit 1 if the self-check finds problems (for CI); default is to warn and exit 0')
@@ -54,7 +54,9 @@ def main(argv=None) -> int:
 
         from summarize import summarize_all
         prose = summarize_all(data, args)
-        print('[build] prose: template only (LLM not enabled in MVP)')
+        st = prose.stats
+        print('[build] prose: %d home summaries by the LLM, the rest from templates%s'
+              % (st['llm_filled'], '' if st['llm'] else ' (set BRINE_URL, BRINE_MODEL, BRINE_API_KEY to use it)'))
 
         out = args.out
         if os.path.isdir(out):
