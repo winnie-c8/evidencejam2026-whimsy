@@ -576,10 +576,14 @@ def card_name(f: Finding, subject: bool) -> str:
 
 def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subject: bool = True,
                  tag: str = '', level: int = 3, extra: str = '', links: str = '',
-                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False) -> str:
+                 quotes_shown: int = QUOTES_IN_CARD, compact: bool = False, open_: bool = False,
+                 labels: bool = False) -> str:
     """One finding. Closed it is one line: direction, name, certainty, study split, Details.
-    Open it shows panels: why that certainty, sources (quotes first), Q1 pathways."""
+    Open it shows panels: why that certainty, sources (quotes first), Q1 pathways.
+    labels: the box labels and the study split in words, for the one-finding popup (Q2) only;
+    left out elsewhere because they are only shown there and the cards repeat (page weight)."""
     base = '%s/%s' % (f.question, f.slug)
+    lab = (lambda t: '<span class="flab">%s</span>' % t) if labels else (lambda t: '')
     cw = CERT_WORD[f.certainty]
     checks = rationale_checks(f.certainty_rationale)
     reason = headline_reason(checks)
@@ -587,15 +591,15 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
                    if reason else '')
     summary = ('<span class="fchip">%s</span><h%d class="fhead">%s%s</h%d>'
                '<span class="fmore" aria-hidden="true">Details</span><span class="fmeta">'
-               # flab / fnote: labels shown only in the one-finding popup (.cardpop), where the
-               # card is read on its own
-               '<span class="fcert"><span class="flab">Certainty: how sure are we?</span>'
-               '<span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
-               '<span class="fsplit"><span class="flab">What the studies found</span>%s %s'
-               '<span class="fnote">%s</span></span></span>'
+               # flab / fnote: labels for the one-finding popup (.cardpop), where the card is read
+               # on its own
+               '<span class="fcert">%s<span class="bars b%d" aria-hidden="true"></span> %s%s</span>'
+               '<span class="fsplit">%s%s %s%s</span></span>'
                % (chip(f.direction, base + '/direction'), level, card_name(f, subject), tag, level,
-                  CERT_BARS.get(f.certainty, 0), span(base + '/certainty', certainty_text(f.certainty)), reason_html,
-                  split_bar(f), split_short(f, base), split_note(f, base)))
+                  lab('Certainty: how sure are we?'), CERT_BARS.get(f.certainty, 0),
+                  span(base + '/certainty', certainty_text(f.certainty)), reason_html,
+                  lab('What the studies found'), split_bar(f), split_short(f, base),
+                  '<span class="fnote">%s</span>' % split_note(f, base) if labels else ''))
     # panel 1: why that certainty, as a checklist; the exact rule text one click further
     raw = esc(f.certainty_rationale) if f.certainty_rationale else 'The pack gives no rationale for this grade.'
     score = rationale_score(f.certainty_rationale)
@@ -616,12 +620,13 @@ def finding_card(data: SiteData, f: Finding, sources: List[SourcePage], *, subje
         # Q3 repeats this 123 times: the checklist is built in the browser from the rule text
         # below (CHECKS_JS); without script the exact rule text is still there.
         items = ''
-    why = ('<section class="panel pwhy"><h5>How the certainty is worked out%s</h5>'
-           '<p class="why-sub">Why “%s”: start from the best kind of study behind it, then one level up or down for '
-           'each check.</p>%s'
+    # the line under the heading is left out of compact cards (Q3 repeats them; page weight)
+    sub = ('' if compact else '<p class="why-sub">Why “%s”: start from the best kind of study behind it, then one '
+           'level up or down for each check.</p>' % esc(cw))
+    why = ('<section class="panel pwhy"><h5>How the certainty is worked out%s</h5>%s%s'
            # the pack's exact rationale must be on the page (README; both checkers): kept, but quiet
            '<details class="raw"><summary>exact rule text</summary><p class="rule">%s</p></details></section>'
-           % ('' if compact else HELP_BTN, esc(cw),
+           % ('' if compact else HELP_BTN, sub,
               '<ul class="checks" data-rule></ul>' if compact else (('<ul class="checks">%s</ul>' % items) if items else ''),
               raw))
     # panel 2: sources, quotes first
@@ -1716,7 +1721,7 @@ def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[S
                 '<button type="button" class="pop-x" popovertarget="pop-%s" popovertargetaction="hide">'
                 '<span aria-hidden="true">×</span><span class="sr-only">Close</span></button>%s</div>'
                 % (esc(f.slug), esc(f.label), esc(f.slug),
-                   finding_card(data, f, sources, tag=tag, extra=extra, open_=True)))
+                   finding_card(data, f, sources, tag=tag, extra=extra, open_=True, labels=True)))
 
     popups = {f.slug: popup(f) for f in q.all_findings()}
     chart = timeline_chart(q, popups)

@@ -950,6 +950,7 @@ td.mc-tnum { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--
   .mc-row { display: block; padding: .9rem 0; }
   .mc-head { display: none; }
   .mc-group { padding: 1rem 0 0; }
+  .mc-group h3 { white-space: normal; }   /* one line only where the grid gives it room (wide fonts, #83 review) */
   .mc-group > div:not(.mc-out) { display: none; }
   .mc-out, .mc-cert, .mc-group .mc-out { padding: 0; }
   .mc-cert { margin-top: .6rem; max-width: 18rem; }
