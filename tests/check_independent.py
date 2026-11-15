@@ -370,7 +370,10 @@ class Checker:
         if root is None:
             return
         hrefs = {a.attrs.get('href', '').split('#')[0] for a in root.iter() if a.tag == 'a'}
-        for target in ['q1.html', 'q1-graph.html', 'q2.html', 'q3.html']:
+        # The graph must be reachable from home: q1-graph.html, or q1.html when that page draws it.
+        q1 = self.page('q1.html')
+        graph_on_q1 = q1 is not None and any(n.attrs.get('id') == 'q1g' for n in q1.iter())
+        for target in ['q1.html', 'q2.html', 'q3.html'] + ([] if graph_on_q1 else ['q1-graph.html']):
             self.ok(target in hrefs, f'index.html: no link to {target}')
 
     def check_question(self, qid: str) -> None:
