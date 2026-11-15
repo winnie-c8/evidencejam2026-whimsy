@@ -1517,6 +1517,13 @@ details.gmx[open] > summary { background: var(--link); border-color: var(--link)
 .gmx-qmore[open] > summary { margin-bottom: .7rem; }
 .gmx-qmore blockquote.quote { margin: 0 0 .7rem; }
 .gmx-acts { margin: 0 .9rem .8rem; }
+.gmx-acts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; }
+.gmx-acts .doi { color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
+.gmx-note { margin: 0 0 .7rem; font-size: .8rem; color: var(--muted); }
+.gmx-about { margin: 0 .9rem .7rem; font-size: .8rem; }
+.gmx-about > summary { cursor: pointer; color: var(--link); width: fit-content; }
+.gmx-about > summary:hover { text-decoration: underline; }
+.gmx-about dl.camo { margin: .4rem 0 0; padding: .5rem .7rem; background: var(--panel); border-radius: 4px; font-size: .8rem; }
 
 /* Constraints: the pack's limitations, word for word, with our short tag in front */
 .gmx-lims { list-style: none; margin: 0 0 .6rem; padding: 0; }

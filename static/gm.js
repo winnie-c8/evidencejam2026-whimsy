@@ -269,8 +269,28 @@
         var head = txt(sec, 'h2').replace(/^Paper \d+ of \d+: /, '');
         var ym = head.match(/\s\((\d{4})\)$/);
         var title = ym ? head.slice(0, ym.index) : head;
-        var quotes = [].map.call(sec.querySelectorAll('blockquote.quote'), function (q) { return q.textContent.trim(); });
+        // each source: its quote word for word, and the sources page's notes on that claim (how it
+        // was tested, what it found, ...), so nothing on that page is missing from the popup
+        var quotes = [].map.call(sec.querySelectorAll('details.ev'), function (ev) {
+          var frag = document.createDocumentFragment();
+          var q = ev.querySelector('blockquote.quote');
+          if (q) frag.appendChild(el('blockquote', 'quote', q.textContent.trim()));
+          var dl = ev.querySelector('dl.camo');
+          if (dl) {
+            var c = document.importNode(dl, true);
+            [].forEach.call(c.querySelectorAll('[data-check],[id]'), function (n) {
+              n.removeAttribute('data-check');
+              n.removeAttribute('id');
+            });
+            var ab = el('details', 'gmx-about');
+            ab.appendChild(el('summary', '', 'About this source'));
+            ab.appendChild(c);
+            frag.appendChild(ab);
+          }
+          return frag;
+        });
         var doi = sec.querySelector('p.src a[href^="https://doi.org/"]');
+        var doiTxt = sec.querySelector('p.src .doi');
         var li = el('li');
         var pd = el('details', 'gmx-paper');
         if (k === 0) pd.open = true;
@@ -279,12 +299,12 @@
         sm.appendChild(el('span', 't', title));
         sm.appendChild(el('span', 'n', quotes.length + ' ' + plural(quotes.length, 'quote', 'quotes')));
         pd.appendChild(sm);
-        if (quotes[0]) pd.appendChild(el('blockquote', 'quote', quotes[0]));
+        if (quotes[0]) pd.appendChild(quotes[0]);
         if (quotes.length > 1) {
           var qm = el('details', 'gmx-qmore');
           var qs = el('summary', '', (quotes.length - 1) + ' more ' + plural(quotes.length - 1, 'quote', 'quotes'));
           qm.appendChild(qs);
-          quotes.slice(1).forEach(function (q) { qm.appendChild(el('blockquote', 'quote', q)); });
+          quotes.slice(1).forEach(function (q) { qm.appendChild(q); });
           pd.appendChild(qm);
         }
         if (doi) {
@@ -296,12 +316,19 @@
           a.appendChild(ar);
           var p = el('p', 'gmx-acts');
           p.appendChild(a);
+          if (doiTxt) p.appendChild(el('small', 'doi', doiTxt.textContent.trim()));
           pd.appendChild(p);
         }
         li.appendChild(pd);
         ul.appendChild(li);
       });
-      b.insertBefore(ul, b.querySelector('.go'));
+      var go = b.querySelector('.go');
+      b.insertBefore(el('p', 'gmx-note', 'Each quote is one sentence copied word for word from the paper. ' +
+        '“Authors’ wording” is how strongly the paper words its claim; it is separate from the certainty grade.'), go);
+      b.insertBefore(ul, go);
+      // everything from the sources page is now here, so no need to open it (the link stays in the
+      // page for readers without script, and for the checkers)
+      if (go) go.style.display = 'none';
     }).catch(function () { /* the sources-page link stays */ });
   }
 
