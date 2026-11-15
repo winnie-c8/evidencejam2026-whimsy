@@ -14,7 +14,6 @@
   var words = [sec.querySelector('.pb-spread'), sec.querySelector('.pb-many')];
   var STEP = 22;        // px of scrolling per flower: 14 flowers in about 300px
   var SLICE = 12;       // px of scrolling per paper slice: the band in about 300px
-  var start = scrollY;  // flowers count from where the page was when it opened
   // top of the bunch first, as if drifting down (each flower's centre y is in its clip-path)
   flowers.sort(function (a, b) {
     return parseFloat(a.style.clipPath.split(' ').pop()) - parseFloat(b.style.clipPath.split(' ').pop());
@@ -29,7 +28,7 @@
   // px a part has risen past 90% of the screen height (0 until it is on screen)
   function risen(el) { return Math.max(0, innerHeight * 0.9 - el.getBoundingClientRect().top); }
   function frame() {
-    var d = Math.max(0, scrollY - Math.min(start, 0)), shown = 0;
+    var d = Math.max(0, scrollY), shown = 0;
     // flowers follow your scrolling, but only once the bunch is on screen (phones)
     var df = Math.min(d, risen(box));
     flowers.forEach(function (f, i) { var y = df >= 10 + STEP * i; on(f, y); if (y) shown++; });

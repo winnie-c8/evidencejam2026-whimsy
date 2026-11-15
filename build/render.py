@@ -827,7 +827,7 @@ def problem_section() -> str:
     flowers = ''.join('<img src="static/home-flowers.webp" alt="" decoding="async" '
                       'style="clip-path:circle({}% at {}% {}%)">'.format(r, x, y) for x, y, r in HOME_FLOWERS)
     n = HOME_PAPER_STRIPS
-    strips = ''.join('<img src="static/home-papers.webp" alt="" decoding="async" '
+    strips = ''.join('<img src="static/home-papers.webp" alt="" decoding="async" loading="lazy" '
                      'style="clip-path:inset(0 {:.3f}% 0 {:.3f}%)">'.format(100 - (i + 1) * 100 / n, i * 100 / n)
                      for i in range(n))
     # hide the parts before the first paint (no flash), unless the reader asks for reduced motion
@@ -1866,7 +1866,14 @@ def render_method(data: SiteData) -> str:
 
 def render_site(data: SiteData, prose: Prose, out: str) -> List[str]:
     os.makedirs(os.path.join(out, 'static'), exist_ok=True)
-    heroes = [f for f in os.listdir(os.path.join(ROOT, 'static')) if f.startswith('hero-')]
+    # only the hero pictures and cloud drawings this page template uses (hero-q<N>[-clouds].<ext>);
+    # a big one is reported so page weight doesn't grow unnoticed
+    heroes = [f for f in os.listdir(os.path.join(ROOT, 'static'))
+              if re.fullmatch(r'hero-q\d+(?:-clouds)?\.(?:webp|avif|jpg|png|svg)', f)]
+    for f in heroes:
+        kb = os.path.getsize(os.path.join(ROOT, 'static', f)) // 1024
+        if kb > 150:
+            print('[build] warning: static/%s is %d KB; it is loaded on its question page' % (f, kb))
     for f in ['style.css', 'favicon.svg', 'graph.js', 'tree.js', 'ns.js', 'problem.js', 'ov.js', 'pin.webp', 'ov-wave.svg', 'home-flowers.webp',
               'home-papers.webp', 'logo.svg'] + heroes:
         shutil.copyfile(os.path.join(ROOT, 'static', f), os.path.join(out, 'static', f))

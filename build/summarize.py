@@ -206,8 +206,17 @@ def home_template(qid: str, data: SiteData) -> str:
     kind = data.kinds[qid]
     if kind == GAPMAP and 'summary' in q.extra:
         s = q.extra['summary']
-        return ('Only %s of %s treatment and outcome combinations have been studied, and %s of those rest on a '
-                'single study. Even the best-studied combinations give mixed results.' % (s['filled'], s['cells'], s['thin']))
+        lead = ('Only %s of %s treatment and outcome combinations have been studied, and %s of those rest on a '
+                'single study.' % (s['filled'], s['cells'], s['thin']))
+        by_id = {f.id: f for f in q.findings}
+        dense = [by_id[i] for i in (s.get('densest') or []) if i in by_id]
+        n_mixed = sum(f.direction == 'mixed' for f in dense)
+        if dense and n_mixed == len(dense):   # said only when the pack's densest cells really are all mixed
+            lead += ' Even the best-studied combinations give mixed results.'
+        elif n_mixed:
+            lead += ' %s of the %s best-studied combinations give mixed results.' % (
+                _cap(NUMBER_WORD.get(n_mixed, str(n_mixed))), NUMBER_WORD.get(len(dense), str(len(dense))))
+        return lead
     sa = q.extra.get('short_answer') or {}
     if 'time_to_reference' in sa and sa.get('time_to_reference') is None:
         firm = [f.outcome_label.lower() for f in q.findings
