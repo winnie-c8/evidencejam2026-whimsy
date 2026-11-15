@@ -1,4 +1,5 @@
-// Q3 gap map. Every box is a button, and the arrow keys move between boxes (Home / End: row ends).
+// Q3 gap map. Every box is a button. The map is one Tab stop; the arrow keys move between boxes
+// (Home / End: row ends).
 // - A studied box already opens its treatment's side panel on its own card (popovertarget); here it
 //   gets its full spoken name: "Seeding / sowing, Plant & vegetation cover: 9 studies, Mixed, High certainty".
 // - An empty box becomes a button for the one shared "Not studied" panel (#gm-gap), filled in from
@@ -110,7 +111,21 @@
     if (!table.contains(e.relatedTarget)) { mark(foc, 'fx', false); foc = null; }
   });
 
-  // 2. Arrow keys between boxes. Tab still visits every box; this is the quick way round.
+  // 2. One Tab stop for the whole map (roving tabindex): only one box is in the Tab order, the
+  //    first at the start, then whichever box was last focused. Tab enters and leaves the map
+  //    once; the arrow keys move between boxes. Without script, the studied boxes stay Tab stops.
+  var boxes = table.tBodies[0].querySelectorAll('td > button');
+  var cur = boxes[0] || null;
+  [].forEach.call(boxes, function (b) { b.tabIndex = b === cur ? 0 : -1; });
+  table.addEventListener('focusin', function (e) {
+    var b = e.target.closest('td > button');
+    if (!b || b === cur) return;
+    if (cur) cur.tabIndex = -1;
+    b.tabIndex = 0;
+    cur = b;
+  });
+
+  // Arrow keys between boxes.
   table.addEventListener('keydown', function (e) {
     var k = e.key;
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].indexOf(k) < 0) return;
