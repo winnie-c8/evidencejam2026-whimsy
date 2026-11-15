@@ -275,7 +275,8 @@ def source_page_link(sources: List[SourcePage], quotes: Iterable[Quote], *, fnam
     back_link = '<p class="back"><a href="%s">%s</a></p>' % (esc(back), esc(back_text))
     body = ('<h1>Sources: %s</h1>%s%s<div class="sources">%s</div>%s%s'
             % (esc(label), back_link, SOURCES_NOTE, boxes, back_link, OPEN_TARGET_JS))
-    sources.append(SourcePage(fname, 'Sources · ' + label, description, body))
+    if not any(sp.fname == fname for sp in sources):   # q1.html and q1-graph.html share arrow pages
+        sources.append(SourcePage(fname, 'Sources · ' + label, description, body))
     return ('<a class="srclink" href="%s">Read all sources<span class="sr-only"> for %s</span></a>'
             % (esc(fname), esc(label)))
 
@@ -639,17 +640,61 @@ def at_a_glance(q: Question, short_html: str = '') -> str:
 
 
 def limits_box(prefix: str, limitations: Iterable[str], rule: Optional[str],
-               how_built: Optional[str], heading: str = 'Read this first') -> str:
+               how_built: Optional[str], what: str = 'this answer') -> str:
     """The pack's limitations, word for word. A closed one-liner, so the page stays clean,
     but always on the question page itself (README; both checkers)."""
     lims = list(limitations)
     items = ''.join('<li>%s</li>' % span('%s/limitations/%d' % (prefix, i), t) for i, t in enumerate(lims))
     # how_built (the data team's selection rules) is on the Method page, under "Where the data comes from"
-    return ('<details class="limits" id="limits-%s"><summary><strong>%d %s this answer can\'t tell you</strong>'
+    return ('<details class="limits" id="limits-%s"><summary><strong>%d %s %s can\'t tell you</strong>'
             '<span class="cnt">read before acting on it</span></summary><p class="intro">In the data team\'s own '
             'words: how the studies were matched and grouped, and what that means for the answer above. '
             '<a href="method.html#data">How each answer was built →</a></p><ul>%s</ul></details>'
-            % (esc(prefix), len(lims), plural(len(lims), 'thing', 'things'), items))
+            % (esc(prefix), len(lims), plural(len(lims), 'thing', 'things'), esc(what), items))
+
+
+# Short labels in our own words, shown above the pack's exact sentence (plain words on top,
+# the data's words underneath). Keyed by the pack's text: a sentence not listed here (new or
+# changed data) is shown without a label, never with a wrong one.
+LIMIT_LABELS = {
+    'Matching is by keyword over node labels': 'Studies were found by keyword',
+    'Nursery fertilization and fertilization at planting are different practices':
+        'Two kinds of fertilization, kept apart',
+    "'Competing vegetation (more of it)' and 'Vegetation control & release' describe the same factor":
+        'Weeds and weed control, kept apart',
+    'Growth pools height, diameter and biomass': 'Growth mixes height, diameter and biomass',
+    'A path through a condition': 'A path through a middle box is not one tested effect',
+    "No edge is a missing edge's opposite": 'No arrow means not tested, not “no effect”',
+    "'Competing vegetation' is one node": 'Competing vegetation is one box, as cause or result',
+    'Condition matching is by keyword': 'The middle boxes were also found by keyword',
+}
+
+
+def limit_label(text: str) -> str:
+    for start, label in LIMIT_LABELS.items():
+        if text.startswith(start):
+            return label
+    return ''
+
+
+def limits_combined(groups: List[Tuple[str, str, List[str]]]) -> str:
+    """One "things this answer can't tell you" box for several lists (Q1: the answer's and the
+    graph's). groups: (heading, data-check prefix, sentences). Each sentence word for word,
+    under a short label in our words when we have one."""
+    total = sum(len(g[2]) for g in groups)
+    body = []
+    for heading, prefix, lims in groups:
+        items = []
+        for i, t in enumerate(lims):
+            lbl = limit_label(t)
+            items.append('<li>%s%s</li>' % ('<strong class="lim-t">%s</strong>' % esc(lbl) if lbl else '',
+                                            span('%s/limitations/%d' % (prefix, i), t, 'lim-x' if lbl else '')))
+        body.append('<h3 class="lim-h">%s</h3><ul class="lims">%s</ul>' % (esc(heading), ''.join(items)))
+    return ('<details class="limits" id="limits-%s"><summary><strong>%d %s this answer can\'t tell you</strong>'
+            '<span class="cnt">read before acting on it</span></summary><p class="intro">Each point in the data '
+            'team\'s own words, under a short summary of ours. <a href="method.html#data">How each answer was '
+            'built →</a></p>%s</details>'
+            % (esc(groups[0][1]), total, plural(total, 'thing', 'things'), ''.join(body)))
 
 
 def finding_cells(f: Finding) -> Tuple[str, str, str]:
@@ -903,21 +948,25 @@ def not_studied(q: Question) -> str:
 
 
 def question_page(data: SiteData, prose: Prose, q: Question, main: str, *,
-                  jumps: List[Tuple[str, str]], short: Optional[str] = None, scripts: str = '') -> str:
+                  jumps: List[Tuple[str, str]], short: Optional[str] = None, scripts: str = '',
+                  tail: str = '', tail_jumps: Optional[List[Tuple[str, str]]] = None,
+                  script: Optional[str] = None, wide: bool = False, limits: Optional[str] = None) -> str:
     """The one template every question page uses, in this order: kicker + h1, short answer,
-    limitations, MAIN VIEW, not studied, link to the Guide."""
+    limitations, MAIN VIEW, not studied, TAIL (reference parts), link to the Guide."""
     n = list(data.questions).index(q.qid) + 1
     name = question_name(q)
     body = '<p class="kicker">Question %02d · %s</p><h1>%s</h1>' % (n, esc(name), esc(q.text))
     body += short if short is not None else short_box(prose.short_answer[q.qid].html, 'short')
-    body += limits_box(q.qid, q.limitations, q.rule, q.how_built)
+    body += limits if limits is not None else limits_box(q.qid, q.limitations, q.rule, q.how_built)
     body += main
     body += not_studied(q)
+    body += tail
     body += ('<p class="to-method"><a href="method.html">Guide: how to read this site, how certainty is graded, where the data '
              'comes from, and the limits →</a></p>')
-    jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else [])
+    jumps = [('#short', 'Short answer')] + jumps + ([('#gaps-h', 'Not studied')] if q.gaps else []) + \
+        (tail_jumps or [])
     return page(data, '%s.html' % q.qid, 'Q%d · %s' % (n, name), q.text,
-                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps)
+                body + GRADING_POPOVER + OPEN_TARGET_JS + scripts, jumps=jumps, script=script, wide=wide)
 
 
 def by_strength(fs: Iterable[Finding]) -> List[Finding]:
@@ -925,8 +974,10 @@ def by_strength(fs: Iterable[Finding]) -> List[Finding]:
 
 
 def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
-    """EFFECTS layout (Q1 today). Main view: at a glance, findings by outcome (strongest first),
-    combined treatments, graph link."""
+    """EFFECTS layout. With a graph (Q1) the graph is the answer: render_effects_graph.
+    Without one: at a glance, findings by outcome (strongest first), combined treatments."""
+    if q.qid in data.graphs and all(f.slug in data.graph_join for f in q.findings):
+        return render_effects_graph(data, prose, q, sources)
     def card(f: Finding) -> str:
         graph = ''
         if f.slug in data.graph_join:
@@ -953,7 +1004,38 @@ def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[Sour
     return question_page(data, prose, q, main, jumps=jumps)
 
 
-def interactions_section(data: SiteData, q: Question) -> str:
+def render_effects_graph(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
+    """Q1 (#77): the graph is the answer. Question, short answer, both sets of limitations
+    (the answer's and the graph's), the graph (with Matrix and Table as other views), not
+    studied. The cards graph.js opens in the side panel (one per arrow, holding its finding,
+    and the two-cause card) sit in one store after that: hidden by graph.js, shown as a plain
+    list without script."""
+    g = data.graphs[q.qid]
+    here = '%s.html' % q.qid
+    gp = graph_parts(data, q.qid, sources, here)
+    ends = ('top', 'bottom') if GRAPH_FLOW == 'down' else ('left', 'right')
+    limits = limits_combined([('About the findings', q.qid, list(q.limitations)),
+                              ('About the graph', graph_prefix(q.qid), list(g.limitations))])
+    main = ''
+    table_view = ('<section id="table" class="gtable" aria-labelledby="table-h"><h2 id="table-h">All arrows as a '
+                  'table</h2>%s</section>' % gp['table'])
+    main += ('<section class="graph-sec" id="graph" aria-labelledby="graph-h"><h2 id="graph-h">How each factor '
+             'affects the seedlings</h2><p>%s</p>%s%s%s%s</section>'
+             % (esc(GRAPH_INTRO.get(q.qid, DEFAULT_GRAPH_INTRO) % ends), gp['figure'], gp['matrix'], table_view,
+                gp['paths']))
+    store = gp['combos'] + gp['arrows']
+    if not gp['combos']:
+        store += gp['set_aside']
+    left = [it for it in (q.extra.get('interactions') or []) if it['edge_id'] not in gp['placed']]
+    tail = ('<section class="card-store" id="cards" aria-labelledby="cards-h"><h2 id="cards-h">Details for each '
+            'arrow</h2>%s</section>' % store)
+    if left:   # a combined-treatment claim no card holds: listed as before
+        tail += interactions_section(data, q, here)
+    return question_page(data, prose, q, main, jumps=[('#graph', 'The graph')], tail=tail,
+                         script='static/graph.js', wide=True, limits=limits)
+
+
+def interactions_section(data: SiteData, q: Question, here: Optional[str] = None) -> str:
     inter = q.extra.get('interactions') or []
     if not inter:
         return ''
@@ -978,7 +1060,8 @@ def interactions_section(data: SiteData, q: Question) -> str:
                         else:
                             kind = 'an edge'
                         shown = 'Shown as %s: <a href="%s#e-%s">%s</a>.' % (
-                            kind, graph_file(q.qid), esc(slug(e['id'])), esc(edge_title(g, e)))
+                            kind, '' if here == '%s.html' % q.qid else graph_file(q.qid),
+                            esc(slug(e['id'])), esc(edge_title(g, e)))
                         break
         rows.append('<tr id="ix-%d"><td>%s</td><td>%s</td><td>%s</td></tr>' % (
             i + 1, evidence_box(quote, 1, 'ev-ix-%d' % (i + 1), q.qid, open_=True),
@@ -1380,31 +1463,35 @@ def matrix_view(g: Any, gp_: str) -> str:
             '%s</section>' % (head, ''.join(body), note))
 
 
-def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> str:
-    """The graph page for any question that has a *_graph.json."""
+def graph_parts(data: SiteData, qid: str, sources: List[SourcePage], here: str) -> Dict[str, str]:
+    """The graph and everything that goes with it, as pieces a page can lay out: the drawing
+    (figure, key, matrix, the paths note), its limitations, the claim set aside, the evidence
+    behind each arrow and the table of all arrows. `here` is the page they go on.
+
+    On the question's own page (here == qid.html) each arrow that is one of the answer's
+    findings carries that finding: its evidence section holds id="f-<finding slug>" with the
+    finding's own numbers (data-check "<qid>/<slug>/...") and links to its sources page."""
     g = data.graphs[qid]
     q = data.questions.get(qid)
     n = qnum(data, qid)
     gp_ = graph_prefix(qid)
-    gfile = graph_file(qid)
-    name = question_name(q) if q is not None else qid.upper()
-    ends = ('top', 'bottom') if GRAPH_FLOW == 'down' else ('left', 'right')
-    body = ('<h1>%s as a causal graph</h1>'
-            '<p class="lead">Each arrow is a body of evidence. Select one to read its sources.</p>'
-            '<p>%sA table of every arrow follows the graph.</p>'
-            % (esc(name), esc(GRAPH_INTRO.get(qid, DEFAULT_GRAPH_INTRO) % ends)))
-    body += ('<figure class="graph"><!--GRAPH--><figcaption>%s boxes linked by %s arrows, each a body of '
-             'evidence, and %s %s looked for and not found. Select an arrow to read its evidence '
-             'and sources.</figcaption>'
-             '<div class="gkey" id="read" role="group" aria-labelledby="read-h"><h2 id="read-h">How to read the '
-             'graph</h2>%s</div></figure>'
-             % (span(gp_ + '/count/nodes', len(g.nodes)), span(gp_ + '/count/edges', len(g.edges)),
-                span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings'), GRAPH_KEY))
-    body += matrix_view(g, gp_)
-    body += ('<p class="callout paths" role="note">A route through a middle box joins separate bodies of '
-             'evidence. It is not one tested effect.</p>')
-    body += limits_box(gp_, g.limitations, g.raw.get('rule'), g.raw.get('how_built'),
-                       heading='Before you trace a path')
+    on_answer = here == '%s.html' % qid
+    by_edge = {eid: fs for fs, eid in data.graph_join.items()}
+    findings = {f.slug: f for f in (q.findings if q is not None else [])}
+    parts: Dict[str, str] = {}
+    parts['figure'] = (
+        '<figure class="graph"><!--GRAPH--><figcaption>%s boxes linked by %s arrows, each a body of '
+        'evidence, and %s %s looked for and not found. Select an arrow to read its evidence '
+        'and sources.</figcaption>'
+        '<div class="gkey" id="read" role="group" aria-labelledby="read-h"><h2 id="read-h">How to read the '
+        'graph</h2>%s</div></figure>'
+        % (span(gp_ + '/count/nodes', len(g.nodes)), span(gp_ + '/count/edges', len(g.edges)),
+           span(gp_ + '/count/gaps', len(g.gaps)), plural(len(g.gaps), 'pairing', 'pairings'), GRAPH_KEY))
+    parts['matrix'] = matrix_view(g, gp_)
+    parts['paths'] = ('<p class="callout paths" role="note">A route through a middle box joins separate bodies of '
+                      'evidence. It is not one tested effect.</p>')
+    parts['limits'] = limits_box(gp_, g.limitations, g.raw.get('rule'), g.raw.get('how_built'), what='the graph')
+    parts['set_aside'] = ''
     if g.set_aside:
         items = []
         for s in g.set_aside:
@@ -1412,43 +1499,55 @@ def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> st
             if q is not None:
                 for i, it in enumerate(q.extra.get('interactions') or []):
                     if it.get('edge_id') == s.get('edge_id'):
-                        where = ' <a href="%s.html#ix-%d">Read the claim</a>.' % (qid, i + 1)
+                        where = ' <a href="%s#ix-%d">Read the claim</a>.' % ('' if on_answer else '%s.html' % qid,
+                                                                             i + 1)
             items.append('<li>%s: %s.%s</li>' % (esc(s.get('edge_id')), esc(s.get('why')), where))
-        body += ('<h2>Claim set aside</h2><p>Not drawn on the graph:</p><ul>%s</ul>' % ''.join(items))
+        parts['set_aside'] = ('<h2 id="aside">Claim set aside</h2><p>Not drawn on the graph:</p><ul>%s</ul>'
+                              % ''.join(items))
 
-    body += '<h2 id="arrows">Evidence behind each arrow</h2>'
+    arrows = []
     for e in g.edges:
         es = slug(e['id'])
-        base = '%s/%s' % (gp_, es)
         title = edge_title(g, e)
-        quotes = data.edge_index.get(qid, {}).get(e['id'], ())
-        boxes = source_page_link(sources, quotes, fname='sources-e-%s.html' % es, id_prefix='ev-e-' + es,
-                                 check_prefix=gp_, label=title, back=gfile + '#e-' + es,
-                                 back_text='Back to the graph',
-                                 description='The quoted sentences behind one arrow on the Q%d graph.' % n)
+        f = findings.get(by_edge.get(e['id'], '')) if on_answer else None
+        base = '%s/%s' % (qid, f.slug) if f is not None else '%s/%s' % (gp_, es)
+        if f is not None:
+            # the finding's own sources page (exactly its quotes); its numbers equal the arrow's
+            boxes = finding_sources(sources, f, qid)
+        else:
+            quotes = data.edge_index.get(qid, {}).get(e['id'], ())
+            boxes = source_page_link(sources, quotes, fname='sources-e-%s.html' % es, id_prefix='ev-e-' + es,
+                                     check_prefix=gp_, label=title, back=here + '#e-' + es,
+                                     back_text='Back to the graph',
+                                     description='The quoted sentences behind one arrow on the Q%d graph.' % n)
         finding = ''
-        for fs, eid in data.graph_join.items():
-            if eid == e['id']:
-                finding = ('<p>This arrow is the finding <a href="%s.html#f-%s">on the Q%d answer page</a>.</p>'
-                           % (qid, esc(fs), n))
+        if not on_answer and e['id'] in by_edge:
+            finding = ('<p>This arrow is the finding <a href="%s.html#f-%s">on the Q%d answer page</a>.</p>'
+                       % (qid, esc(by_edge[e['id']]), n))
         meaning = esc(e.get('direction_meaning') or '')
-        # .back-graph is left out when graph.js shows this section in its side panel
-        body += ('<section class="edge-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
-                 '<div class="badges">%s %s %s</div><p>%s</p>%s%s'
-                 '<p class="back-graph"><a href="#edge-%s">Back to the graph</a></p>%s</section>'
-                 % (es, es, es, esc(title), direction_badge(e['direction'], base + '/direction'),
+        inner = ('<div class="badges">%s %s %s</div><p>%s</p>%s%s'
+                 % (direction_badge(e['direction'], base + '/direction'),
                     certainty_badge(e['certainty'], e.get('certainty_rationale'), title, base),
                     counts(base, e['studies'], e['claims']),
                     vote_split(base, e.get('study_directions') or {}, False),
-                    '<p>%s</p>' % meaning if meaning else '', finding, es, boxes))
+                    '<p>%s</p>' % meaning if meaning else '', finding))
+        if f is not None:
+            inner = '<div class="efind" id="f-%s">%s%s</div>' % (esc(f.slug), inner, boxes)
+            boxes = ''
+        # .back-graph is left out when graph.js shows this section in its side panel
+        arrows.append('<section class="edge-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
+                      '%s<p class="back-graph"><a href="#edge-%s">Back to the graph</a></p>%s</section>'
+                      % (es, es, es, esc(title), inner, es, boxes))
     for gp in g.gaps:
         gs = slug(gp['id'])
         lbl = '%s → %s' % (g.node(gp['source'])['label'], g.node(gp['target'])['label'])
-        body += ('<section class="edge-panel gap-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
-                 '<div class="gap" role="note"><strong>Not studied:</strong> no claim in this body of research '
-                 'tested this pairing. That is not evidence of no effect. <span class="searched">Searched for: '
-                 '%s</span></div><p class="back-graph"><a href="#gapedge-%s">Back to the graph</a></p></section>'
-                 % (gs, gs, gs, esc(lbl), esc(gp.get('searched_for', '')), gs))
+        arrows.append('<section class="edge-panel gap-panel" id="e-%s" aria-labelledby="h-%s"><h3 id="h-%s">%s</h3>'
+                      '<div class="gap" role="note"><strong>Not studied:</strong> no claim in this body of research '
+                      'tested this pairing. That is not evidence of no effect. <span class="searched">Searched for: '
+                      '%s</span></div><p class="back-graph"><a href="#gapedge-%s">Back to the graph</a></p></section>'
+                      % (gs, gs, gs, esc(lbl), esc(gp.get('searched_for', '')), gs))
+    parts['arrows'] = ''.join(arrows)
+    parts['combos'], parts['placed'] = combo_cards(data, qid) if on_answer and q is not None else ('', set())
 
     rows = []
     for e in g.edges:
@@ -1458,9 +1557,103 @@ def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> st
                     % (es, esc(edge_title(g, e)), direction_badge(e['direction'], base + '/direction'),
                        span(base + '/certainty', certainty_text(e['certainty'])),
                        counts(base, e['studies'], e['claims'])))
-    body += '<h2 id="table">All arrows as a table</h2>' + table(
-        'Every arrow on the graph, with the same data as text',
-        ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
+    parts['table'] = table('Every arrow on the graph, with the same data as text',
+                           ['Arrow', 'Direction', 'Certainty', 'Studies'], ''.join(rows), 'all-edges')
+    return parts
+
+
+def combo_cards(data: SiteData, qid: str) -> Tuple[str, set]:
+    """Two-cause cards (#77): one per combination box on the graph. A card holds every
+    combined-treatment claim about its two members: the combination box's arrows (applied
+    together), a moderation arrow between the two (one changes how much the other helps) and
+    any claim set aside (not drawn). Each claim is listed one by one with its quote, never
+    pooled with the two separate findings. graph.js opens a card when both members are
+    selected and the outcome is clicked, or the combination box is.
+    Returns (html, the interaction claim ids placed)."""
+    g = data.graphs[qid]
+    q = data.questions[qid]
+    inter = q.extra.get('interactions') or []
+    ix_of = {it['edge_id']: i for i, it in enumerate(inter)}
+    aside = {s_['edge_id']: s_.get('why', '') for s_ in g.set_aside}
+    gp_ = graph_prefix(qid)
+    placed: set = set()
+    num = [0]
+
+    def claims(edge_ids: Iterable[str]) -> str:
+        out = []
+        for eid in edge_ids:
+            if eid not in ix_of or eid not in q.evidence:
+                continue
+            i = ix_of[eid]
+            placed.add(eid)
+            num[0] += 1   # sources numbered 1, 2, 3 ... down the card
+            out.append('<div class="ix" id="ix-%d"><p class="ix-dir">This claim: %s</p>%s</div>'
+                       % (i + 1, direction_badge(inter[i]['direction'], '%s/interactions/%d/direction' % (qid, i)),
+                          evidence_box(q.evidence[eid], num[0], 'ev-ix-%d' % (i + 1), qid, open_=True)))
+        return ''.join(out)
+
+    def block(heading: str, e: Dict[str, Any]) -> str:
+        base = '%s/%s' % (gp_, slug(e['id']))
+        title = edge_title(g, e)
+        return ('<section class="combo-part"><h4>%s</h4><div class="badges">%s %s %s</div>%s</section>'
+                % (esc(heading), direction_badge(e['direction'], base + '/direction'),
+                   certainty_badge(e['certainty'], e.get('certainty_rationale'), title, base),
+                   counts(base, e['studies'], e['claims']), claims(e.get('edge_ids') or [])))
+
+    cards = []
+    for node in g.nodes:
+        if node.get('kind') != 'combination' or len(node.get('members') or []) != 2:
+            continue
+        a, b = node['members']
+        num[0] = 0
+        la, lb = g.node(a)['label'], g.node(b)['label']
+        parts, outcomes = [], []
+        for e in g.edges:
+            if e.get('source') == node['id'] and e.get('kind') != 'moderation':
+                outcomes.append(e['target'])
+                parts.append(block('Applied together', e))
+        for e in g.edges:
+            if e.get('kind') == 'moderation':
+                t = g.edge(e['target_edge'])
+                if {e['source'], t['source']} == {a, b}:
+                    outcomes.append(t['target'])
+                    parts.append(block('%s changes how much %s affects %s' % (
+                        g.node(e['source'])['label'], g.node(t['source'])['label'].lower(),
+                        g.node(t['target'])['label'].lower()), e))
+        # claims set aside are about several treatments at once; listed on the pair's card
+        for eid, why in aside.items():
+            if eid in ix_of and eid not in placed:
+                parts.append('<section class="combo-part aside" id="aside"><h4>Set aside, not drawn on the graph</h4>'
+                             '<p>%s.</p>%s</section>' % (esc(why), claims([eid])))
+        outcomes = list(dict.fromkeys(outcomes))
+        names = ' and '.join(g.node(o)['label'] for o in outcomes)
+        cs = slug(node['id'])
+        cards.append(
+            '<section class="edge-panel combo-panel" id="combo-%s" aria-labelledby="h-combo-%s" data-node="%s" '
+            'data-members="%s %s" data-outcomes="%s"><h3 id="h-combo-%s">%s + %s → %s</h3>'
+            '<p>Claims about these two treatments used together. Each is listed on its own, with its quote. '
+            'They are not added up from the two separate findings.</p>%s</section>'
+            % (cs, cs, esc(node['id']), esc(a), esc(b), esc(' '.join(outcomes)), cs, esc(la), esc(lb), esc(names),
+               ''.join(parts)))
+    return ''.join(cards), placed
+
+
+def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> str:
+    """The graph page for any question that has a *_graph.json."""
+    g = data.graphs[qid]
+    q = data.questions.get(qid)
+    n = qnum(data, qid)
+    gfile = graph_file(qid)
+    name = question_name(q) if q is not None else qid.upper()
+    ends = ('top', 'bottom') if GRAPH_FLOW == 'down' else ('left', 'right')
+    gp = graph_parts(data, qid, sources, gfile)
+    body = ('<h1>%s as a causal graph</h1>'
+            '<p class="lead">Each arrow is a body of evidence. Select one to read its sources.</p>'
+            '<p>%sA table of every arrow follows the graph.</p>'
+            % (esc(name), esc(GRAPH_INTRO.get(qid, DEFAULT_GRAPH_INTRO) % ends)))
+    body += gp['figure'] + gp['matrix'] + gp['paths'] + gp['limits'] + gp['set_aside']
+    body += '<h2 id="arrows">Evidence behind each arrow</h2>' + gp['arrows']
+    body += '<h2 id="table">All arrows as a table</h2>' + gp['table']
     jumps = [('#read', 'How to read it'), ('#matrix', 'Matrix view'), ('#arrows', 'Evidence behind each arrow'),
              ('#table', 'All arrows as a table'),
              ('%s.html' % qid, 'Back to the answer')]
