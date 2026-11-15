@@ -4,7 +4,7 @@
 
 Whimsy is an offline evidence explorer for Canadian restoration practitioners, researchers, and funders. It answers three questions about tree planting, created marshes, and grassland restoration. Each question opens with a plain-language answer. Open a finding to see the direction of the result, its certainty grade, how many studies support it, and the original sentences from the papers.
 
-[Demo walkthrough](#try-a-finding) · [Figma wireframes](#figma-wireframes) · [Answer pack](answers/answers.md) · [Build checks][main-ci]
+[Demo walkthrough](#try-a-finding) · [Wireframes on GitHub](design/wireframes/out/) · [Answer pack](answers/answers.md) · [Build checks][main-ci]
 
 ## Quick start
 
@@ -53,9 +53,11 @@ The gap map shows how much research exists for each treatment and outcome. The p
 
 **Design follow-up.** Give one-study boxes a dotted border and label it **1 study · Thin evidence** in the legend. This makes a one-study box distinguishable from a two-study box and a grey gap at a glance. Keep **Read all sources** visible after the inline citations load. Where a claim supports several grid boxes, list and link each pairing on the sources page.
 
-## Figma wireframes
+## Wireframes
 
-[Open the team’s Figma file][figma] or jump directly to a frame. If Figma prompts for team access, the linked pull requests describe the design and interaction.
+The [GitHub wireframe exports](design/wireframes/out/) cover the finding card, Q1, and Q3 in desktop and phone layouts. To view the exports as pages, open the [HTML index](design/wireframes/out/index.html) in your browser from a local checkout.
+
+The [full Figma file][figma] and individual Figma frames below require team access. The linked pull requests describe the design and interactions.
 
 | Screen or interaction | Figma frames | Implementation notes |
 | --- | --- | --- |
@@ -180,7 +182,7 @@ The bundled fonts use the SIL Open Font License. [Inter licence](static/fonts/in
 
 
 
-[figma]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=0-1
+[figma]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza
 [figma-home]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=279-3223
 [figma-card]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=96-7838
 [figma-card-phone]: https://www.figma.com/design/JmqB89eWc03xvRTxmYFRG5/evidence-jam-causapalooza?node-id=96-7529
