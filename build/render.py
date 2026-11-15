@@ -200,7 +200,7 @@ SOURCES_NOTE = ('<p class="note">Each source is one sentence quoted from a paper
 # from the glance table or gap map) opens it. Without script it is just one click away.
 OPEN_TARGET_JS = ('<script>function openTarget(){var e=location.hash&&document.getElementById('
                   'decodeURIComponent(location.hash.slice(1)));if(!e)return;for(var p=e;p;p=p.parentElement)'
-                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details:not(.raw)");'
+                  '{if(p.tagName==="DETAILS")p.open=true;}if(e.tagName!=="DETAILS"){var d=e.querySelector("details:not(.raw):not(.ix-fold)");'
                   'if(d)d.open=true;}var pp=e.closest("[popover]");if(pp&&pp.showPopover){try{pp.showPopover()}catch(x){}}'
                   'only(pp,e);e.scrollIntoView({block:"nearest"});'
                   # a Q1 popup (one card filling it) opens at its top, so its × stays in view
@@ -1113,12 +1113,22 @@ def render_effects(data: SiteData, prose: Prose, q: Question, sources: List[Sour
                 % (esc(f.slug), esc(f.label), esc(f.slug), effect_popup(data, f, sources, href)))
 
     main = certainty_chart(q, {f.slug: popup(f) for f in by_strength(q.findings)}) + LEVELS_POPOVER
-    main += interactions_section(data, q)
-    if q.qid in data.graphs:
-        main += '<p class="graph-link"><a href="%s">See this answer as a graph →</a></p>' % graph_file(q.qid)
+    ix = interactions_section(data, q)
     jumps = [('#glance', 'Certainty chart')]
-    if q.extra.get('interactions'):
-        jumps.append(('#ix-h', 'Two treatments together'))
+    g = data.graphs.get(q.qid)
+    if g is not None:
+        # Winnie's matrix from the graph page: adds the links through the conditions in between and the
+        # combined treatment, which the chart can't show; its cells open the arrows on the graph page
+        main += matrix_view(g, '', href=graph_file(q.qid), sid='connect', heading='How these factors connect',
+                            intro='<p class="cc-read">The chart above shows each factor\'s direct effect. This grid '
+                                  'also shows the links through the conditions in between (seedling nutrients, '
+                                  'competing vegetation, soil) and the combined treatment. Each cell shows the '
+                                  'direction, the number of studies and the certainty; select one for its '
+                                  'evidence on the graph page. An empty cell means no arrow.</p>',
+                            extra=ix + '<p class="graph-link"><a href="%s">See it as a graph →</a></p>' % graph_file(q.qid))
+        jumps.append(('#connect', 'How factors connect'))
+    else:
+        main += ix
     return question_page(data, prose, q, main, jumps=jumps)
 
 
@@ -1152,18 +1162,18 @@ def interactions_section(data: SiteData, q: Question) -> str:
         grp['items'].append('<li class="ixq" id="ix-%d" data-claim="%s">%s%s</li>'
                             % (i + 1, esc(eid), chip(it['direction'], '%s/interactions/%d/direction' % (q.qid, i)),
                                card_quote(q.evidence[eid])))
-    cards = []
+    parts = []
     for grp in groups.values():
         n = len(grp['items'])
-        cards.append('<article class="ixc"><h3>%s</h3><p class="ixk">%s%s%d %s</p><ul class="ixl">%s</ul>%s</article>'
+        parts.append('<div class="ixg-grp"><h4>%s</h4><p class="ixk">%s%s%d %s</p><ul class="ixl">%s</ul></div>'
                      % (esc(grp['title']), esc(grp['kind']), ' · ' if grp['kind'] else '', n,
-                        plural(n, 'claim', 'claims'), ''.join(grp['items']),
-                        ('<p class="ixg"><a href="%s">See it on the graph →</a></p>' % esc(grp['href']))
-                        if grp['href'] else ''))
-    return ('<section class="ix-sec" aria-labelledby="ix-h"><h2 id="ix-h">Two treatments applied together</h2>'
-            '<p class="ix-intro">These results come from applying two treatments at once, or from one treatment '
-            'changing another\'s effect. They are not part of any single bar above. Each claim is shown with its '
-            'own quote.</p><div class="ixcards">%s</div></section>' % ''.join(cards))
+                        plural(n, 'claim', 'claims'), ''.join(grp['items'])))
+    n = len(inter)
+    return ('<details class="ix-fold" id="ix-h"><summary>Read the %d %s about two treatments together</summary>'
+            '<p class="ix-intro">These come from applying two treatments at once, or from one treatment changing '
+            'another\'s effect. They answer "how does site preparation change that?" and are not part of any bar '
+            'in the chart. Each claim is shown with its own quote.</p>%s</details>'
+            % (n, plural(n, 'claim', 'claims'), ''.join(parts)))
 
 
 # --------------------------------------------------------------- Q2 timeline
@@ -1499,10 +1509,12 @@ GRAPH_KEY = ''.join([
 ])
 
 
-def matrix_view(g: Any, gp_: str) -> str:
+def matrix_view(g: Any, gp_: str, *, href: str = '', sid: str = 'matrix', heading: str = 'Matrix view',
+                intro: str = '', extra: str = '') -> str:
     """The same arrows as a grid: what you do (and the conditions) as rows, the conditions and
     outcomes as columns. A cell shows the direction (symbol and colour), the number of studies
-    and the certainty, and links to the arrow's evidence; an empty cell has no arrow."""
+    and the certainty, and links to the arrow's evidence; an empty cell has no arrow.
+    On another page (Q1) `href` is the graph page, so the links go to the arrows there."""
     rows, _ = order_rows(g)
     kind = {n['id']: n.get('kind') for n in g.nodes}
     label = {n['id']: n['label'] for n in g.nodes}
@@ -1519,15 +1531,15 @@ def matrix_view(g: Any, gp_: str) -> str:
         if e is not None:
             n = e['studies']
             cert = certainty_text(e['certainty']).lower()
-            words = '%s → %s: %s, %s certainty, %d %s' % (
+            words = '%s → %s: %s, %s, %d %s' % (
                 label[s], label[t], e['direction'].replace('_', ' '), cert, n, 'study' if n == 1 else 'studies')
-            return ('<td class="mx d-%s"><a href="#e-%s" aria-label="%s"><span class="mx-main">'
+            return ('<td class="mx d-%s"><a href="%s#e-%s" aria-label="%s"><span class="mx-main">'
                     '<span class="mx-sym">%s</span> %d</span><span class="mx-cert">%s</span></a></td>'
-                    % (esc(e['direction']), esc(slug(e['id'])), esc(words), GRAPH_SYM[e['direction']], n, esc(cert)))
+                    % (esc(e['direction']), href, esc(slug(e['id'])), esc(words), GRAPH_SYM[e['direction']], n, esc(cert)))
         gp = gaps.get((s, t))
         if gp is not None:
-            return ('<td class="mx gap"><a href="#e-%s" aria-label="%s → %s: not studied">not studied</a></td>'
-                    % (esc(slug(gp['id'])), esc(label[s]), esc(label[t])))
+            return ('<td class="mx gap"><a href="%s#e-%s" aria-label="%s → %s: not studied">not studied</a></td>'
+                    % (href, esc(slug(gp['id'])), esc(label[s]), esc(label[t])))
         return '<td class="mx none"><span class="sr-only">no arrow</span></td>'
 
     head = ('<tr><td></td><th scope="colgroup" colspan="%d">Conditions they change</th>'
@@ -1542,18 +1554,18 @@ def matrix_view(g: Any, gp_: str) -> str:
     for e in g.edges:
         if e.get('kind') == 'moderation':
             t = g.edge(e['target_edge'])
-            mods.append('<a href="#e-%s">%s changes the effect of %s → %s</a> (%s %s, %d %s, %s certainty)'
-                        % (esc(slug(e['id'])), esc(label[e['source']]), esc(label[t['source']]),
+            mods.append('<a href="%s#e-%s">%s changes the effect of %s → %s</a> (%s %s, %d %s, %s)'
+                        % (href, esc(slug(e['id'])), esc(label[e['source']]), esc(label[t['source']]),
                            esc(label[t['target']]), GRAPH_SYM[e['direction']], e['direction'].replace('_', ' '),
                            e['studies'], 'study' if e['studies'] == 1 else 'studies',
                            esc(certainty_text(e['certainty']).lower())))
     note = ('<p class="mx-note">Not a cell in the grid: %s.</p>' % '; '.join(mods)) if mods else ''
-    return ('<section id="matrix" class="gmatrix" aria-labelledby="matrix-h"><h2 id="matrix-h">Matrix view</h2>'
-            '<p>The same arrows as a grid. Each cell shows the direction (symbol and colour), the number of '
-            'studies and the certainty, and links to the evidence. An empty cell means there is no arrow.</p>'
+    intro = intro or ('<p>The same arrows as a grid. Each cell shows the direction (symbol and colour), the number of '
+                      'studies and the certainty, and links to the evidence. An empty cell means there is no arrow.</p>')
+    return ('<section id="%s" class="gmatrix" aria-labelledby="%s-h"><h2 id="%s-h">%s</h2>%s'
             '<div class="table-wrap"><table class="matrix"><caption class="sr-only">Every arrow as a grid: '
             'causes in rows, what they act on in columns</caption><thead>%s</thead><tbody>%s</tbody></table></div>'
-            '%s</section>' % (head, ''.join(body), note))
+            '%s%s</section>' % (sid, sid, sid, heading, intro, head, ''.join(body), note, extra))
 
 
 def render_graph_page(data: SiteData, qid: str, sources: List[SourcePage]) -> str:

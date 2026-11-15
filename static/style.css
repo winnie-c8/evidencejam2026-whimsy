@@ -857,17 +857,18 @@ table.levels th { white-space: nowrap; }
 .cc-filter select { font: inherit; font-size: .9rem; padding: .2rem .4rem; min-height: 2rem; max-width: 100%; }
 .cc-count { margin: 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; flex-basis: 100%; }
 
-/* Q1: two treatments applied together, one card per thing the claims say */
-.ix-sec { margin: 2rem 0 1.5rem; }
+/* Q1: the claims about two treatments together, folded under the matrix */
+details.ix-fold { margin: 1rem 0; border: 1px solid var(--line); border-radius: 8px; padding: .6rem 1rem; }
+details.ix-fold > summary { cursor: pointer; color: var(--link); font-weight: 600; }
+details.ix-fold[open] > summary { margin-bottom: .5rem; }
 .ix-intro { max-width: 46rem; }
-.ixcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 1rem; margin-top: .75rem; }
-.ixc { border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; background: var(--bg); min-width: 0; }
-.ixc h3 { margin: 0 0 .25rem; font-size: 1.05rem; line-height: 1.35; }
-.ixk { margin: 0 0 .5rem; color: var(--muted); font-size: .9rem; }
+.ixg-grp { margin: .9rem 0 0; }
+.ixg-grp h4 { margin: 0 0 .2rem; font-size: 1rem; line-height: 1.35; }
+.ixk { margin: 0 0 .4rem; color: var(--muted); font-size: .9rem; }
 .ixl { list-style: none; margin: 0; padding: 0; }
 .ixq { margin: 0; padding: .6rem 0; border-top: 1px solid var(--line); max-width: none; }
 .ixq .cq { margin: .4rem 0 0; }
-.ixg { margin: .5rem 0 0; }
+#connect { margin-top: 2.5rem; }
 
 /* Q3 gap map: cells are buttons (no underline), more room, a "?" per row; details in popups */
 table.gapmap { font-size: .95rem; }
