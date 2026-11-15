@@ -131,7 +131,8 @@ def word_to_code(text: str) -> str:
     t = norm(text).lower()
     t = re.sub(r'\s*certainty$', '', t)
     # plain words for the reference directions (Q2 chart), each meaning exactly one pack value
-    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference'}.get(t, t)
+    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference',
+         'no change': 'no effect'}.get(t, t)
     return t.replace(' ', '_')
 
 

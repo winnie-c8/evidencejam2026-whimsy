@@ -990,25 +990,36 @@ def interactions_section(data: SiteData, q: Question) -> str:
                         ''.join(rows), 'interactions'))
 
 
-# --------------------------------------------------------------- Q2 timeline
-# "When were these marshes measured?": one row per comparison finding, a bar for each marsh age
-# in its time_points. It is NOT a recovery curve: no study reports a time to reach the
-# reference (time_to_reference is null), and the bar colour is the overall result.
+# --------------------------------------------------------------- Q2 chart
+# "Outcome by outcome" (Figma frame "current graph"): one row per finding with its result, a
+# 4-block certainty meter, the marsh ages studied on a 0-30 year track, and (compared with
+# natural marshes) "Matched natural marshes yet?". It is NOT a recovery curve: no study reports
+# a time to reach the reference (time_to_reference is null), and the bar colour is the overall
+# result, pooled across ages. HTML (not SVG) so it reflows into stacked rows on a phone.
 
 TL_WORD = {'below_reference': ('◀', 'Behind'), 'above_reference': ('▶', 'Ahead'),
            'comparable': ('=', 'Matches'), 'mixed': ('⇅', 'Mixed'), 'unclear': ('?', 'Unclear'),
-           'increase': ('▲', 'Increase'), 'decrease': ('▼', 'Decrease'), 'no_effect': ('–', 'No effect')}
-TL_MAX, TL_STEP = 30, 5                      # axis: 0 to 30, a tick every 5
-TL_X0, TL_PX = 400, 16                       # where the axis starts, px per year (fits the page column)
-TL_ROW, TL_TOP, TL_GROUP = 76, 60, 44        # row height, space for the axis, a group heading
-TL_BTN = 44                                  # the "?" column on the right
+           'increase': ('▲', 'Increase'), 'decrease': ('▼', 'Decrease'), 'no_effect': ('–', 'No change')}
+# colour key per direction (the CSS class mc-<key>), and the legend word
+MC_KEY = {'below_reference': 'behind', 'decrease': 'behind', 'above_reference': 'ahead', 'increase': 'ahead',
+          'comparable': 'ahead', 'mixed': 'mixed', 'unclear': 'unclear', 'no_effect': 'nochg'}
+MC_LEGEND = [('behind', 'Behind'), ('ahead', 'Ahead'), ('mixed', 'Mixed'), ('unclear', 'Unclear'),
+             ('nochg', 'No change')]
+# "Matched natural marshes yet?": the answer word, and the result word for the line under it
+MC_MATCHED = {'below_reference': ('No', 'behind'), 'above_reference': ('Yes (ahead)', 'ahead'),
+              'comparable': ('Yes', 'matches'), 'mixed': ('Mixed', ''), 'unclear': ('Unclear', '')}
+MC_CLAIM_WORD = {'above_reference': 'higher', 'comparable': 'same', 'below_reference': 'lower', 'unclear': 'unclear'}
+MC_SPLIT_WORD = {'below_reference': 'behind', 'above_reference': 'ahead'}
+MC_ORDER = {'below_reference': 0, 'above_reference': 1, 'comparable': 2, 'mixed': 3, 'unclear': 4}
+CERT_BLOCKS = {'very_low': 1, 'low': 2, 'moderate': 3, 'high': 4}
+TL_MAX, TL_STEP = 30, 5                      # age axis: 0 to 30 years, a grid line every 5
 AGE_RANGE = re.compile(r'^\s*(\d+)\s*[-–]\s*(\d+)\s*years?\s*$')
 AGE_ONE = re.compile(r'^\s*(\d+)\s*years?\s*$')
 
 
 def f1(v: float) -> str:
-    s_ = '%.1f' % v
-    return s_[:-2] if s_.endswith('.0') else s_
+    s_ = '%.2f' % v
+    return s_.rstrip('0').rstrip('.')
 
 
 def parse_age(t: str) -> Optional[Tuple[int, int]]:
@@ -1022,97 +1033,172 @@ def parse_age(t: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def timeline_chart(q: Question, popups: Dict[str, str]) -> str:
-    """The Q2 main view: one row per finding (compared with natural marshes, then change with age).
-    A row is short; its "?" (or a click anywhere on it) opens a popup with the finding's full card.
-    Static SVG, values in data-check spans; the same data follows as a table."""
+def meter(certainty: str, cls: str = 'mc-meter') -> str:
+    """Four blocks, the first N filled (N = 1 for very low ... 4 for high). The word is said next to it."""
+    n = CERT_BLOCKS.get(certainty, 0)
+    return '<span class="%s m%d" aria-hidden="true">%s</span>' % (cls, n, '<i></i>' * 4)
+
+
+def age_track(f: Finding, base: str) -> str:
+    """The marsh ages a finding's studies looked at, on the 0-30 track: a bar per age range, a
+    short bar for a single age, a tick for a single age that falls inside a range. A dashed box
+    when no age is reported. Ages are also said as text (pack values, data-checked)."""
+    tps = f.raw.get('time_points') or []
+    ages = [(i, parse_age(t)) for i, t in enumerate(tps)]
+    ranges = [a for _, a in ages if a and a[0] != a[1]]
+    pct = lambda yr: min(yr, TL_MAX) * 100.0 / TL_MAX
+    marks = []
+    for _, a in sorted(((i, a) for i, a in ages if a), key=lambda x: x[1]):
+        lo, hi = a
+        if lo != hi:
+            marks.append('<span class="mc-bar" style="left:%s%%;width:%s%%"></span>' % (f1(pct(lo)), f1(pct(hi) - pct(lo))))
+        elif any(r[0] <= lo <= r[1] for r in ranges):
+            marks.append('<span class="mc-tick" style="left:%s%%"></span>' % f1(pct(lo)))
+        else:
+            marks.append('<span class="mc-pt" style="left:%s%%"></span>' % f1(pct(lo)))
+    said = ', '.join(span('%s/time_points/%d' % (base, i), t) for i, t in enumerate(tps))
+    axis = ('<span class="mc-ax" aria-hidden="true">%s</span>'
+            % ''.join('<span style="left:%s%%">%d</span>' % (f1(pct(y)), y) for y in range(0, TL_MAX + 1, 10)))
+    if not marks:
+        unparsed = (' <span class="sr-only">Marsh ages: %s</span>' % said) if tps else ''
+        return ('<div class="mc-ages"><span class="mc-none">marsh age not reported%s</span></div>' % unparsed)
+    return ('<div class="mc-ages"><span class="mc-track">%s</span>%s<span class="sr-only">Marsh ages studied: %s'
+            '</span></div>' % (''.join(marks), axis, said))
+
+
+def split_text(f: Finding, base: str) -> str:
+    """'2 of 3 studies behind' when the studies disagree, else '5 of 6 claims behind' when the
+    claims do; nothing when all agree. Numbers are the pack's (data-checked)."""
+    word = MC_SPLIT_WORD.get(f.direction)
+    if not word:
+        return ''
+    sd, cd = f.raw.get('study_directions') or {}, f.raw.get('claim_directions') or {}
+    if len(sd) > 1 and f.direction in sd:
+        return ' · %s of %s studies %s' % (span(base + '/study_directions/' + f.direction, sd[f.direction]),
+                                           span(base + '/studies', f.studies), word)
+    if len(cd) > 1 and f.direction in cd and f.raw.get('claims'):
+        return ' · %s of %s claims %s' % (span(base + '/claim_directions/' + f.direction, cd[f.direction]),
+                                          span(base + '/claims', f.raw['claims']), word)
+    return ''
+
+
+def matched_cell(f: Finding, base: str) -> str:
+    ans, word = MC_MATCHED.get(f.direction, (words(f.direction), ''))
+    has_age = bool(f.raw.get('time_points'))
+    if f.direction == 'mixed':
+        cd = f.raw.get('claim_directions') or {}
+        bits = ['%s %s' % (span(base + '/claim_directions/' + d, n), MC_CLAIM_WORD.get(d, words(d)))
+                for d, n in sorted(cd.items(), key=lambda x: -x[1])]
+        if bits:
+            bits[0] = bits[0].replace('</span> ', '</span> claims ', 1)
+        sub = ', '.join(bits)
+    else:
+        sub = word
+    tail = 'pooled across ages' if has_age else 'age unknown'
+    sub = '%s · %s' % (sub, tail) if sub else tail
+    return ('<div class="mc-match"><span class="mc-mlab">Matched natural marshes yet? </span>'
+            '<strong>%s</strong><span class="mc-msub">%s</span></div>' % (esc(ans), sub))
+
+
+def timeline_chart(q: Question, popups: Dict[str, str], gaps_anchor: str = 'gaps-h') -> str:
+    """The Q2 main view (Figma "current graph"): a key, "How to read this", one row per finding
+    (compared with natural marshes, then older vs newer created marshes) and the takeaway. A
+    row's outcome name opens a popup with the finding's full card (why that certainty, quotes).
+    The same data follows as a table."""
     rank = {c: i for i, c in enumerate(CERT_ORDER)}
-    groups = [('', sorted(q.findings, key=lambda f: (not f.raw.get('lags'), rank.get(f.certainty, 9))))]
+    groups = [('Compared with natural marshes', sorted(q.findings, key=lambda f: (
+        not f.raw.get('lags'), rank.get(f.certainty, 9), MC_ORDER.get(f.direction, 9))), True)]
     if q.trends:
-        groups.append(('As marshes age', list(q.trends)))
-    allf = [f for _, fs in groups for f in fs]
+        groups.append(('Comparing older created marshes to newer ones', list(q.trends), False))
+    allf = [f for _, fs, _ in groups for f in fs]
     if not allf or not any(f.raw.get('time_points') for f in allf):
         return ''
     qid = q.qid
-    x = lambda yr: TL_X0 + min(yr, TL_MAX) * TL_PX
-    width = x(TL_MAX) + 24 + TL_BTN
-    parts, buttons, y = [], [], TL_TOP
-    parts.append('<defs><pattern id="tl-hatch" width="8" height="8" patternUnits="userSpaceOnUse" '
-                 'patternTransform="rotate(45)"><rect width="8" height="8" class="tl-hatch-bg"/>'
-                 '<line x1="0" y1="0" x2="0" y2="8" class="tl-hatch-line"/></pattern></defs>')
-    # axis title first (so no tick number runs into it), then tick numbers
-    parts.append('<text class="tl-axis-title" x="%d" y="18">Marsh age when measured (years)</text>' % TL_X0)
-    for yr in range(0, TL_MAX + 1, TL_STEP):
-        parts.append('<text class="tl-tick" x="%d" y="%d" text-anchor="middle">%d</text>' % (x(yr), TL_TOP - 18, yr))
-    rows_svg = []
-    for title, fs in groups:
-        if title:
-            rows_svg.append('<text class="tl-group" x="0" y="%d">%s</text>' % (y + 30, esc(title)))
-            y += TL_GROUP
-        for f in fs:
+    keys = {MC_KEY.get(f.direction, 'unclear') for f in allf}
+    legend = ''.join('<span class="mc-sw mc-%s"><i aria-hidden="true"></i>%s</span>' % (k, w)
+                     for k, w in MC_LEGEND if k in keys)
+    key = ('<div class="mc-key"><p><span class="mc-kh">Result:</span> %s</p>'
+           '<p><span class="mc-kh">Certainty:</span> <span class="mc-meter mc-kmeter m4" aria-hidden="true">'
+           '<i></i><i></i><i></i><i></i></span> More filled blocks = more certain (very low, low, moderate, high)</p></div>'
+           % legend)
+    how = ('<details class="mc-how"><summary>How to read this</summary><ul>'
+           '<li>Each row is one outcome. The coloured word under its name is the overall result: '
+           'compared with natural marshes, or (last group) older created marshes compared with newer ones.</li>'
+           '<li><strong>Certainty</strong>: the more blocks are filled, the surer we can be. The word next to them '
+           'says the grade, with the number of studies.</li>'
+           '<li><strong>Marsh ages studied</strong>: each bar is a range of marsh ages that studies looked at, '
+           'coloured by the overall result. A short mark is a single age. A dashed box means the studies did not say '
+           'how old their marshes were.</li>'
+           '<li><strong>Matched natural marshes yet?</strong> Whether created marshes have reached natural ones on '
+           'that outcome. No study followed a marsh until it matched.</li>'
+           '<li>Select an outcome name for why it has that certainty and the quoted sources.</li></ul></details>')
+    ticks = ''.join('<span style="left:%s%%">%d</span>' % (f1(yr * 100.0 / TL_MAX), yr)
+                    for yr in range(0, TL_MAX + 1, TL_STEP))
+    head = ('<div class="mc-row mc-head" aria-hidden="true"><div class="mc-out">Outcome</div>'
+            '<div class="mc-cert"><span class="mc-ch">Certainty (how sure are we?)</span>'
+            '<span class="mc-clabs"><span>Very low</span><span>Low</span><span>Moderate</span><span>High</span></span></div>'
+            '<div class="mc-ages"><span class="mc-ch">Marsh ages studied (years)</span><span class="mc-ticks">%s</span></div>'
+            '<div class="mc-match">Matched natural marshes yet?</div></div>' % ticks)
+    rows = [head]
+    for title, fs, matched in groups:
+        rows.append('<div class="mc-row mc-group%s"><div class="mc-out"><h3>%s</h3></div><div class="mc-cert"></div>'
+                    '<div class="mc-ages"></div><div class="mc-match"></div></div>'
+                    % ('' if matched else ' mc-nom', esc(title)))
+        for i, f in enumerate(fs):
             base = '%s/%s' % (qid, f.slug)
             sym, word = TL_WORD.get(f.direction, ('', words(f.direction)))
-            lag = ' <tspan class="tl-lag">· lags</tspan>' if f.raw.get('lags') else ''
-            row = ['<g class="tl-row tl-%s"><line class="tl-sep" x1="0" y1="%d" x2="%d" y2="%d"/>'
-                   '<text class="tl-name" x="0" y="%d">%s%s</text>'
-                   '<text class="tl-meta" x="0" y="%d"><tspan class="tl-sym" aria-hidden="true">%s</tspan> '
-                   '<tspan data-check="%s/direction">%s</tspan> · <tspan data-check="%s/certainty">%s</tspan> · '
-                   '<tspan data-check="%s/studies">%d</tspan> %s</text>'
-                   % (esc(f.direction.replace('_', '-')), y + TL_ROW, width, y + TL_ROW, y + 30,
-                      esc(f.outcome_label), lag, y + 54, sym, esc(base), esc(word), esc(base),
-                      esc(certainty_text(f.certainty)), esc(base), f.studies, plural(f.studies, 'study', 'studies'))]
-            ages = [a for a in (parse_age(t) for t in f.raw.get('time_points') or []) if a is not None]
-            if ages:
-                for a, b in ages:
-                    x1, x2 = x(a), x(b)
-                    if x2 - x1 < 8:
-                        x1, x2 = (x1 + x2) / 2 - 4, (x1 + x2) / 2 + 4
-                    row.append('<rect class="tl-bar" x="%s" y="%d" width="%s" height="28" rx="4"/>'
-                               % (f1(x1), y + 24, f1(x2 - x1)))
-            else:
-                row.append('<rect class="tl-none" x="%d" y="%d" width="%d" height="28" fill="url(#tl-hatch)"/>'
-                           '<text class="tl-none-t" x="%d" y="%d" text-anchor="middle">age not reported</text>'
-                           % (x(0), y + 24, x(TL_MAX) - x(0), (x(0) + x(TL_MAX)) // 2, y + 43))
-            row.append('</g>')
-            rows_svg.append(''.join(row))
-            # the whole row is a button (over the drawing); its "?" sits at the right
-            buttons.append('<button type="button" class="tl-open" popovertarget="pop-%s" '
-                           'style="top:%dpx;height:%dpx;width:%dpx">'
-                           '<span class="sr-only">Details: %s</span><span class="tl-q" aria-hidden="true">?</span></button>'
-                           % (esc(f.slug), y, TL_ROW, width, esc(f.label)))
-            y += TL_ROW
-    height = y + 8
-    grid = ''.join('<line class="tl-grid" x1="%d" y1="%d" x2="%d" y2="%d"/>' % (x(yr), TL_TOP - 10, x(yr), height - 8)
-                   for yr in range(0, TL_MAX + 1, TL_STEP))
-    n_aged = sum(1 for f in allf if f.raw.get('time_points'))
-    summary = ('Ages of the marshes studied for %d findings; %d of them report marsh ages. Each row shows the '
-               'overall result. Select a row for its details. The table below has the same data.' % (len(allf), n_aged))
-    svg = ('<svg class="tl" width="%d" height="%d" viewBox="0 0 %d %d" role="group" aria-label="%s">%s%s%s</svg>'
-           % (width, height, width, height, esc(summary), ''.join(parts), grid, ''.join(rows_svg)))
-    rows = []
+            k = MC_KEY.get(f.direction, 'unclear')
+            last = ' mc-last' if i == len(fs) - 1 else ''
+            rows.append(
+                '<div class="mc-row mc-%s%s%s">'
+                '<div class="mc-out"><button type="button" class="mc-name" popovertarget="pop-%s">%s'
+                '<span class="sr-only">: details and sources</span></button>'
+                '<span class="mc-dir"><span aria-hidden="true">%s</span> %s</span></div>'
+                '<div class="mc-cert">%s<span class="mc-meta">%s · %s %s%s</span></div>'
+                '%s%s</div>'
+                % (k, last, '' if matched else ' mc-nom', esc(f.slug), esc(f.outcome_label), sym,
+                   span(base + '/direction', word), meter(f.certainty),
+                   span(base + '/certainty', CERT_WORD[f.certainty]), span(base + '/studies', f.studies),
+                   plural(f.studies, 'study', 'studies'), split_text(f, base),
+                   age_track(f, base), matched_cell(f, base) if matched else '<div class="mc-match"></div>'))
+    chart = '<div class="mc-wrap"><div class="mc">%s</div></div>' % ''.join(rows)
+
+    # takeaway: what the chart cannot say, from the pack
+    sa = q.extra.get('short_answer') or {}
+    take = []
+    if sa.get('time_to_reference') is None:
+        take.append('<p class="mc-take-h">Takeaway: how long full recovery takes is unknown.</p>')
+    take.append('<p>Bars show the marsh ages that were studied, coloured by the overall result for that outcome. '
+                'Results are pooled across studies, not reported age by age.</p>')
+    if q.limitations:
+        take.append('<p>%s A result measured at one age doesn’t show the trajectory.</p>'
+                    % span('%s/limitations/0' % qid, q.limitations[0]))
+    if q.gaps:
+        labels = [g.outcome_label for g in q.gaps]
+        some = ', '.join(esc(lbl[0].lower() + lbl[1:]) for lbl in labels[:3])
+        take.append('<p>No evidence for %s %s, including %s. <a href="#%s">See Not studied</a>.</p>'
+                    % (number_word(len(q.gaps)), plural(len(q.gaps), 'outcome', 'outcomes'), some, gaps_anchor))
+    takeaway = '<div class="mc-take">%s</div>' % ''.join(take)
+
+    trows = []
     for f in allf:
         base = '%s/%s' % (qid, f.slug)
         sym, word = TL_WORD.get(f.direction, ('', words(f.direction)))
         tps = f.raw.get('time_points') or []
         ages = (', '.join(span('%s/time_points/%d' % (base, i), t) for i, t in enumerate(tps))
                 if tps else '<span class="muted">not reported</span>')
-        rows.append('<tr><th scope="row">%s%s</th><td><span aria-hidden="true">%s</span> %s</td>'
-                    '<td>%s</td><td>%s</td><td>%s</td></tr>'
-                    % (esc(f.outcome_label), ' (lags)' if f.raw.get('lags') else
-                       (' (as marshes age)' if f.kind == 'trend' else ''), sym,
-                       span(base + '/direction', word), span(base + '/certainty', CERT_WORD[f.certainty]),
-                       span(base + '/studies', f.studies), ages))
+        trows.append('<tr><th scope="row">%s%s</th><td><span aria-hidden="true">%s</span> %s</td>'
+                     '<td>%s</td><td>%s</td><td>%s</td></tr>'
+                     % (esc(f.outcome_label), ' (lags)' if f.raw.get('lags') else
+                        (' (older vs newer marshes)' if f.kind == 'trend' else ''), sym,
+                        span(base + '/direction', word), span(base + '/certainty', CERT_WORD[f.certainty]),
+                        span(base + '/studies', f.studies), ages))
     tbl = table('The chart as a table: each finding, its overall result and the marsh ages studied',
-                ['Outcome', 'Result', 'Certainty', 'Studies', 'Ages measured'], ''.join(rows), 'tl-table')
+                ['Outcome', 'Result', 'Certainty', 'Studies', 'Ages measured'], ''.join(trows), 'tl-table')
     pops = ''.join(popups[f.slug] for f in allf)
-    return ('<h2 id="timeline">When were these marshes measured?</h2>'
-            '<p class="note">Select a row (or its <span class="tl-q-inline" aria-hidden="true">?</span>) for why it has '
-            'that certainty and the quoted sources.</p>'
-            '<div class="tl-wrap" role="region" aria-label="Marsh ages chart" tabindex="0">%s%s</div>'
-            '<p class="tl-cap">Bars show the marsh ages studies looked at. The result (Behind / Ahead) is overall, '
-            'not at each age. No study followed a marsh until it matched a natural one.</p>'
+    return ('<h2 id="timeline">Outcome by outcome</h2>%s%s%s%s'
             '<details class="tl-tbl"><summary>The same data as a table</summary>%s</details>%s'
-            % (svg, ''.join(buttons), tbl, pops))
+            % (key, how, chart, takeaway, tbl, pops))
 
 
 def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[SourcePage]) -> str:
@@ -1159,7 +1245,7 @@ def render_comparison(data: SiteData, prose: Prose, q: Question, sources: List[S
     popups = {f.slug: popup(f) for f in q.all_findings()}
     chart = timeline_chart(q, popups)
     if chart:
-        main, jumps = chart, [('#timeline', 'When measured')]
+        main, jumps = chart, [('#timeline', 'Outcomes')]
     else:  # no ages in the data: cards as on any other page
         main = '<h2 id="compare">Findings</h2>' + cards(q.findings) + (cards(q.trends) if q.trends else '')
         jumps = [('#compare', 'Findings')]

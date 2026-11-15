@@ -23,6 +23,7 @@ DIR_WORDS = {
     'Unclear': 'unclear', 'Below reference': 'below_reference', 'Comparable': 'comparable',
     'Above reference': 'above_reference',
     'Behind': 'below_reference', 'Matches': 'comparable', 'Ahead': 'above_reference',  # plain words (Q2 chart)
+    'No change': 'no_effect',
 }
 CERT_WORDS = {}
 for _k, _w in (('high', 'High'), ('moderate', 'Moderate'), ('low', 'Low'), ('very_low', 'Very low')):
