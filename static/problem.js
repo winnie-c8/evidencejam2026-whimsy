@@ -1,6 +1,7 @@
-// Home page "Problem" opening, revealed as you scroll (normal scrolling, nothing pinned):
+// Home page "Problem" opening, revealed as you scroll:
 // 1. at first only the sentence shows;
-// 2. the flowers drift in one by one over the first few hundred pixels of scrolling;
+// 2. the flowers drift in one by one over the first few hundred pixels of scrolling, while the
+//    opening holds still (setPin below); the page starts moving once they are all in;
 // 3. once every flower is in, "spread across: hundreds of papers" (it sits below the flowers);
 // 4. then the paper band, slice by slice to the end of the screen, once it comes up the screen.
 // Decorative only: the text is in the page from the start. Nothing moves for people who ask for
@@ -47,9 +48,32 @@
       }, strips.length * GAP + 400);
     }
   }
+  // Hold the page still while the flowers come in: the opening stays where it is (sticky) for
+  // the scrolling it takes to bring in every flower, plus a short pause on the full bunch, and
+  // the page starts moving after that. Only when the whole bunch is on screen at the start
+  // (on a phone it is below the fold, so the page just scrolls as before).
+  var pin = sec.querySelector('.pb-pin');
+  var HOLD = 10 + STEP * (flowers.length - 1) + 60;   // px of scrolling the opening stays put
+  // the room to stay stuck in must be content of the section (sticky ignores padding)
+  var hold = document.createElement('div');
+  hold.className = 'pb-hold';
+  hold.setAttribute('aria-hidden', 'true');
+  function setPin() {
+    sec.classList.remove('pinned');
+    hold.remove();
+    pin.style.top = '';
+    var top = pin.getBoundingClientRect().top + scrollY;          // where it sits in the page
+    var boxBottom = box.getBoundingClientRect().bottom + scrollY;
+    if (boxBottom > innerHeight) return;                           // bunch not fully on screen
+    pin.style.top = top + 'px';      // stuck exactly where it starts, so nothing jumps
+    hold.style.height = HOLD + 'px';   // the room it stays stuck for
+    sec.appendChild(hold);
+    sec.classList.add('pinned');
+  }
   var queued = false;
   function onScroll() { if (!queued) { queued = true; requestAnimationFrame(function () { queued = false; frame(); }); } }
   addEventListener('scroll', onScroll, { passive: true });
-  addEventListener('resize', onScroll);
+  addEventListener('resize', function () { setPin(); onScroll(); });
+  setPin();
   frame();
 })();

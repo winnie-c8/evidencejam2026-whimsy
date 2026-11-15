@@ -294,6 +294,7 @@
   var hoverKey = null;   // a box id or arrow element under the pointer / keyboard focus
   var pinned = null;     // a box id whose arrows stay highlighted (click the box again to clear)
   var selected = null;   // the arrow whose evidence is open in the panel
+  var sel = [];          // selected treatment boxes, in click order (at most two; see "select treatments")
 
   function relatedTo(target) {
     var on = { arrows: [], nodes: {} };
@@ -322,6 +323,11 @@
   }
 
   function highlight() {
+    if (sel.length) {           // a selection greys out what doesn't apply (applySel); no hover highlight
+      svg.classList.remove('hl');
+      each(svg.querySelectorAll('.on'), function (el) { el.classList.remove('on'); });
+      return;
+    }
     var target = pinned || hoverKey || selected;
     svg.classList.toggle('hl', !!target);
     each(svg.querySelectorAll('.on'), function (el) { el.classList.remove('on'); });
@@ -385,7 +391,13 @@
     tip.style.top = Math.max(8, top) + 'px';
   }
   var tipFor = null;
+  function boxTip(node) {           // a greyed box says why
+    tip.textContent = node.getAttribute('data-why');
+    tipFor = node;
+  }
   svg.addEventListener('pointermove', function (ev) {
+    var node = !drag && ev.target.closest && ev.target.closest('g.node[data-why]');
+    if (node) { if (node !== tipFor) boxTip(node); placeTip(ev.clientX, ev.clientY); return; }
     var link = !drag && ev.pointerType !== 'touch' && ev.target.closest && ev.target.closest('a.edge, a.gap-link');
     if (!link) { tip.hidden = true; tipFor = null; return; }
     if (link !== tipFor) { fillTip(link); tipFor = link; }
@@ -393,6 +405,13 @@
   });
   svg.addEventListener('pointerleave', function () { tip.hidden = true; tipFor = null; });
   svg.addEventListener('focusin', function (ev) {
+    var node = ev.target.closest && ev.target.closest('g.node[data-why]');
+    if (node) {
+      boxTip(node);
+      var nb = node.getBoundingClientRect();
+      placeTip(nb.left, nb.bottom - 10);
+      return;
+    }
     var link = ev.target.closest && ev.target.closest('a.edge, a.gap-link');
     if (!link) return;
     fillTip(link);
@@ -477,9 +496,7 @@
       suppressClick = true;              // the click that follows a drag doesn't open the panel
       setTimeout(function () { suppressClick = false; }, 0);
     } else if (d.kind === 'box' && ev.type === 'pointerup') {
-      pinned = pinned === d.b.id ? null : d.b.id;   // a click on a box pins / unpins its arrows
-      highlight();
-      updateState();
+      boxClick(d.b.id);
     }
   }
   svg.addEventListener('pointerup', endDrag);
@@ -498,8 +515,9 @@
   var tools = document.createElement('div');
   tools.className = 'graph-tools';
   tools.innerHTML =
-    '<p>Drag a box or an arrow to move it; arrows stay attached. Click a box to keep its arrows ' +
-    'highlighted (click it again to clear). Select an arrow to read its evidence in a side panel.</p>' +
+    '<p>Select a treatment, then the outcome you care about, to read what the studies found. Select a ' +
+    'second treatment to see what is known about the two together; greyed boxes were not tested together. ' +
+    'Select a box again to unselect it. You can also select any arrow, or drag boxes and arrows to move them.</p>' +
     '<div class="tool-row"><span id="show-label">Show only:</span>' +
     '<div class="seg" role="group" aria-labelledby="show-label">' +
     '<button type="button" data-show="all" aria-pressed="true">All certainties</button>' +
@@ -548,21 +566,25 @@
 
   // Flow diagram or matrix: the same arrows two ways. Without this script both are shown.
   var matrix = document.getElementById('matrix');
+  var tableView = document.querySelector('section.gtable');   // q1.html: the table of all arrows is a view too
   if (matrix) {
     var toggle = document.createElement('div');
     toggle.className = 'view-toggle';
     toggle.innerHTML = '<span id="view-label">View:</span><div class="seg" role="group" aria-labelledby="view-label">' +
       '<button type="button" data-view="flow" aria-pressed="true">Flow diagram</button>' +
-      '<button type="button" data-view="matrix" aria-pressed="false">Matrix</button></div>';
+      '<button type="button" data-view="matrix" aria-pressed="false">Matrix</button>' +
+      (tableView ? '<button type="button" data-view="table" aria-pressed="false">Table</button>' : '') + '</div>';
     tools.parentNode.insertBefore(toggle, tools);
     // the matrix moves up to where the diagram is, so switching doesn't jump down the page
     figure.parentNode.insertBefore(matrix, figure.nextSibling);
+    if (tableView) matrix.parentNode.insertBefore(tableView, matrix.nextSibling);
     var setView = function (v) {
-      var m = v === 'matrix';
+      var m = v !== 'flow';
       if (m) setFull(false);
       figure.hidden = m;
       tools.hidden = m;
-      matrix.hidden = !m;
+      matrix.hidden = v !== 'matrix';
+      if (tableView) tableView.hidden = v !== 'table';
       each(toggle.querySelectorAll('button'), function (b) {
         b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v));
       });
@@ -570,9 +592,11 @@
     each(toggle.querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
     });
-    setView(location.hash === '#matrix' || location.hash === '#matrix-h' ? 'matrix' : 'flow');
+    setView(location.hash === '#matrix' || location.hash === '#matrix-h' ? 'matrix'
+      : (tableView && (location.hash === '#table' || location.hash === '#table-h')) ? 'table' : 'flow');
     window.addEventListener('hashchange', function () {
       if (location.hash === '#matrix') setView('matrix');
+      else if (tableView && location.hash === '#table') setView('table');
       else if (/^#(read|q1g|edge-)/.test(location.hash)) setView('flow');
     });
   }
@@ -622,6 +646,12 @@
       parts.push('sorted by certainty (most certain ' + (DOWN ? 'on the left' : 'at the top') + ' of each box)');
     }
     if (pinned) parts.push('highlighting the arrows of “' + boxes[pinned].name + '” (click the box again to clear)');
+    if (sel.length) {
+      parts.push('selected ' + sel.map(function (id) { return '“' + boxes[id].name + '”'; }).join(' and ') +
+        (sel.length === 1 ? '; select an outcome, or a second treatment tested together with it'
+                          : '; select the outcome to read what is known about the two together') +
+        '; greyed boxes and arrows do not apply');
+    }
     stateLine.textContent = 'Now showing: ' + parts.join('; ') + '.';
   }
 
@@ -656,6 +686,7 @@
     if (suppressClick) { ev.preventDefault(); return; }
     var a = ev.target.closest && ev.target.closest('a.edge, a.gap-link');
     if (a) {
+      if (a.classList.contains('sel-off')) { ev.preventDefault(); return; }
       if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
       if (openPanel(a)) ev.preventDefault();
       return;
@@ -747,9 +778,16 @@
     });
   }
 
+  var openedFrom = null;   // what gets focus back when the panel closes
   function openPanel(a) {
     var sec = document.getElementById(a.getAttribute('href').slice(1));
     if (!sec) return false;
+    return openCard(sec, a, a);
+  }
+
+  // Show a card (an arrow's section, or a two-cause card) in the panel. arrow: the arrow to mark
+  // as open (or null); from: the element focus returns to on close.
+  function openCard(sec, arrow, from) {
     var clone = sec.cloneNode(true);
     var h3 = clone.querySelector('h3');
     panelTitle.textContent = h3 ? h3.textContent : '';
@@ -772,8 +810,9 @@
       loadSources(link, slot);
     }
     if (selected) selected.classList.remove('sel');
-    selected = a;
-    a.classList.add('sel');
+    selected = arrow;
+    if (arrow) arrow.classList.add('sel');
+    openedFrom = from;
     panel.hidden = false;
     panel.scrollTop = 0;
     document.documentElement.classList.add('drawer-open');
@@ -786,27 +825,162 @@
     if (panel.hidden) return;
     panel.hidden = true;
     document.documentElement.classList.remove('drawer-open');
-    var back = selected;
+    var back = openedFrom || selected;
     if (selected) selected.classList.remove('sel');
     selected = null;
+    openedFrom = null;
     highlight();
-    if (back) back.focus();
+    if (back && back.focus) back.focus();
   }
 
   panel.querySelector('.drawer-close').addEventListener('click', closePanel);
   document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && !panel.hidden) closePanel();
+    if (ev.key !== 'Escape') return;
+    if (!panel.hidden) closePanel();
+    else if (sel.length) { sel = []; applySel(); }
   });
+
+  // ---------------------------------------------------------------- select treatments (#77)
+  // Click a treatment: it is selected, and only what applies to it stays active: the boxes it
+  // has an arrow to (click one: that arrow's card) and a treatment it was tested together with
+  // (click it: both selected). With two selected, only the outcome they were tested on together
+  // stays active (click it: the two-cause card). Everything else greys out and says why.
+
+  var combos = [];   // {node, members, outcomes, card}, read from the two-cause cards on the page
+  each(document.querySelectorAll('.combo-panel'), function (sec) {
+    combos.push({ node: sec.getAttribute('data-node'), members: sec.getAttribute('data-members').split(' '),
+                  outcomes: sec.getAttribute('data-outcomes').split(' '), card: sec });
+  });
+  function comboOf(a, b) {
+    for (var i = 0; i < combos.length; i++) {
+      var m = combos[i].members;
+      if (m.indexOf(a) >= 0 && (b === undefined || m.indexOf(b) >= 0)) return combos[i];
+    }
+    return null;
+  }
+  function arrowFrom(s, t) {
+    for (var i = 0; i < arrows.length; i++) if (arrows[i].s === s && arrows[i].t === t) return arrows[i];
+    return null;
+  }
+  function isCause(id) { return arrows.some(function (a) { return a.s === id; }); }
+  function partnerOf(a, b) { return a !== b && !!comboOf(a, b); }
+  function comboNode(id) { return combos.filter(function (c) { return c.node === id; })[0] || null; }
+
+  // what clicking box id does now: ['select'|'unselect'|'arrow'|'combo'|'pin'|null, detail]
+  function actionFor(id) {
+    if (sel.indexOf(id) >= 0) return ['unselect'];
+    var cn = comboNode(id);
+    if (cn) return (!sel.length || cn.members.indexOf(sel[0]) >= 0) ? ['combo', cn] : [null];
+    if (!sel.length) return isCause(id) ? ['select'] : ['pin'];
+    if (sel.length === 1) {
+      var a = arrowFrom(sel[0], id);
+      if (a) return ['arrow', a];
+      if (partnerOf(sel[0], id)) return ['select'];
+      return [null];
+    }
+    var c = comboOf(sel[0], sel[1]);
+    return c && c.outcomes.indexOf(id) >= 0 ? ['combo', c] : [null];
+  }
+
+  function arrowActive(a) {
+    if (!sel.length) return true;
+    if (sel.length === 1) {
+      if (a.s === sel[0]) return true;
+      if (a.te) return a.s === sel[0] || byId[a.te].s === sel[0];
+      var cn = comboNode(a.s);
+      return !!(cn && cn.members.indexOf(sel[0]) >= 0);
+    }
+    var c = comboOf(sel[0], sel[1]);
+    if (!c) return false;
+    if (a.s === c.node) return true;
+    if (a.te) return c.members.indexOf(a.s) >= 0 && c.members.indexOf(byId[a.te].s) >= 0;
+    // the arrow a moderation arrow points at stays, so the ring never sits on nothing
+    return arrows.some(function (m) { return m.te === a.id && c.members.indexOf(m.s) >= 0; });
+  }
+
+  function applySel() {
+    Object.keys(boxes).forEach(function (id) {
+      var b = boxes[id], act = actionFor(id)[0];
+      var off = sel.length > 0 && !act;
+      b.el.classList.toggle('chosen', sel.indexOf(id) >= 0);
+      b.el.classList.toggle('sel-off', off);
+      b.el.setAttribute('aria-pressed', String(sel.indexOf(id) >= 0));
+      b.el.setAttribute('aria-disabled', String(off));
+      var why = '';
+      if (off) {
+        why = sel.length === 1 && !isCause(id) && !comboNode(id)
+          ? 'No arrow from ' + boxes[sel[0]].name : 'Not tested together';
+      }
+      if (why) b.el.setAttribute('data-why', why); else b.el.removeAttribute('data-why');
+      b.el.setAttribute('aria-label', b.name + (sel.indexOf(id) >= 0 ? ', selected' : '') + (why ? ': ' + why : ''));
+    });
+    arrows.forEach(function (a) {
+      var off = !arrowActive(a);
+      a.el.classList.toggle('sel-off', off);
+      if (off) { a.el.setAttribute('tabindex', '-1'); a.el.setAttribute('aria-disabled', 'true'); }
+      else { a.el.removeAttribute('tabindex'); a.el.removeAttribute('aria-disabled'); }
+    });
+    members.forEach(function (p) {
+      var cn = comboNode(p.getAttribute('data-c'));
+      p.classList.toggle('sel-off', sel.length > 0 && !(cn && cn.members.indexOf(sel[0]) >= 0));
+    });
+    svg.classList.toggle('selecting', sel.length > 0);
+    highlight();
+    updateState();
+  }
+
+  function boxClick(id) {
+    var act = actionFor(id);
+    var b = boxes[id];
+    if (!act[0]) {                   // greyed: say why (touch has no hover)
+      boxTip(b.el);
+      var r = b.el.getBoundingClientRect();
+      placeTip(r.left, r.bottom - 10);
+      return;
+    }
+    if (act[0] === 'pin') { pinned = pinned === id ? null : id; highlight(); updateState(); return; }
+    if (act[0] === 'unselect') { sel = sel.filter(function (x) { return x !== id; }); }
+    else if (act[0] === 'select') { pinned = null; sel.push(id); }
+    else if (act[0] === 'arrow') { openPanel(act[1].el); return; }
+    else if (act[0] === 'combo') { openCard(act[1].card, null, b.el); return; }
+    applySel();
+  }
+
+  // boxes work from the keyboard: Tab to one, Enter or Space selects it
+  Object.keys(boxes).forEach(function (id) {
+    var el = boxes[id].el;
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-pressed', 'false');
+    el.setAttribute('aria-label', boxes[id].name);
+    el.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); boxClick(id); }
+    });
+  });
+
+  // the cards live in one store on the page; with this script they show only in the panel
+  var store = document.getElementById('cards');
+  if (store) store.hidden = true;
 
   routes = routeAll();
   updateState();
 
-  // Arriving from "On the graph" (q1-graph.html#e-...): show that arrow in the panel.
-  if (/^#e-/.test(location.hash)) {
-    var start = svg.querySelector('a[href="' + location.hash.replace(/"/g, '') + '"]');
+  // Arriving at an arrow (#e-...) or at a finding inside one (q1.html#f-..., e.g. from the
+  // short answer): show that arrow in the panel.
+  function openFromHash() {
+    var t = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    var sec = t && t.closest('.edge-panel');
+    if (sec && sec.classList.contains('combo-panel')) {
+      figure.scrollIntoView();
+      openCard(sec, null, boxes[sec.getAttribute('data-node')] && boxes[sec.getAttribute('data-node')].el);
+      return;
+    }
+    var start = sec && svg.querySelector('a[href="#' + sec.id + '"]');
     if (start) {
       figure.scrollIntoView();
       openPanel(start);
     }
   }
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
 }());

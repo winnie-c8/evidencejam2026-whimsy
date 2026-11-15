@@ -131,7 +131,8 @@ def word_to_code(text: str) -> str:
     t = norm(text).lower()
     t = re.sub(r'\s*certainty$', '', t)
     # plain words for the reference directions (Q2 chart), each meaning exactly one pack value
-    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference'}.get(t, t)
+    t = {'behind': 'below reference', 'matches': 'comparable', 'ahead': 'above reference',
+         'no change': 'no effect'}.get(t, t)
     return t.replace(' ', '_')
 
 
@@ -418,7 +419,8 @@ class Checker:
         while sec is not None and sec.tag not in ('section', 'details'):  # a row may fold (details)
             sec = sec.parent
         notes = [n for n in (sec.iter() if sec is not None else []) if 'data-template' in n.attrs]
-        ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) == want
+        # The pack may write the outcome in lower case mid-sentence: match the slot either way.
+        ok = any(norm(n.attrs['data-template'].replace('{outcome}', outcome)) in (want, norm(gap['searched_for'].replace(outcome.lower(), outcome)))
                  and norm(n.attrs['data-template'].replace('{outcome}', 'that outcome')) in n.text()
                  for n in notes)
         self.ok(ok, f'{where}: what was searched for ("{gap["searched_for"]}") is not shown')
@@ -450,8 +452,28 @@ class Checker:
         for a in sa['lagging_attributes']:
             self.ok(norm(a) in text, f'q2.html: lagging attribute "{a}" missing')
 
-    def check_graph(self) -> None:
-        name = 'q1-graph.html'
+    def check_q1_findings_in_graph(self) -> None:
+        """Q1 is answered by its graph (#77): q1.html draws it, and each finding sits inside the
+        evidence section (side card) of the arrow from its subject to its outcome."""
+        name = 'q1.html'
+        root = self.page(name)
+        if root is None:
+            return
+        edges = {(e['source'], e['target']): e for e in self.load('graph')['edges'] if e.get('kind') == 'effect'}
+        ids = self.ids[name]
+        for f in self.load('q1')['findings']:
+            e = edges.get((f['subject']['id'], f['outcome']['id']))
+            if not self.ok(e is not None, f'{name} {f["id"]}: no arrow on the graph for this finding'):
+                continue
+            el = ids.get('f-' + slug(f['id']))
+            if el is None:
+                continue  # check_question reports it
+            sec = el.parent
+            while sec is not None and sec.attrs.get('id') != 'e-' + slug(e['id']):
+                sec = sec.parent
+            self.ok(sec is not None, f'{name} {f["id"]}: finding is not inside its arrow\'s section e-{slug(e["id"])}')
+
+    def check_graph(self, name: str = 'q1-graph.html') -> None:
         root = self.page(name)
         if root is None:
             return
@@ -605,7 +627,9 @@ class Checker:
             self.check_question(qid)
         self.check_short_answers()
         self.check_q2_honesty()
-        self.check_graph()
+        self.check_graph('q1-graph.html')
+        self.check_graph('q1.html')   # Q1's answer page is the graph (#77)
+        self.check_q1_findings_in_graph()
         self.page_weights = self.weights(max_kb)
         return self.problems
 
