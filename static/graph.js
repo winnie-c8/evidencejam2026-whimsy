@@ -293,8 +293,8 @@
 
   var hoverKey = null;   // a box id or arrow element under the pointer / keyboard focus
   var pinned = null;     // a box id whose arrows stay highlighted (click the box again to clear)
-  var selected = null;   // the arrow whose evidence is open in the panel
-  var sel = [];          // selected treatment boxes, in click order (at most two; see "select treatments")
+  var selected = null;   // the arrow whose card is open
+  var sel = null;        // the picked box (a treatment or condition), or null
 
   function relatedTo(target) {
     var on = { arrows: [], nodes: {} };
@@ -323,12 +323,7 @@
   }
 
   function highlight() {
-    if (sel.length) {           // a selection greys out what doesn't apply (applySel); no hover highlight
-      svg.classList.remove('hl');
-      each(svg.querySelectorAll('.on'), function (el) { el.classList.remove('on'); });
-      return;
-    }
-    var target = pinned || hoverKey || selected;
+    var target = sel || pinned || hoverKey || selected;
     svg.classList.toggle('hl', !!target);
     each(svg.querySelectorAll('.on'), function (el) { el.classList.remove('on'); });
     Object.keys(boxes).forEach(function (id) { boxes[id].el.classList.toggle('pinned', id === pinned); });
@@ -502,484 +497,629 @@
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
 
-  // ---------------------------------------------------------------- tools above the graph
+
+  // ---------------------------------------------------------------- Q1 flow view (#85)
+  // Pick a box (thick blue outline; its arrows go full strength). Then click a box it has an
+  // arrow to, or any arrow: that arrow's findings card opens under the flow diagram. The
+  // six-sided box (and "See the N claims", and the count in the blue bar) open the
+  // two-treatments card. Esc closes the card; a second Esc unpicks the box.
 
   var figure = svg.closest('figure');
-  var caption = figure.querySelector('figcaption');
-  var stateLine = document.createElement('span');
-  stateLine.className = 'fig-state';
-  stateLine.setAttribute('role', 'status');
-  caption.appendChild(document.createTextNode(' '));
-  caption.appendChild(stateLine);
-
-  var tools = document.createElement('div');
-  tools.className = 'graph-tools';
-  tools.innerHTML =
-    '<p>Select a treatment, then the outcome you care about, to read what the studies found. Select a ' +
-    'second treatment to see what is known about the two together; greyed boxes were not tested together. ' +
-    'Select a box again to unselect it. You can also select any arrow, or drag boxes and arrows to move them.</p>' +
-    '<div class="tool-row"><span id="show-label">Show only:</span>' +
-    '<div class="seg" role="group" aria-labelledby="show-label">' +
-    '<button type="button" data-show="all" aria-pressed="true">All certainties</button>' +
-    '<button type="button" data-show="high" aria-pressed="false">High certainty</button>' +
-    '<button type="button" data-show="moderate" aria-pressed="false">Moderate certainty</button>' +
-    '<button type="button" data-show="low" aria-pressed="false">Low or very low certainty</button></div></div>' +
-    '<div class="tool-row">' +
-    '<button type="button" class="direct" aria-pressed="false">Direct effects only</button>' +
-    '<button type="button" class="sort" aria-pressed="false">Sort by certainty</button>' +
-    '<button type="button" class="reset">Reset layout</button>' +
-    '<button type="button" class="full" aria-pressed="false">Full screen</button></div>';
-  figure.parentNode.insertBefore(tools, figure);
-
-  // Full screen: the figure covers the window (and the browser goes full screen where it can).
-  // The whole page goes full screen, not just the figure, so the evidence panel still opens.
-  var fullBtn = tools.querySelector('.full');
-  var exitBtn = document.createElement('button');
-  exitBtn.type = 'button';
-  exitBtn.className = 'full-exit';
-  exitBtn.textContent = 'Exit full screen';
-  figure.insertBefore(exitBtn, figure.firstChild);
-  var isFull = false;
-  function setFull(on) {
-    if (on === isFull) return;
-    isFull = on;
-    figure.classList.toggle('full', on);
-    document.documentElement.classList.toggle('graph-full', on);
-    fullBtn.setAttribute('aria-pressed', String(on));
-    var root = document.documentElement;
-    if (on && root.requestFullscreen && !document.fullscreenElement) {
-      root.requestFullscreen().catch(function () {});   // refused (e.g. iPhone): the overlay still works
-    } else if (!on && document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(function () {});
-    }
-    (on ? exitBtn : fullBtn).focus();
-  }
-  fullBtn.addEventListener('click', function () { setFull(!isFull); });
-  exitBtn.addEventListener('click', function () { setFull(false); });
-  // Esc in browser full screen leaves it without a keydown event; follow it
-  document.addEventListener('fullscreenchange', function () {
-    if (!document.fullscreenElement && isFull) setFull(false);
-  });
-  document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && isFull && !document.documentElement.classList.contains('drawer-open')) setFull(false);
-  });
-
-  // Flow diagram or matrix: the same arrows two ways. Without this script both are shown.
-  var matrix = document.getElementById('matrix');
-  var tableView = document.querySelector('section.gtable');   // q1.html: the table of all arrows is a view too
-  if (matrix) {
-    var toggle = document.createElement('div');
-    toggle.className = 'view-toggle';
-    toggle.innerHTML = '<span id="view-label">View:</span><div class="seg" role="group" aria-labelledby="view-label">' +
-      '<button type="button" data-view="flow" aria-pressed="true">Flow diagram</button>' +
-      '<button type="button" data-view="matrix" aria-pressed="false">Matrix</button>' +
-      (tableView ? '<button type="button" data-view="table" aria-pressed="false">Table</button>' : '') + '</div>';
-    tools.parentNode.insertBefore(toggle, tools);
-    // the matrix moves up to where the diagram is, so switching doesn't jump down the page
-    figure.parentNode.insertBefore(matrix, figure.nextSibling);
-    if (tableView) matrix.parentNode.insertBefore(tableView, matrix.nextSibling);
-    var setView = function (v) {
-      var m = v !== 'flow';
-      if (m) setFull(false);
-      figure.hidden = m;
-      tools.hidden = m;
-      matrix.hidden = v !== 'matrix';
-      if (tableView) tableView.hidden = v !== 'table';
-      each(toggle.querySelectorAll('button'), function (b) {
-        b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v));
-      });
-    };
-    each(toggle.querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
-    });
-    setView(location.hash === '#matrix' || location.hash === '#matrix-h' ? 'matrix'
-      : (tableView && (location.hash === '#table' || location.hash === '#table-h')) ? 'table' : 'flow');
-    window.addEventListener('hashchange', function () {
-      if (location.hash === '#matrix') setView('matrix');
-      else if (tableView && location.hash === '#table') setView('table');
-      else if (/^#(read|q1g|edge-)/.test(location.hash)) setView('flow');
-    });
-  }
-
-  var certFilter = 'all';
-  var directOnly = false;
-  var SHOW = { high: ['high'], moderate: ['moderate'], low: ['low', 'very_low'] };
-  var SHOW_WORDS = { high: 'high-certainty', moderate: 'moderate-certainty', low: 'low- or very-low-certainty' };
-
-  function isCondition(id) { return boxes[id] && boxes[id].kind === 'condition'; }
-
-  // Hide arrows the filters leave out. Every box stays. A moderation arrow that is shown keeps
-  // the arrow it changes visible (faded), so it never points at nothing.
-  function applyFilters() {
-    var keep = SHOW[certFilter];
-    var shown = 0;
-    arrows.forEach(function (a) {
-      var certOk = !keep || (a.cert !== null && keep.indexOf(a.cert) >= 0);
-      var directOk = !directOnly || (!isCondition(a.s) && !(a.t && isCondition(a.t)));
-      var on = certOk && directOk;
-      a.el.classList.toggle('filtered', !on);
-      a.el.classList.remove('context');
-      if (on) shown++;
-    });
-    arrows.forEach(function (a) {
-      if (a.te && !a.el.classList.contains('filtered') && byId[a.te].el.classList.contains('filtered')) {
-        byId[a.te].el.classList.remove('filtered');
-        byId[a.te].el.classList.add('context');
-      }
-    });
-    return shown;
-  }
-
-  // The caption says what the graph is showing right now.
-  function updateState() {
-    var shown = applyFilters();
-    var parts = [];
-    if (certFilter !== 'all' || directOnly) {
-      parts.push(shown + ' of ' + arrows.length + ' arrows: ' +
-        (directOnly ? 'direct treatment → outcome' : '') +
-        (directOnly && certFilter !== 'all' ? ', ' : '') +
-        (certFilter !== 'all' ? SHOW_WORDS[certFilter] : '') + ' only; every box stays');
-    } else {
-      parts.push('all ' + arrows.length + ' arrows');
-    }
-    if (sortByCertainty) {
-      parts.push('sorted by certainty (most certain ' + (DOWN ? 'on the left' : 'at the top') + ' of each box)');
-    }
-    if (pinned) parts.push('highlighting the arrows of “' + boxes[pinned].name + '” (click the box again to clear)');
-    if (sel.length) {
-      parts.push('selected ' + sel.map(function (id) { return '“' + boxes[id].name + '”'; }).join(' and ') +
-        (sel.length === 1 ? '; select an outcome, or a second treatment tested together with it'
-                          : '; select the outcome to read what is known about the two together') +
-        '; greyed boxes and arrows do not apply');
-    }
-    stateLine.textContent = 'Now showing: ' + parts.join('; ') + '.';
-  }
-
-  each(tools.querySelectorAll('[data-show]'), function (btn) {
-    btn.addEventListener('click', function () {
-      certFilter = btn.getAttribute('data-show');
-      each(tools.querySelectorAll('[data-show]'), function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
-      updateState();
-    });
-  });
-  var directBtn = tools.querySelector('.direct');
-  directBtn.addEventListener('click', function () {
-    directOnly = !directOnly;
-    directBtn.setAttribute('aria-pressed', String(directOnly));
-    updateState();
-  });
-  var sortBtn = tools.querySelector('.sort');
-  sortBtn.addEventListener('click', function () {
-    sortByCertainty = !sortByCertainty;
-    sortBtn.setAttribute('aria-pressed', String(sortByCertainty));
-    draw();
-    updateState();
-  });
-  tools.querySelector('.reset').addEventListener('click', function () {
-    Object.keys(boxes).forEach(function (id) { boxes[id].x = boxes[id].homeX; boxes[id].y = boxes[id].homeY; });
-    arrows.forEach(function (a) { a.via = null; a.laneOff = 0; });
-    draw();
-  });
-
-  // a click on empty space clears a pinned box
-  svg.addEventListener('click', function (ev) {
-    if (suppressClick) { ev.preventDefault(); return; }
-    var a = ev.target.closest && ev.target.closest('a.edge, a.gap-link');
-    if (a) {
-      if (a.classList.contains('sel-off')) { ev.preventDefault(); return; }
-      if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
-      if (openPanel(a)) ev.preventDefault();
-      return;
-    }
-    if (!(ev.target.closest && ev.target.closest('g.node')) && pinned) {
-      pinned = null;
-      highlight();
-      updateState();
-    }
-  });
-
-  // ---------------------------------------------------------------- side panel
-
   var main = document.getElementById('main') || document.body;
-  var panel = document.createElement('aside');
-  panel.className = 'drawer';
-  panel.hidden = true;
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-modal', 'false');
-  panel.setAttribute('aria-labelledby', 'drawer-title');
-  panel.innerHTML = '<div class="drawer-head"><h2 id="drawer-title" tabindex="-1"></h2>' +
-    '<button type="button" class="drawer-close">Close<span class="sr-only"> evidence panel</span></button></div>' +
-    '<div class="drawer-body"></div>';
-  main.appendChild(panel);
-  var panelTitle = panel.querySelector('h2');
-  var panelBody = panel.querySelector('.drawer-body');
-  var cache = {};
+  svg.classList.add('pale');
+  var status = document.createElement('p');
+  status.className = 'sr-only';
+  status.setAttribute('role', 'status');
+  figure.parentNode.insertBefore(status, figure.nextSibling);
 
-  function stripIds(root) {
-    each(root.querySelectorAll('[id]'), function (el) { el.removeAttribute('id'); });
-    if (root.removeAttribute) root.removeAttribute('id');
+  var slot = document.getElementById('card-slot');
+  if (!slot) {                        // the graph page: cards open under the diagram too
+    slot = document.createElement('div');
+    slot.id = 'card-slot';
+    figure.parentNode.insertBefore(slot, status.nextSibling);
   }
+  slot.hidden = true;
 
-  // A bar of how the studies split by direction (the pack's own counts, in the words below it).
-  var VOTE = { increase: ['↑', 'Increase'], decrease: ['↓', 'Decrease'], mixed: ['⇅', 'Mixed'],
-               no_effect: ['–', 'No effect'], unclear: ['?', 'Unclear'] };
-  function voteBar(root) {
-    var parts = [];
-    each(root.querySelectorAll('[data-check*="/study_directions/"]'), function (el) {
-      var dir = el.getAttribute('data-check').split('/').pop();
-      var n = +el.textContent;
-      if (n > 0 && VOTE[dir]) parts.push([dir, n]);
-    });
-    if (!parts.length) return null;
-    var total = parts.reduce(function (s, p) { return s + p[1]; }, 0);
-    var wrap = document.createElement('div');
-    wrap.className = 'votes-wrap';
-    var h = document.createElement('p');
-    h.className = 'votes-head';
-    h.textContent = 'How the ' + total + ' ' + (total === 1 ? 'study splits' : 'studies split') + ' by direction:';
-    var bar = document.createElement('div');
-    bar.className = 'votebar';
-    bar.setAttribute('aria-hidden', 'true');   // the same counts are written out just below
+  // ----- the findings card, laid out from the data in its section
+
+  var LIMS = [];
+  try { LIMS = JSON.parse((document.getElementById('card-lims') || {}).textContent || '[]'); } catch (e) { LIMS = []; }
+  var SYMS = { increase: '↑', decrease: '↓', mixed: '⇅', no_effect: '–', unclear: '?' };
+  var START_WHY = { 4: 'The best studies were experiments with an untreated control.', 3: 'The best studies were other controlled studies.',
+                    2: 'The best studies only observed, with no experiment.', 1: 'The best evidence was a model or a case study.' };
+  var NUMW = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+  var LV = { 'very low': 1, low: 2, moderate: 3, high: 4 };
+  var LW = { 1: 'Very low', 2: 'Low', 3: 'Moderate', 4: 'High' };
+  var STEPS = [[/^-1 single study$/, 'Only one study.'], [/^-1 studies disagree$/, 'The studies disagree.'],
+               [/^-1 most claims report no comparator$/, 'Most claims have no comparison.'],
+               [/^\+1 (\d+) studies agree$/, '{0} studies agree.'],
+               [/^\+1 mechanistic and difference-making evidence$/, 'It shows how it works, not just that it works.']];
+  var RULE = /^start (high|moderate|low|very low) \([^)]*\)(.*?)\s*->\s*(high|moderate|low|very low)$/;
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+  function foundWhat(d, target) {
+    var t = target.toLowerCase();
+    var noun = t.indexOf('growth') >= 0 ? 'growth' : t.indexOf('survival') >= 0 ? 'survival' : '';
+    if (d === 'increase') return 'found ' + (noun === 'growth' ? 'more growth' : noun ? 'higher survival' : 'an increase');
+    if (d === 'decrease') return 'found ' + (noun === 'growth' ? 'less growth' : noun ? 'lower survival' : 'a decrease');
+    return { mixed: 'mixed', no_effect: 'no change', unclear: 'unclear' }[d] || d;
+  }
+  function bars(n) { var b = el('span', 'bars b' + n); b.setAttribute('aria-hidden', 'true'); return b; }
+  function fold(cls, title, body) {
+    var d = el('details', 'fc-d ' + cls);
+    var s = el('summary');
+    s.appendChild(el('span', '', title));
+    var pm = el('span', 'pm');
+    pm.setAttribute('aria-hidden', 'true');
+    s.appendChild(pm);
+    d.appendChild(s);
+    var inn = el('div', 'fc-in');
+    d.appendChild(inn);
+    if (body) inn.appendChild(body);
+    return d;
+  }
+  function fig(label, nodes) {
+    var f = el('div', 'fig');
+    f.appendChild(el('p', 'fig-l', label));
+    var v = el('p', 'fig-v');
+    nodes.forEach(function (n) { if (typeof n === 'string') v.appendChild(document.createTextNode(n)); else if (n) v.appendChild(n); });
+    f.appendChild(v);
+    return f;
+  }
+  function ladder(rule) {
+    var m = RULE.exec(rule.replace(/\s+/g, ' ').trim());
+    if (!m) return null;
+    var ol = el('ol', 'ladder');
+    function row(cls, k, n, b, t) {
+      var li = el('li', cls);
+      li.appendChild(el('span', 'lad-k', k));
+      var nn = el('span', 'lad-n', n);
+      if (b) nn.appendChild(b);
+      li.appendChild(nn);
+      li.appendChild(el('span', 'lad-t', t));
+      ol.appendChild(li);
+    }
+    var start = LV[m[1]], tot = start;
+    row('lad-s', 'Start', String(start), bars(start), START_WHY[start]);
+    var parts = m[2].split(';').map(function (p) { return p.trim(); }).filter(Boolean);
     parts.forEach(function (p) {
-      var seg = document.createElement('span');
-      seg.className = 'vote-' + p[0];
-      seg.style.flexGrow = p[1];
-      seg.textContent = VOTE[p[0]][0] + ' ' + p[1];
-      bar.appendChild(seg);
+      var d = +((/^([+-]\d+)/.exec(p) || [0, 0])[1]);
+      tot += d;
+      var text = p;
+      for (var i = 0; i < STEPS.length; i++) {
+        var x = STEPS[i][0].exec(p);
+        if (x) { text = STEPS[i][1].replace('{0}', NUMW[+x[1]] || x[1] || ''); break; }
+      }
+      row('lad-a', 'Adjust', (d > 0 ? '+' : d < 0 ? '\u2212' : '') + Math.abs(d), null, text);
     });
-    wrap.appendChild(h);
-    wrap.appendChild(bar);
+    if (!parts.length) row('lad-a', 'Adjust', '0', null, 'Nothing moves it up or down.');
+    var fin = LV[m[3]];
+    var why = tot > 4 && fin === 4 ? 'It can\u2019t go above 4, so it stays at the top.'
+      : tot < 1 && fin === 1 ? 'It can\u2019t go below 1, so it stays at the bottom.'
+      : tot !== fin ? 'A single study never goes above 3.' : 'Start plus the adjustments.';
+    row('lad-r', 'Result', LW[fin], bars(fin), why);
+    var wrap = el('div');
+    wrap.appendChild(el('p', 'fc-lab', 'How this finding got \u201c' + LW[fin] + '\u201d'));
+    wrap.appendChild(ol);
     return wrap;
   }
+  // "How certainty is graded" and "Constraints of this grade", inside every Certainty calculation
+  var GRADING = "<details class=\"fc-d sub\"><summary><span>How certainty is graded</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><ul class=\"levels\"><li><span class=\"bars b4\" aria-hidden=\"true\"></span> High</li><li><span class=\"bars b3\" aria-hidden=\"true\"></span> Moderate</li><li><span class=\"bars b2\" aria-hidden=\"true\"></span> Low</li><li><span class=\"bars b1\" aria-hidden=\"true\"></span> Very low</li></ul><p class=\"lv-h\"><span class=\"num\" aria-hidden=\"true\">1</span> Start from the best study</p><ul class=\"pts\"><li>Experiment with an untreated control <b>4</b></li><li>Other controlled study <b>3</b></li><li>Observation only <b>2</b></li><li>Model or case study <b>1</b></li></ul><p class=\"lv-h\"><span class=\"num\" aria-hidden=\"true\">2</span> Then move up or down</p><ul class=\"pts\"><li>Only one study <b>−1</b></li><li>Studies disagree <b>−1</b></li><li>Most claims have no comparison <b>−1</b></li><li>Three or more studies agree <b>+1</b></li><li>Shows how it works <b>+1</b></li></ul><p>It always stays between 1 and 4. A single study never goes above 3.</p></div></details><details class=\"fc-d sub warn\"><summary><span>Constraints of this grade</span><span class=\"pm\" aria-hidden=\"true\"></span></summary><div class=\"fc-in\"><p>The grade can overstate how sure we are. It starts from the strongest study, not an average. One good experiment can lift a whole group of weaker studies to “High”.</p></div></details>";
+  function fillGrading(slotEl) { slotEl.innerHTML = GRADING; }
 
-  function loadSources(link, slot) {
+  function buildCard(sec) {
+    var root = sec.querySelector('.efind') || sec;
+    var data = root.querySelector('.fc-figs');
+    var dir = data.querySelector('.dir');
+    var q = function (end) { return data.querySelector('[data-check$="/' + end + '"]'); };
+    var cert = q('certainty'), studies = q('studies'), claims = q('claims');
+    var target = sec.getAttribute('data-tl') || '';
+    var figs = el('div', 'fc-figs');
+    figs.appendChild(fig('Finding', [dir]));
+    figs.appendChild(fig('Certainty', [data.querySelector('.bars'), ' ', cert]));
+    var sf = fig('Studies', [studies]);
+    var sub = el('p', 'fig-s');
+    sub.appendChild(document.createTextNode((+studies.textContent === 1 ? 'study' : 'studies') + ' · '));
+    sub.appendChild(claims);
+    sub.appendChild(document.createTextNode(+claims.textContent === 1 ? ' claim' : ' claims'));
+    sf.querySelector('.fig-v').appendChild(sub);
+    figs.appendChild(sf);
+    root.replaceChild(figs, data);
+
+    // the split bar, each part labelled; the counts are the pack's own spans
+    var split = root.querySelector('.fc-split');
+    if (split) {
+      var parts = Array.prototype.map.call(split.querySelectorAll('[data-d]'), function (s) {
+        return [s.getAttribute('data-d'), s.querySelector('[data-check]')];
+      });
+      var total = parts.reduce(function (t, p) { return t + +p[1].textContent; }, 0);
+      var wrap = el('div', 'split');
+      var bar = el('p', 'split-bar');
+      parts.forEach(function (p) {
+        var seg = el('span', 'seg vote-' + p[0]);
+        seg.style.flexGrow = p[1].textContent;
+        var sym = el('span', '', (SYMS[p[0]] || '') + ' ');
+        sym.setAttribute('aria-hidden', 'true');
+        seg.appendChild(sym);
+        seg.appendChild(p[1]);
+        seg.appendChild(document.createTextNode(' ' + foundWhat(p[0], target)));
+        bar.appendChild(seg);
+      });
+      var d = /dir-([a-z-]+)/.exec(dir.className)[1].replace('-', '_');
+      var word = dir.textContent.replace(/^\W+\s*/, '').trim().toLowerCase();
+      var mine = parts.filter(function (p) { return p[0] === d; })[0];
+      var note = 'How the ' + total + ' ' + (total === 1 ? 'study' : 'studies') + ' split.';
+      if (d === 'mixed') note += ' They don’t agree, so the overall answer is “studies disagree”.';
+      else if (mine) {
+        var n = +mine[1].textContent;
+        note += ' The overall answer is “' + word + '” because ' +
+          (total === 1 ? 'the one study' : n === total ? 'all ' + n : 2 * n > total ? 'most of them (' + n + ' of ' + total + ')'
+            : 'the most common result (' + n + ' of ' + total + ')') + ' ' + foundWhat(d, target) + '.';
+      }
+      if (parts.some(function (p) { return p[0] === 'mixed'; })) {
+        note += ' “Mixed” means that study’s own results pointed different ways.';
+      }
+      wrap.appendChild(bar);
+      wrap.appendChild(el('p', 'split-note', note));
+      root.replaceChild(wrap, split);
+    }
+
+    // Certainty calculation, Citations, Constraints: each closed at first
+    var btns = el('div', 'fc-btns');
+    var rule = root.querySelector('p.rule');
+    var calc = el('div');
+    var lad = ladder(rule.textContent);
+    if (lad) calc.appendChild(lad);
+    var rh = el('div', 'fc-rule-h', 'The data\u2019s rule, word for word: ');
+    rh.appendChild(rule);
+    calc.appendChild(rh);
+    var gs = el('div', 'grading-slot');
+    calc.appendChild(gs);
+    btns.appendChild(fold('calc', 'Certainty calculation', calc));
+    var src = root.querySelector('.fc-src');
+    var link = src.querySelector('a.srclink');
+    var cites = el('div');
+    var tiles = el('div', 'tiles');
+    tiles.setAttribute('aria-live', 'polite');
+    cites.appendChild(tiles);
+    cites.appendChild(src);
+    var cd = fold('cites', 'Citations (' + claims.textContent + ')', cites);
+    cd.addEventListener('toggle', function () { if (cd.open && !tiles.firstChild && link) loadTiles(link, tiles); });
+    btns.appendChild(cd);
+    var ul = el('ul', 'fc-lims');
+    (sec.getAttribute('data-lims') || '').split(' ').forEach(function (i) {
+      var l = LIMS[+i];
+      if (!l) return;
+      var li = el('li');
+      li.appendChild(el('strong', '', l[0] + ': '));
+      li.appendChild(document.createTextNode(l[1]));
+      ul.appendChild(li);
+    });
+    var cons = el('div');
+    cons.appendChild(ul);
+    var more = el('p', 'fc-more');
+    var a = el('a', '', 'All the constraints of this answer');
+    a.href = '#overview';
+    more.appendChild(a);
+    cons.appendChild(more);
+    btns.appendChild(fold('cons', 'Constraints', cons));
+    root.appendChild(btns);
+  }
+
+  // Citations: one tile per paper, from the finding's sources page. Click a paper: its first
+  // quote word for word, the rest behind "N more quotes", and the paper's DOI link.
+  var cache = {};
+  function loadTiles(link, box) {
     var url = link.getAttribute('href');
+    box.textContent = 'Loading the citations…';
     var got = cache[url] || (cache[url] = fetch(url).then(function (r) {
       if (!r.ok) throw new Error(r.status);
       return r.text();
     }));
     got.then(function (text) {
       var doc = new DOMParser().parseFromString(text, 'text/html');
-      var src = doc.querySelector('.sources');
-      if (!src) throw new Error('no sources');
-      var n = src.querySelectorAll('details.ev').length;
-      stripIds(src);
-      slot.innerHTML = '';
-      var h = document.createElement('h3');
-      h.textContent = n === 1 ? 'The quoted source' : 'The ' + n + ' quoted sources';
-      slot.appendChild(h);
-      var note = doc.querySelector('.note');
-      if (note) slot.appendChild(document.importNode(note, true));
-      slot.appendChild(document.importNode(src, true));
-      link.firstChild.textContent = 'Open these sources on their own page';
+      var papers = doc.querySelectorAll('section.paper');
+      if (!papers.length) throw new Error('no papers');
+      box.textContent = '';
+      var nq = doc.querySelectorAll('section.paper details.ev').length;
+      box.appendChild(el('p', 'fc-lab', papers.length + (papers.length === 1 ? ' paper' : ' papers') + ' \u00b7 ' + nq + (nq === 1 ? ' quote' : ' quotes')));
+      var list = el('ul', 'tile-list');
+      each(papers, function (p, k) {
+        var h = p.querySelector('h2').textContent.replace(/^Paper \d+ of \d+:\s*/, '');
+        var ym = /\((\d{4})\)\s*$/.exec(h);
+        var title = h.replace(/\s*\(\d{4}\)\s*$/, '').replace(/<\/?i>/g, '');
+        var evs = p.querySelectorAll('details.ev');
+        var li = el('li', 'tile');
+        var b = el('button', 'tile-b');
+        b.type = 'button';
+        b.setAttribute('aria-expanded', 'false');
+        b.appendChild(el('span', 'tile-y', ym ? ym[1] : 'Year not given'));
+        b.appendChild(el('span', 'tile-t', title));
+        b.appendChild(el('span', 'tile-n', evs.length + (evs.length === 1 ? ' quote' : ' quotes')));
+        var panel = el('div', 'tile-q');
+        panel.hidden = true;
+        panel.id = 'tq-' + Math.random().toString(36).slice(2, 9);
+        b.setAttribute('aria-controls', panel.id);
+        var first = evs[0].querySelector('blockquote');
+        if (first) panel.appendChild(document.importNode(first, true));
+        var acts = el('div', 'tile-acts');
+        if (evs.length > 1) {
+          var rest = el('div');
+          for (var i = 1; i < evs.length; i++) {
+            var bq = evs[i].querySelector('blockquote');
+            if (bq) rest.appendChild(document.importNode(bq, true));
+          }
+          acts.appendChild(fold('sub', (evs.length - 1) + ' more ' + (evs.length === 2 ? 'quote' : 'quotes'), rest));
+        }
+        var doi = p.querySelector('p.src a[href^="https://doi.org/"]');
+        if (doi) {
+          var go = el('a', '', 'Open the paper \u2197');
+          go.href = doi.getAttribute('href');
+          go.rel = 'noopener';
+          acts.appendChild(go);
+        }
+        panel.appendChild(acts);
+        b.addEventListener('click', function () {
+          var open = b.getAttribute('aria-expanded') !== 'true';
+          b.setAttribute('aria-expanded', String(open));
+          panel.hidden = !open;
+          li.classList.toggle('open', open);
+        });
+        li.appendChild(b);
+        li.appendChild(panel);
+        list.appendChild(li);
+      });
+      box.appendChild(list);
+      link.firstChild.textContent = 'Open all the citations on their own page';
     }).catch(function () {
       delete cache[url];
-      slot.textContent = 'The sources could not be loaded here. Use the link above to read them.';
+      box.textContent = 'The citations could not be loaded here. Use the link below to read them.';
     });
   }
 
-  var openedFrom = null;   // what gets focus back when the panel closes
-  function openPanel(a) {
-    var sec = document.getElementById(a.getAttribute('href').slice(1));
-    if (!sec) return false;
-    return openCard(sec, a, a);
-  }
+  // ----- open and close a card
 
-  // Show a card (an arrow's section, or a two-cause card) in the panel. arrow: the arrow to mark
-  // as open (or null); from: the element focus returns to on close.
-  function openCard(sec, arrow, from) {
-    var clone = sec.cloneNode(true);
-    var h3 = clone.querySelector('h3');
-    panelTitle.textContent = h3 ? h3.textContent : '';
-    if (h3) h3.parentNode.removeChild(h3);
-    each(clone.querySelectorAll('.back-graph'), function (el) { el.parentNode.removeChild(el); });
-    each(clone.querySelectorAll('details.cert'), function (d) { d.open = true; });
-    stripIds(clone);
-    var votes = clone.querySelector('.votes');
-    var bar = voteBar(clone);
-    if (votes && bar) votes.parentNode.parentNode.insertBefore(bar, votes.parentNode);
-    panelBody.innerHTML = '';
-    while (clone.firstChild) panelBody.appendChild(clone.firstChild);
-    var link = panelBody.querySelector('a.srclink');
-    if (link) {
-      var slot = document.createElement('div');
-      slot.className = 'drawer-sources';
-      slot.setAttribute('aria-live', 'polite');
-      slot.textContent = 'Loading the quoted sources…';
-      panelBody.appendChild(slot);
-      loadSources(link, slot);
-    }
+  var current = null, openedFrom = null, slotHome = null, pickedRow = null;
+  function openCard(sec, arrow, from, anchor) {
+    if (current && current !== sec) putBack(current);
+    if (!slotHome) { slotHome = document.createComment('slot'); slot.parentNode.insertBefore(slotHome, slot); }
+    if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
+    else slotHome.parentNode.insertBefore(slot, slotHome.nextSibling);
+    if (pickedRow) pickedRow.classList.remove('picked');
+    pickedRow = from && from.closest && from.closest('.brow, tr');
+    if (pickedRow) pickedRow.classList.add('picked');
+    current = sec;
+    slot.appendChild(sec);
+    slot.hidden = false;
     if (selected) selected.classList.remove('sel');
-    selected = arrow;
-    if (arrow) arrow.classList.add('sel');
-    openedFrom = from;
-    panel.hidden = false;
-    panel.scrollTop = 0;
-    document.documentElement.classList.add('drawer-open');
-    panelTitle.focus();
+    selected = arrow || null;
+    if (selected) selected.classList.add('sel');
+    openedFrom = from || arrow || null;
     highlight();
+    var h = sec.querySelector('h3');
+    if (h) h.focus({ preventScroll: true });
+    sec.scrollIntoView({ block: 'nearest' });
     return true;
   }
-
-  function closePanel() {
-    if (panel.hidden) return;
-    panel.hidden = true;
-    document.documentElement.classList.remove('drawer-open');
-    var back = openedFrom || selected;
+  function putBack(sec) { if (sec._home && sec._home.parentNode) sec._home.parentNode.insertBefore(sec, sec._home.nextSibling); }
+  function closeCard() {
+    if (!current) return;
+    putBack(current);
+    current = null;
+    slot.hidden = true;
+    if (pickedRow) { pickedRow.classList.remove('picked'); pickedRow = null; }
     if (selected) selected.classList.remove('sel');
     selected = null;
-    openedFrom = null;
     highlight();
+    var back = openedFrom;
+    openedFrom = null;
     if (back && back.focus) back.focus();
   }
+  function cardFor(id) {
+    var t = id && document.getElementById(id);
+    return t && t.closest('section.edge-panel');
+  }
+  function openArrow(a) {
+    var sec = cardFor(a.getAttribute('href').slice(1));
+    return sec ? openCard(sec, a, a) : false;
+  }
 
-  panel.querySelector('.drawer-close').addEventListener('click', closePanel);
-  document.addEventListener('keydown', function (ev) {
-    if (ev.key !== 'Escape') return;
-    if (!panel.hidden) closePanel();
-    else if (sel.length) { sel = []; applySel(); }
-  });
+  // ----- pick a box
 
-  // ---------------------------------------------------------------- select treatments (#77)
-  // Click a treatment: it is selected, and only what applies to it stays active: the boxes it
-  // has an arrow to (click one: that arrow's card) and a treatment it was tested together with
-  // (click it: both selected). With two selected, only the outcome they were tested on together
-  // stays active (click it: the two-cause card). Everything else greys out and says why.
-
-  var combos = [];   // {node, members, outcomes, card}, read from the two-cause cards on the page
+  var combos = [];
   each(document.querySelectorAll('.combo-panel'), function (sec) {
-    combos.push({ node: sec.getAttribute('data-node'), members: sec.getAttribute('data-members').split(' '),
-                  outcomes: sec.getAttribute('data-outcomes').split(' '), card: sec });
+    combos.push({ node: sec.getAttribute('data-node'), card: sec });
   });
-  function comboOf(a, b) {
-    for (var i = 0; i < combos.length; i++) {
-      var m = combos[i].members;
-      if (m.indexOf(a) >= 0 && (b === undefined || m.indexOf(b) >= 0)) return combos[i];
-    }
-    return null;
-  }
-  function arrowFrom(s, t) {
-    for (var i = 0; i < arrows.length; i++) if (arrows[i].s === s && arrows[i].t === t) return arrows[i];
-    return null;
-  }
-  function isCause(id) { return arrows.some(function (a) { return a.s === id; }); }
-  function partnerOf(a, b) { return a !== b && !!comboOf(a, b); }
   function comboNode(id) { return combos.filter(function (c) { return c.node === id; })[0] || null; }
-
-  // what clicking box id does now: ['select'|'unselect'|'arrow'|'combo'|'pin'|null, detail]
-  function actionFor(id) {
-    if (sel.indexOf(id) >= 0) return ['unselect'];
-    var cn = comboNode(id);
-    if (cn) return (!sel.length || cn.members.indexOf(sel[0]) >= 0) ? ['combo', cn] : [null];
-    if (!sel.length) return isCause(id) ? ['select'] : ['pin'];
-    if (sel.length === 1) {
-      var a = arrowFrom(sel[0], id);
-      if (a) return ['arrow', a];
-      if (partnerOf(sel[0], id)) return ['select'];
-      return [null];
-    }
-    var c = comboOf(sel[0], sel[1]);
-    return c && c.outcomes.indexOf(id) >= 0 ? ['combo', c] : [null];
-  }
-
-  function arrowActive(a) {
-    if (!sel.length) return true;
-    if (sel.length === 1) {
-      if (a.s === sel[0]) return true;
-      if (a.te) return a.s === sel[0] || byId[a.te].s === sel[0];
-      var cn = comboNode(a.s);
-      return !!(cn && cn.members.indexOf(sel[0]) >= 0);
-    }
-    var c = comboOf(sel[0], sel[1]);
-    if (!c) return false;
-    if (a.s === c.node) return true;
-    if (a.te) return c.members.indexOf(a.s) >= 0 && c.members.indexOf(byId[a.te].s) >= 0;
-    // the arrow a moderation arrow points at stays, so the ring never sits on nothing
-    return arrows.some(function (m) { return m.te === a.id && c.members.indexOf(m.s) >= 0; });
+  function arrowFrom(s, t) {
+    for (var i = 0; i < arrows.length; i++) if (arrows[i].s === s && arrows[i].t === t && !arrows[i].te) return arrows[i];
+    return null;
   }
 
   function applySel() {
     Object.keys(boxes).forEach(function (id) {
-      var b = boxes[id], act = actionFor(id)[0];
-      var off = sel.length > 0 && !act;
-      b.el.classList.toggle('chosen', sel.indexOf(id) >= 0);
-      b.el.classList.toggle('sel-off', off);
-      b.el.setAttribute('aria-pressed', String(sel.indexOf(id) >= 0));
-      b.el.setAttribute('aria-disabled', String(off));
-      var why = '';
-      if (off) {
-        why = sel.length === 1 && !isCause(id) && !comboNode(id)
-          ? 'No arrow from ' + boxes[sel[0]].name : 'Not tested together';
-      }
-      if (why) b.el.setAttribute('data-why', why); else b.el.removeAttribute('data-why');
-      b.el.setAttribute('aria-label', b.name + (sel.indexOf(id) >= 0 ? ', selected' : '') + (why ? ': ' + why : ''));
+      var on = sel === id;
+      boxes[id].el.classList.toggle('chosen', on);
+      boxes[id].el.setAttribute('aria-pressed', String(on));
     });
-    arrows.forEach(function (a) {
-      var off = !arrowActive(a);
-      a.el.classList.toggle('sel-off', off);
-      if (off) { a.el.setAttribute('tabindex', '-1'); a.el.setAttribute('aria-disabled', 'true'); }
-      else { a.el.removeAttribute('tabindex'); a.el.removeAttribute('aria-disabled'); }
-    });
-    members.forEach(function (p) {
-      var cn = comboNode(p.getAttribute('data-c'));
-      p.classList.toggle('sel-off', sel.length > 0 && !(cn && cn.members.indexOf(sel[0]) >= 0));
-    });
-    svg.classList.toggle('selecting', sel.length > 0);
     highlight();
-    updateState();
   }
-
   function boxClick(id) {
-    var act = actionFor(id);
     var b = boxes[id];
-    if (!act[0]) {                   // greyed: say why (touch has no hover)
-      boxTip(b.el);
-      var r = b.el.getBoundingClientRect();
-      placeTip(r.left, r.bottom - 10);
+    var cn = comboNode(id);
+    if (cn) { openCard(cn.card, null, b.el); return; }
+    if (sel === id) {
+      sel = null;
+      status.textContent = b.name + ' unpicked.';
+    } else if (sel && arrowFrom(sel, id)) {
+      var a = arrowFrom(sel, id);
+      openCard(cardFor(a.el.getAttribute('href').slice(1)), a.el, b.el);
       return;
+    } else {
+      sel = id;
+      pinned = null;
+      status.textContent = b.name + ' picked: its arrows are shown at full strength. Pick a box it points to, or an arrow, to read what the studies found.';
     }
-    if (act[0] === 'pin') { pinned = pinned === id ? null : id; highlight(); updateState(); return; }
-    if (act[0] === 'unselect') { sel = sel.filter(function (x) { return x !== id; }); }
-    else if (act[0] === 'select') { pinned = null; sel.push(id); }
-    else if (act[0] === 'arrow') { openPanel(act[1].el); return; }
-    else if (act[0] === 'combo') { openCard(act[1].card, null, b.el); return; }
     applySel();
   }
 
-  // boxes work from the keyboard: Tab to one, Enter or Space selects it
   Object.keys(boxes).forEach(function (id) {
-    var el = boxes[id].el;
-    el.setAttribute('tabindex', '0');
-    el.setAttribute('role', 'button');
-    el.setAttribute('aria-pressed', 'false');
-    el.setAttribute('aria-label', boxes[id].name);
-    el.addEventListener('keydown', function (ev) {
+    var e = boxes[id].el;
+    e.setAttribute('tabindex', '0');
+    e.setAttribute('role', 'button');
+    e.setAttribute('aria-pressed', 'false');
+    e.setAttribute('aria-label', boxes[id].name + (comboNode(id) ? ': opens the two-treatments card' : ''));
+    e.addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); boxClick(id); }
     });
   });
 
-  // the cards live in one store on the page; with this script they show only in the panel
+  svg.addEventListener('click', function (ev) {
+    if (suppressClick) { ev.preventDefault(); return; }
+    var a = ev.target.closest && ev.target.closest('a.edge, a.gap-link');
+    if (!a || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    if (openArrow(a)) ev.preventDefault();
+  });
+
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (howto && howto.open) return;          // the dialog closes itself
+    if (current) closeCard();
+    else if (sel) { sel = null; applySel(); status.textContent = 'Nothing picked.'; }
+  });
+
+  // links that open the two-treatments card ("See the 5 claims", the count in the blue bar)
+  each(document.querySelectorAll('a[href^="#combo-"]'), function (a) {
+    a.addEventListener('click', function (ev) {
+      var sec = document.getElementById(a.getAttribute('href').slice(1));
+      if (!sec) return;
+      ev.preventDefault();
+      openCard(sec, null, a);
+      sec.scrollIntoView({ block: 'start' });
+    });
+  });
+
+  // ----- Bars and Table views (Figma "Bars view", "Table view"), drawn from the diagram itself
+
+  var DWORD = { increase: 'Increases', decrease: 'Decreases', mixed: 'Studies disagree', no_effect: 'No change found', unclear: 'Unclear' };
+  var DSYM = { increase: '↑', decrease: '↓', mixed: '⇅', no_effect: '–', unclear: '?' };
+  var CW = { high: 'High', moderate: 'Moderate', low: 'Low', very_low: 'Very low' };
+  var CN = { high: 4, moderate: 3, low: 2, very_low: 1 };
+  function rowsInto(t) {
+    var out = [];
+    arrows.forEach(function (a) {
+      if (a.te || a.t !== t) return;
+      var d = /\bd-(\w+)/.exec(a.el.getAttribute('class'));
+      var src = boxes[a.s];
+      out.push({ a: a, gap: !a.cert, dir: d ? d[1] : null, cert: a.cert, n: a.studies,
+                 name: src.name + (src.kind === 'combination' ? ', used together' : '') });
+    });
+    return out.sort(function (p, q) { return (p.gap - q.gap) || (p.a.rank - q.a.rank) || (q.n - p.n); });
+  }
+  function dirSpan(d) {
+    var sp = el('span', 'dir dir-' + d.replace('_', '-'));
+    var sy = el('span', '', DSYM[d] + ' ');
+    sy.setAttribute('aria-hidden', 'true');
+    sp.appendChild(sy);
+    sp.appendChild(document.createTextNode(DWORD[d] || d));
+    return sp;
+  }
+  function openRow(r, from, anchor) {
+    var sec = cardFor(r.a.el.getAttribute('href').slice(1));
+    if (sec) openCard(sec, r.a.el, from, anchor);
+  }
+  var outcomes = Object.keys(boxes).filter(function (id) { return boxes[id].kind === 'outcome'; });
+  var conds = Object.keys(boxes).filter(function (id) { return boxes[id].kind === 'condition'; });
+
+  function barsView() {
+    var v = el('section', 'q1v');
+    v.id = 'view-bars';
+    v.setAttribute('aria-label', 'Bars view');
+    v.appendChild(el('p', 'view-note', 'Each bar is one treatment or condition. The longer the bar, the higher the certainty. Pick a bar to open its findings.'));
+    var key = el('ul', 'ckey');
+    [['vote-increase', '↑ Increases'], ['vote-decrease', '↓ Decreases'], ['vote-mixed', '⇅ Studies disagree'], ['k-gap', 'Not studied']].forEach(function (k) {
+      var li = el('li');
+      li.appendChild(el('i', k[0]));
+      li.appendChild(document.createTextNode(k[1]));
+      key.appendChild(li);
+    });
+    v.appendChild(key);
+    outcomes.forEach(function (t) {
+      var wrap = el('div', 'bwrap');
+      wrap.appendChild(el('h3', 'ch', boxes[t].name));
+      var ul = el('ul', 'bchart');
+      rowsInto(t).forEach(function (r) {
+        var li = el('li', 'brow' + (r.gap ? ' is-gap' : ''));
+        var b = el('button');
+        b.type = 'button';
+        b.appendChild(el('span', 'bl', r.name));
+        var track = el('span', 'bt');
+        var bar = el('span', 'bb' + (r.gap ? '' : ' vote-' + r.dir), r.gap ? '? Not studied' : DSYM[r.dir] + ' ' + DWORD[r.dir]);
+        if (!r.gap) bar.style.width = (CN[r.cert] * 20.5) + '%';
+        track.appendChild(bar);
+        if (!r.gap) {
+          track.appendChild(el('span', 'bn', r.n + (r.n === 1 ? ' study' : ' studies')));
+          var cs = el('span', 'sr-only', ', ' + CW[r.cert] + ' certainty');
+          track.appendChild(cs);
+        }
+        b.appendChild(track);
+        b.addEventListener('click', function () { openRow(r, li, wrap); });
+        li.appendChild(b);
+        ul.appendChild(li);
+      });
+      wrap.appendChild(ul);
+      var ax = el('div', 'brow bax');
+      ax.setAttribute('aria-hidden', 'true');
+      ax.appendChild(el('span', 'bl'));
+      var sc = el('span', 'bax-s');
+      ['1 Very low', '2 Low', '3 Moderate', '4 High'].forEach(function (w) { sc.appendChild(el('b', '', w)); });
+      sc.appendChild(el('small', '', 'CERTAINTY \u2192'));
+      ax.appendChild(sc);
+      wrap.appendChild(ax);
+      v.appendChild(wrap);
+    });
+    return v;
+  }
+
+  function oneTable(t, firstCol) {
+    var wrap = el('div', 'vtable');
+    var tb = el('table');
+    tb.appendChild(el('caption', '', 'Affects on ' + boxes[t].name.charAt(0).toLowerCase() + boxes[t].name.slice(1)));
+    var thead = el('thead');
+    var hr = el('tr');
+    [firstCol, 'Findings', 'Certainty', '# of studies'].forEach(function (h) { var th = el('th', '', h); th.scope = 'col'; hr.appendChild(th); });
+    thead.appendChild(hr);
+    tb.appendChild(thead);
+    var body = el('tbody');
+    rowsInto(t).forEach(function (r) {
+      var tr = el('tr', r.gap ? 'is-gap' : '');
+      var th = el('th');
+      th.scope = 'row';
+      var a = el('a', '', r.name);
+      a.href = r.a.el.getAttribute('href');
+      th.appendChild(a);
+      tr.appendChild(th);
+      var td1 = el('td');
+      if (r.gap) td1.textContent = '? Not studied'; else td1.appendChild(dirSpan(r.dir));
+      tr.appendChild(td1);
+      var td2 = el('td');
+      if (r.gap) td2.textContent = '—';
+      else { td2.appendChild(bars(CN[r.cert])); td2.appendChild(document.createTextNode(' ' + CW[r.cert])); }
+      tr.appendChild(td2);
+      tr.appendChild(el('td', '', String(r.gap ? 0 : r.n)));
+      var go = function (ev) { ev.preventDefault(); openRow(r, tr, wrap); };
+      a.addEventListener('click', go);
+      tr.addEventListener('click', function (ev) { if (ev.target !== a) go(ev); });
+      body.appendChild(tr);
+    });
+    tb.appendChild(body);
+    wrap.appendChild(tb);
+    return wrap;
+  }
+  function tableView2() {
+    var v = el('section', 'q1v');
+    v.id = 'view-table';
+    v.setAttribute('aria-label', 'Table view');
+    v.appendChild(el('p', 'view-note', 'Every arrow on the flow diagram as a row, with the same numbers. Pick a row to open what the studies found.'));
+    outcomes.forEach(function (t, i) { v.appendChild(oneTable(t, i ? 'Treatment or condition' : 'Treatment or condition')); });
+    if (conds.length) {
+      var inner = el('div');
+      conds.forEach(function (t) { inner.appendChild(oneTable(t, 'Treatment or condition')); });
+      var f = fold('vmore', 'What the treatments change: ' + conds.length + ' more tables', inner);
+      v.appendChild(f);
+    }
+    return v;
+  }
+
+  // ----- toolbar: Flow / Bars / Table, and How to read the flow diagram
+
+  var bar = document.querySelector('.flow-bar');
+  var tableView = document.querySelector('section.gtable');
+  var together = document.querySelectorAll('.together');
+  if (bar) {
+    bar.hidden = false;
+    var vBars = barsView(), vTable = tableView2();
+    figure.parentNode.insertBefore(vBars, figure);
+    figure.parentNode.insertBefore(vTable, figure);
+    if (tableView) tableView.hidden = true;     // the plain table stays in the page for no-script readers
+    var setView = function (v) {
+      figure.hidden = v !== 'flow';
+      each(together, function (t) { t.hidden = v !== 'flow'; });
+      var fl = document.querySelector('.flow-lims');
+      if (fl) fl.hidden = v !== 'flow';
+      vBars.hidden = v !== 'bars';
+      vTable.hidden = v !== 'table';
+      var st = document.querySelector('.flow-steps');
+      if (st) st.hidden = v !== 'flow';
+      var hb = bar.querySelector('.howto-btn');
+      if (hb) hb.hidden = v !== 'flow';
+      if (current && slotHome) slotHome.parentNode.insertBefore(slot, slotHome.nextSibling);   // the open card stays open
+      each(bar.querySelectorAll('[data-view]'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-view') === v)); });
+    };
+    each(bar.querySelectorAll('[data-view]'), function (b) {
+      b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
+    });
+    setView(location.hash === '#table' ? 'table' : 'flow');
+  }
+  var howto = document.getElementById('howto');
+  var howBtn = document.querySelector('.howto-btn');
+  if (howto && howBtn && howto.showModal) {
+    howBtn.addEventListener('click', function () { howto.showModal(); });
+    howto.querySelector('[data-close]').addEventListener('click', function () { howto.close(); });
+    howto.addEventListener('close', function () { howBtn.focus(); });
+    howto.addEventListener('click', function (ev) { if (ev.target === howto) howto.close(); });   // click outside
+  } else if (howBtn) {
+    howBtn.hidden = true;
+  }
+
+  // every card remembers where it lives, so it can go back there when another one opens
+  function initCards() {
+  each(document.querySelectorAll('section.edge-panel'), function (sec) {
+    sec._home = document.createComment('card');
+    sec.parentNode.insertBefore(sec._home, sec);
+    var head = document.createElement('div');
+    head.className = 'fc-head';
+    var kick = sec.querySelector('.fc-kicker');
+    if (!kick) {
+      kick = document.createElement('p');
+      kick.className = 'fc-kicker';
+      kick.textContent = sec.classList.contains('gap-panel') ? 'Not studied' : 'Findings';
+    }
+    head.appendChild(kick);
+    var x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'x';
+    x.innerHTML = '✕<span class="sr-only"> Close this card</span>';
+    x.addEventListener('click', closeCard);
+    head.appendChild(x);
+    sec.insertBefore(head, sec.firstChild);
+    var h3 = sec.querySelector('h3');
+    if (h3) h3.setAttribute('tabindex', '-1');
+    each(sec.querySelectorAll('.back-graph'), function (el) { el.parentNode.removeChild(el); });
+    if (sec.querySelector('.fc-figs')) buildCard(sec);
+    each(sec.querySelectorAll('.grading-slot'), fillGrading);
+  });
   var store = document.getElementById('cards');
   if (store) store.hidden = true;
+  }
 
+  initCards();
   routes = routeAll();
-  updateState();
 
-  // Arriving at an arrow (#e-...) or at a finding inside one (q1.html#f-..., e.g. from the
-  // short answer): show that arrow in the panel.
+  // Arriving at an arrow (#e-...), a finding inside one (#f-..., e.g. from the short answer)
+  // or the two-treatments card (#combo-...): open it under the flow diagram.
   function openFromHash() {
-    var t = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
-    var sec = t && t.closest('.edge-panel');
-    if (sec && sec.classList.contains('combo-panel')) {
-      figure.scrollIntoView();
-      openCard(sec, null, boxes[sec.getAttribute('data-node')] && boxes[sec.getAttribute('data-node')].el);
-      return;
-    }
-    var start = sec && svg.querySelector('a[href="#' + sec.id + '"]');
-    if (start) {
-      figure.scrollIntoView();
-      openPanel(start);
-    }
+    var h = location.hash && decodeURIComponent(location.hash.slice(1));
+    var sec = h && cardFor(h);
+    if (!sec) return;
+    var start = svg.querySelector('a[href="#' + sec.id + '"]');
+    var node = sec.getAttribute('data-node');
+    openCard(sec, start, start || (node && boxes[node] && boxes[node].el));
   }
   openFromHash();
   window.addEventListener('hashchange', openFromHash);
