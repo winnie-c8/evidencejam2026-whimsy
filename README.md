@@ -1,6 +1,7 @@
 # Whimsy · Restoration Evidence
 
 **Evidence Jam 2026 (Causapalooza!) · Lane 3 — Decision Support**
+🥇 1st Place Overall, Evidence Jam 2026
 
 Whimsy is an offline evidence explorer for Canadian restoration practitioners, researchers, and funders. It answers three questions about tree planting, created marshes, and grassland restoration. Each question opens with a plain-language answer. Open a finding to see the direction of the result, its certainty grade, how many studies support it, and the original sentences from the papers.
 
